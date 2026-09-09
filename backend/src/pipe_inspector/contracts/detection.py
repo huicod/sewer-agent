@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-import math
 from enum import StrEnum
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import Field, model_validator
+
+from .common import ContractModel, ImageRegion
 
 
 class DetectionLabel(StrEnum):
@@ -14,18 +15,14 @@ class DetectionLabel(StrEnum):
     BLOCK = "BLOCK"
 
 
-class Detection(BaseModel):
-    model_config = ConfigDict(frozen=True)
-
+class Detection(ContractModel):
     label: DetectionLabel
     native_label: str = Field(min_length=1)
     score: float = Field(ge=0.0, le=1.0, allow_inf_nan=False)
     bbox_xyxy: tuple[float, float, float, float]
 
 
-class DetectionBatch(BaseModel):
-    model_config = ConfigDict(frozen=True)
-
+class DetectionBatch(ContractModel):
     detector_id: str = Field(min_length=1)
     model_version: str = Field(min_length=1)
     label_space_version: str = Field(min_length=1)
@@ -36,9 +33,5 @@ class DetectionBatch(BaseModel):
     @model_validator(mode="after")
     def validate_original_image_bounds(self) -> "DetectionBatch":
         for detection in self.detections:
-            x1, y1, x2, y2 = detection.bbox_xyxy
-            if not all(math.isfinite(value) for value in (x1, y1, x2, y2)):
-                raise ValueError("bbox coordinates must be finite")
-            if not (0.0 <= x1 < x2 <= self.width and 0.0 <= y1 < y2 <= self.height):
-                raise ValueError("bbox coordinates must be ordered and within image bounds")
+            ImageRegion(width=self.width, height=self.height, bbox_xyxy=detection.bbox_xyxy)
         return self

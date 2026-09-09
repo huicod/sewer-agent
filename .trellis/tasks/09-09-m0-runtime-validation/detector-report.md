@@ -33,7 +33,9 @@ coordinate finiteness/order/bounds, lazy one-time model loading, non-numeric-ord
 `model.names` translation, invalid trained class maps, missing input before
 model loading, and missing checkpoints on every lazy-load entry point. The CLI `--help` path also completed without loading weights.
 
-## Real CUDA smoke status
+## First-attempt CUDA smoke status (historical)
+
+Update: after the user explicitly acknowledged checkpoint-loading risks, the root agent completed the real GPU smoke successfully: AJ score 0.931791, class map 0=PL/1=BX/2=FS/3=BLOCK/4=AJ. Current evidence is in this task's report.md and ignored var/fixtures/detector-smoke.json. The rejection below describes the earlier attempt, not the current blocker.
 
 - Environment import check: Ultralytics `8.4.46` is installed in `.venv`.
 - Requested input: ignored `var/fixtures/sewer2403-sample.jpg`, a real 720x576

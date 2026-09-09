@@ -3,8 +3,9 @@ from __future__ import annotations
 import importlib
 import math
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any, Literal, Protocol
 
 from pipe_inspector.contracts.detection import Detection, DetectionBatch, DetectionLabel
 
@@ -13,13 +14,24 @@ LABEL_SPACE_VERSION = "sewer2403-5class-v1"
 TRAINED_LABELS = frozenset(label.value for label in DetectionLabel)
 
 
+@dataclass(frozen=True, slots=True)
+class DetectorCapabilities:
+    supports_batch: bool
+    coordinate_space: Literal["original_pixels"] = "original_pixels"
+
+
 class DetectorAdapter(Protocol):
     detector_id: str
     model_version: str
     label_space_version: str
+    capabilities: DetectorCapabilities
 
     @property
     def class_names(self) -> dict[int, str]: ...
+
+    def load(self) -> None: ...
+
+    def warmup(self, image_path: str | Path) -> None: ...
 
     def predict_image(self, path: str | Path) -> DetectionBatch: ...
 
@@ -46,6 +58,7 @@ class UltralyticsDetector:
         self.detector_id = DETECTOR_ID
         self.label_space_version = LABEL_SPACE_VERSION
         self.model_version = self._derive_model_version(self.checkpoint)
+        self.capabilities = DetectorCapabilities(supports_batch=True)
         self._model: Any | None = None
         self._class_names: dict[int, str] | None = None
 
@@ -59,6 +72,12 @@ class UltralyticsDetector:
     def class_names(self) -> dict[int, str]:
         self._ensure_model()
         return dict(self._class_names or {})
+
+    def load(self) -> None:
+        self._ensure_model()
+
+    def warmup(self, image_path: str | Path) -> None:
+        self.predict_image(image_path)
 
     def predict_image(self, path: str | Path) -> DetectionBatch:
         return self.predict_batch((path,))[0]

@@ -1,0 +1,29 @@
+{
+  "id": "m1-contracts",
+  "name": "m1-contracts",
+  "title": "T03: unified inspection and tool contracts",
+  "description": "",
+  "status": "completed",
+  "dev_type": null,
+  "scope": null,
+  "package": null,
+  "priority": "P2",
+  "creator": "huicod",
+  "assignee": "huicod",
+  "createdAt": "2026-09-09",
+  "completedAt": "2026-09-09",
+  "branch": null,
+  "base_branch": "main",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {
+    "roadmap_tasks": "T03",
+    "jj_change": "msmpusxk"
+  }
+}

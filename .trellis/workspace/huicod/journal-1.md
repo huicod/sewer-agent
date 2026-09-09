@@ -65,3 +65,35 @@ Local jj change `tsksxomp`; no remote push.
 ### Next Steps
 
 - Obtain informed checkpoint trust approval and configure provider/model/base URL locally, then complete T02 before T03
+
+
+## Session 3: T03 contracts complete and trusted GPU smoke passed
+
+**Date**: 2026-09-09
+**Task**: T03 contracts complete and trusted GPU smoke passed
+
+### Summary
+
+User authorized trusted checkpoint loading: GPU AJ smoke passed. T03 contracts and detector replacement completed and independently approved. T02 live API remains pending; next T04.
+
+### Main Changes
+
+- Validated task/asset/finding/tool contracts, shared pixel geometry, explicit detector lifecycle; jj change msmpusxk
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `154f7d02` | (see git log) |
+
+### Testing
+
+- [OK] 145 passed, 3 skipped; Ruff clean; independent scoped review approved
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- T04 upload/media validation, persistent task API/progress and minimal Web shell; configure real LLM/VLM API separately

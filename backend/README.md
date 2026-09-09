@@ -1,6 +1,6 @@
 # 后端开发入口
 
-当前为 M0 基础设施与适配器阶段，不是已完成的图片/视频产品。总范围见 [总体开发计划](../project_management/DEVELOPMENT_PLAN.md)，活动任务与验收证据保存在 `.trellis/`。
+当前已通过 M0 本地模型/恢复验证，已完成 M1/T03 统一契约；真实 API 联调待配置，还不是完整图片/视频产品。总范围见 [总体开发计划](../project_management/DEVELOPMENT_PLAN.md)，活动任务与验收证据保存在 `.trellis/`。
 
 ## 本服务器环境
 
@@ -64,3 +64,21 @@ SEWER_RUN_LIVE_API=1 SEWER_LIVE_IMAGE=var/fixtures/sewer2403-sample.jpg \
 `vision/detector.py` 对外提供 `DetectorAdapter`；业务层接收原图像素坐标、五类标签、分数和版本字段，不接收 Ultralytics 对象。契约测试与真实单图 GPU 推理均已通过。
 
 用户已知情确认加载现有可信 `best.pt`；单图检出 AJ，score=0.93179，记录在忽略入库的 `var/fixtures/detector-smoke.json`。这只证明兼容，不代表精度验收。使用 `scripts/detector_smoke.py --help` 查看显式入口，不自动下载替代权重。
+
+## 统一契约入口
+
+`pipe_inspector.contracts` 提供 AssetRef、AssetRecord、Finding、TaskSnapshot、TaskPlan、ToolCall 及检测结果类型。UUID + version 关联证据，所有新契约拒绝额外执行字段；不包含数据库连接或文件路径解析。
+
+```python
+from pipe_inspector.contracts import TaskPlan
+
+plan = TaskPlan.model_validate({
+    "target_labels": ["PL"],
+    "steps": [
+        {"step_id": "initial", "action": "detect"},
+        {"step_id": "review", "action": "verify", "depends_on": ["initial"]},
+    ],
+})
+```
+
+这里的 PL 是报告关注范围，基础检测仍覆盖五类。验证通过表示计划结构合法，不表示工具已安装、证据已确认或计划已执行；这些由后续工作流负责。
