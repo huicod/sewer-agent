@@ -1,6 +1,6 @@
 # 管网检测服务器交付包
 
-整理日期：2026-08-25
+初始交付：2026-08-25；开发规划更新：2026-09-09
 
 本目录用于把当前可用的 YOLO26 训练材料和 VLM 复检调研传回服务器。两部分相互独立：
 
@@ -28,14 +28,12 @@ scp -P <端口> -r .\server root@<服务器IP>:/root/autodl-tmp/
 
 完整包包含约 2.23 GB 的三卷 Sewer2403 压缩数据。若服务器已经有原始 `sewer2403/images` 和 `sewer2403/labels`，可以跳过 `server/yolov26/data_archives`，只上传其余目录。
 
-上传完成后，在服务器检查：
-
-```bash
-cd /root/autodl-tmp/server
-sha256sum -c SHA256SUMS.txt
-```
+`SHA256SUMS.txt` 仅保留原始交付记录，日常开发不执行全量哈希校验，也不随文档或代码变更重新生成它。
 
 ## 3. 使用入口
+
+- 总体开发计划与阶段验收：[DEVELOPMENT_PLAN.md](project_management/DEVELOPMENT_PLAN.md)（待确认，未开始正式开发）
+- 开发规则：[AGENTS.md](AGENTS.md)
 
 - YOLO26 数据准备、训练和评估：`yolov26/README.md`
 - VLM + YOLO 架构、方法、论文与实验路线总览：`vlm_review/VLM_YOLO_ARCHITECTURE_AND_RESEARCH_SUMMARY.md`

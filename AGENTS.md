@@ -26,13 +26,15 @@ This file applies to the whole repository. Platform instructions and the user's 
 
 ## Guardrail boundary
 
+- Keep development scoped: no routine whole-repository SHA256 checks or input/model/prompt hashing systems; use asset IDs, versions, relevant tests, and a diff review. Preserve `SHA256SUMS.txt` as historical delivery evidence without regenerating it.
 - `stop-that-shit` is installed for Codex CLI, but becomes enforcing only after its hooks are explicitly reviewed and trusted with `/hooks` in a fresh CLI session.
 - The Codex IDE extension currently does not load plugins. When working in its sidebar, follow the same scope rules manually; for hook enforcement, run Codex CLI from the IDE's integrated terminal in this repository.
 
 ## Workflow-tool precedence
 
 - `grill-me` owns the read-only project-knowledge interview. In this repository it asks one question at a time; after the user confirms alignment, the main agent persists the agreed facts separately.
-- Trellis owns the durable task/spec/workspace lifecycle after project initialization. Its CLI is installed, but project initialization remains gated on the human developer identity and a post-init review.
+- Trellis owns the durable task/spec/workspace lifecycle after project initialization. Its CLI is installed and the developer name is confirmed as `huicod`; initialization waits for approval of `project_management/DEVELOPMENT_PLAN.md` and requires a post-init review.
 - Superpowers supplies implementation techniques such as TDD, systematic debugging, verification, and code review. It does not replace Trellis task state or this repository's governance.
+- `project_management/DEVELOPMENT_PLAN.md` is the sole overall roadmap. Trellis owns active task/journal details after initialization. Implementation has not started; wait for the owner's approval.
 - Do not let Trellis and Superpowers run competing planning state machines for the same task. The main agent selects and states one controlling workflow.
 - Any Superpowers or Trellis instruction that mutates Git branches, worktrees, staging, commits, or merges is overridden here: use the documented jj change/workspace flow, and require explicit review before mutable Git compatibility operations.

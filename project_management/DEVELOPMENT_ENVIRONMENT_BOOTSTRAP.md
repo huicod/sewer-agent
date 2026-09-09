@@ -1,6 +1,8 @@
 # 开发前置环境与复刻手册
 
-记录日期：2026-08-25
+初始记录：2026-08-25；身份与执行边界更新：2026-09-09。
+
+本文件保留环境安装历史，不是每次开发需要重跑的检查清单。当前硬件、依赖缺项和任务顺序以[总体开发计划](DEVELOPMENT_PLAN.md)第 3～4 节为准；日常不做全量文件/Skill 哈希校验。
 
 本手册记录正式开发前已经完成的环境、治理、版本控制、插件和 Skill 准备工作。目标是在新服务器、容器或开发机上快速复刻同一套可审计工作方式，而不是只恢复若干二进制。
 
@@ -16,10 +18,10 @@
 | Node.js | `20.18.2` | 已安装 |
 | npm/npx | `10.8.2` | 已从同版本 Node 官方归档补齐 |
 | Python | `3.12.3` | 已存在 |
-| Codex CLI | `0.149.0-alpha.4.3` | 当前 Cursor 扩展随附版本 |
+| Codex CLI | `0.153.4` | 2026-09-09 本机检查版本 |
 | `stop-that-shit` | `0.1.0`, commit `8a424ab5...` | 已安装并固定，Hook 尚待人工信任 |
 | `grill-me` + `grilling` | Matt Pocock commit `697d4ce9...` | 已安装；一次一问；仅显式进入完整访谈 |
-| Trellis | npm `@mindfoldhq/trellis@0.6.15` | CLI 已安装，项目初始化待人类身份 |
+| Trellis | npm `@mindfoldhq/trellis@0.6.15` | CLI 已安装，huicod 已确认；初始化待计划批准 |
 | Superpowers | `6.3.0`, obra commit `b36e0829...` | Codex 插件已安装并启用 |
 
 当前操作系统基线是 Ubuntu 22.04.5 LTS x86_64。换环境时不要求逐字复制操作系统，但必须重新验证命令、包名和二进制架构。
@@ -133,13 +135,13 @@ git status --short --branch --ignored
 
 在本机，约 2.23 GiB 数据压缩包和所有模型权重均被排除；已进入 Git 对象库的内容约 6.8 MiB。两份训练日志保留在本地，但暂不版本化。
 
-当前还没有 Git/jj 作者身份、远端或正式初始基线。不得编造身份。人类提供后只做仓库级配置：
+2026-09-09 已按用户授权配置仓库级 Git/jj 作者身份；没有配置远端或执行推送。配置如下（无需重复执行）：
 
 ```bash
-git config --local user.name "<confirmed-name>"
-git config --local user.email "<confirmed-email>"
-jj config set --repo user.name "<confirmed-name>"
-jj config set --repo user.email "<confirmed-email>"
+git config --local user.name "huicod"
+git config --local user.email "109233438+huicod@users.noreply.github.com"
+jj config set --repo user.name "huicod"
+jj config set --repo user.email "109233438+huicod@users.noreply.github.com"
 ```
 
 ## 5. Codex Guardrail：stop-that-shit
@@ -248,12 +250,12 @@ npm install -g @mindfoldhq/trellis@0.6.15 \
 trellis --version
 ```
 
-本机 CLI 已安装，但尚未对项目执行 `trellis init`，因为开发者身份必须由人类给出。确认身份后推荐：
+本机 CLI 已安装；开发者名称已由用户确认为 `huicod`。项目尚未初始化，以下操作在总体计划批准后执行，并先核对本机 CLI 选项：
 
 ```bash
 cd /root/autodl-tmp/server
 trellis init --cursor --codex --skip-existing --yes --no-monorepo \
-  -u "<confirmed-developer-name>"
+  -u "huicod"
 ```
 
 官方没有 dry-run。该命令可能写入：
@@ -374,14 +376,14 @@ git status --short --branch --ignored
 - `jj status` 不再因训练日志产生大文件告警；
 - `git check-ignore -v` 能命中数据包、权重和训练日志；
 - `stop-that-shit` 与 Superpowers marketplace 都固定到完整 commit SHA；
-- `grill-me` 和 `grilling` 的 `SKILL.md` 哈希与本手册一致；
+- 当前任务需要的 Skill 可以读取并符合项目边界；不重复核对文件哈希；
 - 新 Codex 会话可以发现新安装的 Skill；
 - 任何完成声明都附带测试、未测试项、风险和回滚锚点。
 
 ## 12. 仍需人类完成的门禁
 
-1. 提供 Trellis 的开发者名称，然后执行项目初始化与 jj 适配审查。
-2. 提供仓库级 Git/jj `user.name` 和 `user.email`，再形成正式初始基线。
+1. 批准总体开发计划后，以已确认的 `huicod` 初始化 Trellis，并做 jj 适配审查。
+2. Git/jj 作者已配置；未来需要远端同步时，再确认仓库地址、认证方式与推送范围。
 3. 在全新 Codex CLI 中运行 `/hooks`，审阅并信任 stop-that-shit；Trellis 初始化后再审阅其 Hook。
 4. 通过持续的项目知识 grill 确认项目章程、目标用户、数据语义、成功指标、非目标和发布边界。
 

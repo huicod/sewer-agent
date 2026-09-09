@@ -1,5 +1,7 @@
 # YOLO26 + YOLOE + VLM 管网缺陷检测系统架构
 
+> 历史研究参考：本文含 SEDD 三类等旧假设，不作为当前实施依据。请以[主方案](../VLM_YOLO_ARCHITECTURE_AND_RESEARCH_SUMMARY.md)第 9～10 节和[开发计划](../../project_management/DEVELOPMENT_PLAN.md)为准。
+
 > 版本：2026-08-24  
 > 范围：SEDD 三类缺陷 `crack / root / deposit`，面向在线检测、VLM 复核、少样本增强、精细分割、尺寸量化和自动报告。  
 > 论文与代码综述见：[YOLO + VLM 管网调研总览](./summary_yolo_vlm_pipe_inspection.md)。

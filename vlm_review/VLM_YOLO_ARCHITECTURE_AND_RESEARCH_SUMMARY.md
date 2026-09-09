@@ -1,7 +1,9 @@
 # VLM + YOLO 管网缺陷检测：架构、方法与调研总结
 
-整理日期：2026-08-25  
-适用范围：Sewer2403 五类 YOLO26s 基线与五类视频检测系统。基础类别固定为 `PL / BX / FS / BLOCK / AJ`；17 类结果只保留为历史对照，不进入当前系统的类别设计。
+更新日期：2026-09-09  
+适用范围：CCTV 图片/离线视频 Agent 软件原型；以已有五类模型起步，检测器可替换，LLM/VLM 均通过 API 调用。基础类别为 `PL / BX / FS / BLOCK / AJ`；其他疑似缺陷先人工确认。
+
+本文是需求与架构主文档。实施以第 9～10 节为准；第 2～8 节保留基线和研究背景，其中训练/蒸馏不在首版范围。开发任务只在[总体开发计划](../project_management/DEVELOPMENT_PLAN.md)维护。
 
 ## 1. 直接结论
 
@@ -11,9 +13,9 @@
 2. ByteTrack 或 BoT-SORT 把逐帧框聚合成稳定 `track_id` 和 `DefectEvent`；
 3. 事件路由器只把低置信度、弱类、跨帧冲突、低画质或模型分歧事件送给 VLM；
 4. VLM 根据 ROI、上下文、多帧、专家定义、正例原型和难负例进行接受、改类、拒绝或请求更多证据；
-5. YOLO26 完全没有出框时，必须由 YOLOE、WeDetect-Uni、YOLO-World 或 Grounding DINO 等第二候选源补充候选；
-6. 新候选重新进入融合、跟踪和 VLM 复检，不能绕过时序确认；
-7. 外部状态机拥有最终业务决定权，VLM 不能直接报警、生成几何真值或控制机器人。
+5. YOLO26 无框时仍做全图/周期审计，疑似漏报再按需调用 YOLOE 等第二候选源定位；
+6. 新候选进入融合与证据复检；视频利用时序，单图利用原图上下文或人工确认；
+7. 工作流与规则拥有业务状态迁移权，VLM 不能直接确认其他类别或生成几何真值。
 
 需要特别区分：
 
@@ -68,7 +70,8 @@ flowchart TD
     A[视频/图像输入] --> B[解码与质量评估]
     B --> C[YOLO26 固定类高频检测]
     C --> D[候选标准化与 NMS/融合]
-    D --> E[ByteTrack / BoT-SORT]
+    D -->|视频| E[ByteTrack / BoT-SORT]
+    D -->|图片| G
     E --> F[DefectEvent 聚合与最佳证据选帧]
     F --> G{事件路由器}
     G -->|低置信度/弱类/冲突/低画质| H[VLM 事件级复检]
@@ -78,10 +81,11 @@ flowchart TD
     F --> J
     J --> K{状态机}
     K -->|确认| L[缺陷事件库]
-    K -->|证据不足| M[邻帧/变焦/重拍/人工审核]
+    K -->|证据不足| M[邻帧/上下文/请求更好输入/人工审核]
     K -->|拒绝| N[保留审计记录]
-    L --> O[分割与几何量测]
-    O --> P[结构化报告/GIS/维修建议]
+    L --> P[结构化结果与报告]
+    L -->|按文本或补证需求| O[分割/相对深度等工具]
+    O --> P
 ```
 
 ### 3.1 快速环
@@ -103,7 +107,7 @@ YOLO26 不负责：
 
 ### 3.2 跟踪与事件层
 
-ByteTrack 可先作为简单基线；对于机器人移动镜头、管壁纹理重复和固定缺陷，普通 IoU 关联可能错配，应进一步评估 BoT-SORT、全局运动补偿、光流、视觉里程计或 SLAM。
+ByteTrack 先作为简单基线；移动镜头与重复纹理可能导致错配，先测试事件关联与边界去重，只有出现实测问题再评估必要的跟踪替代，不引入 SLAM。
 
 跟踪层输出：
 
@@ -113,7 +117,7 @@ ByteTrack 可先作为简单基线；对于机器人移动镜头、管壁纹理�
 - 最清晰、最近、面积最大或最稳定的证据帧；
 - 跨帧投票、短时漏检补偿和去重结果。
 
-VLM 的默认调用单位是 `DefectEvent`，不是单帧。一个 2～5 秒事件通常只调用一次主复检，只有在 VLM 请求更多上下文、第二候选源产生新证据或主动重拍后才再次复检。
+VLM 的默认调用单位是 `DefectEvent`，不是单帧。一个 2～5 秒事件通常只调用一次主复检，只有在 VLM 请求更多上下文、第二候选源产生新证据或用户提供更好输入后才再次复检。
 
 ### 3.3 事件路由器
 
@@ -140,7 +144,7 @@ VLM 的默认调用单位是 `DefectEvent`，不是单帧。一个 2～5 秒事�
 - 紧 ROI 和 1.5～2 倍上下文 ROI；
 - 同一事件的前、中、后或最佳质量 1～3 帧；
 - YOLO 类别、分数、框和轨迹稳定性；
-- 管材、管径、里程、钟点位、拍摄方向和画质；
+- 媒体时间戳与画质；未提供的管材、管径、里程、标定等信息留空，不由模型猜测；
 - 候选缺陷的专家定义、可观察属性、正例原型和难负例。
 
 VLM 应输出受约束的 JSON，而不是自由文本覆盖检测结果：
@@ -150,7 +154,8 @@ VLM 应输出受约束的 JSON，而不是自由文本覆盖检测结果：
   "event_id": "pipe-001-event-00037",
   "track_id": 37,
   "decision": "accept|revise|reject|abstain|need_more_context",
-  "canonical_label": "PL|BX|FS|BLOCK|AJ",
+  "canonical_label": "PL|BX|FS|BLOCK|AJ|OTHER|null",
+  "open_label": null,
   "evidence": ["visible cue 1", "visible cue 2"],
   "confuser": "joint_shadow|null",
   "image_quality": "good|usable|poor",
@@ -158,7 +163,7 @@ VLM 应输出受约束的 JSON，而不是自由文本覆盖检测结果：
 }
 ```
 
-VLM 的自报置信度不能直接视为校准概率。需要在固定验证集上做温度缩放、逻辑回归、isotonic calibration 或分箱可靠性检查，并保留 `abstain`。
+VLM 自报置信度不是校准概率。首版保留 `abstain` 并用固定案例检查可靠性，不在缺少数据时强行增加校准训练。
 
 ### 3.5 第二候选源
 
@@ -179,13 +184,13 @@ VLM 的自报置信度不能直接视为校准概率。需要在固定验证集�
 4. Grounding DINO：较重，但适合离线高召回检索和标注；
 5. Grounded SAM2：对候选做图像/视频掩膜与自动标注，不作为每帧主检测器。
 
-第二候选不能直接变成正式事件。它必须关联现有轨迹或建立 tentative track，并由连续帧、VLM、几何或人工证据确认。
+第二候选不能直接变成确认缺陷。视频先关联轨迹，单图保留候选；由证据规则确认，OTHER 必须人工审核。
 
 ### 3.6 分割、量测和报告
 
-检测框只能表示大致位置。腐蚀面积、裂缝长度、堵塞率和管道变形需要分割与真实尺度来源：双目、RGB-D、线激光、LiDAR、相机标定或已知管径约束。VLM 不能从单目 RGB 猜毫米尺寸。
+检测框只能表示大致位置。首版只有单目 CCTV，分割与深度工具仅输出像素/相对结果。真实尺寸和堵塞率需要额外尺度与几何依据，不属于当前输入能力；VLM 不能猜毫米尺寸。
 
-报告层只能引用结构化事实：类别、时间、里程、钟点位、证据帧、校准分数、掩膜、量测和标准条款。LLM 可以组织文字，但不能补写不存在的检测或尺寸。
+报告层只引用实际获得且经过校验的结构化事实；缺少里程、尺度或规范时明确缺失。LLM 可以组织文字，不能补写不存在的检测、尺寸或条款。
 
 ## 4. VLM + YOLO 方法分类
 
@@ -244,7 +249,7 @@ VLM 的自报置信度不能直接视为校准概率。需要在固定验证集�
 
 Prompt 实验必须固定相同 VLM 版本、解码参数、ROI、上下文、帧数和测试集，分别比较：仅类别名、专家定义、正例原型、难负例、多帧和元数据的增量贡献。
 
-## 7. 训练与数据闭环
+## 7. 训练与数据闭环（未来研究，首版不实施）
 
 ```text
 生产/历史视频
@@ -268,7 +273,7 @@ Prompt 实验必须固定相同 VLM 版本、解码参数、ROI、上下文、�
 
 如果最终希望边缘端只运行 YOLO，应在推理时关闭 VLM，单独报告新 YOLO 的 mAP、per-class AP 和鲁棒性，证明知识已经蒸馏回权重。
 
-## 8. 推荐实验矩阵
+## 8. 研究实验矩阵（非开发排期）
 
 | 编号 | 组合 | 目的 | 主要指标 |
 |---|---|---|---|
@@ -285,451 +290,116 @@ Prompt 实验必须固定相同 VLM 版本、解码参数、ROI、上下文、�
 
 所有实验必须使用相同 split、相同视频分组规则和相同事件匹配协议。不能把图像分类 macro-F1 与检测 mAP 直接横向比较。
 
-## 9. 分阶段落地建议
+## 9. 首版范围与开发顺序
 
-### Phase 0：固定基线
+本节起为 2026-09-09 用户对齐后的实施约定；前述论文、训练方法与实验矩阵属于研究背景，不自动进入开发范围。
 
-- 完成五类 `best.pt` 的独立 test 评估；
-- 固化 split、类映射、阈值、错误样本和版本信息；
-- 当前线上、VLM 复检、事件 Schema 和报告均只使用五类枚举；17 类结果仅作历史误差分析，不能与五类指标混合。
+首版是完整 Agent 软件原型：CCTV 图片/离线视频 + 文本任务；已有五类检测器 + 视频事件 + 条件 VLM 复检 + 开放候选 + 可恢复工作流 + 人工审核 + 结构化报告，并支持按需增强、分割和相对深度等后置工具。不是训练或优化某一个 YOLO26 模型。
 
-### Phase 1：事件级 VLM 最小闭环
+LLM 和 VLM 均调用外部 API。本 GPU 服务器运行后端和本地视觉工具；没有管径、相机标定、里程或额外传感器输入，不规划机器人控制或真实几何量测。
 
-- YOLO26 + ByteTrack；
-- 生成 `DefectEvent` 和最佳 1～3 帧；
-- 选一个可替换的 VLM reviewer 接口；
-- 优先评估 BX、FS、PL；
-- 输出固定 JSON、`abstain` 和人工审核队列。
+唯一开发路线见[总体开发计划](../project_management/DEVELOPMENT_PLAN.md)：M0 技术验证 → M1 图片/文本/报告 → M2 视频/恢复/审核 → M3 开放候选与效果对照 → M4 后置工具 → M5 整体验收。具体任务只在计划中维护；当前等待用户批准，尚未正式开发。
 
-### Phase 2：补召回
+## 10. 运行协议
 
-- 先零样本测试 YOLOE，不训练；
-- 与低阈值 YOLO26、YOLO-World、WeDetect-Uni 或 Grounding DINO 比较同预算 candidate recall；
-- 新候选回流 tracker 和 VLM，不直接成为最终事件。
+### 10.1 模块与职责
 
-### Phase 3：数据闭环与蒸馏
+采用 FastAPI + Temporal + PostgreSQL + 本地持久资产目录，模块化后端配 CPU/API worker 与单 GPU worker；不按每个模型拆十个微服务。Temporal 是唯一持久工作流执行器，首版不叠加 LangGraph、额外队列或多 Agent 自由协商。
 
-- 从未标注视频中挖掘 BX/FS/PL 候选；
-- VLM 过滤后人工审核；
-- 与传统重采样、Copy-Paste、脏数据增强做严格对照；
-- 再训练 YOLO26，并在关闭 VLM 时评估。
+LLM 将文本转换成结构化 TaskPlan，提议合法工具顺序并组织报告；VLM 只提出视觉判断。普通代码校验 Schema、前置条件、预算、状态迁移和最终事实。模型调用与其他 I/O 位于 Activities，不进入需要确定性重放的 Workflow。
 
-### Phase 4：分割、量测和报告
+TaskPlan 包含目标五类、开放异常审计开关、动作、输出和预算。动作限定 detect、verify、segment、relative_measure、compare、retrieve_standard、summarize、export_report 等白名单；基础检测不可因文本过滤而绕过。不执行任意 shell、路径或模型返回的指令。
 
-- 对 PL/FS/BLOCK 增加掩膜；
-- 接入标定深度、双目、线激光或 LiDAR；
-- 统一事件、复检、掩膜和量测 Schema；
-- LLM 只基于结构化事实生成报告。
+### 10.2 图片与视频两条管线
 
-## 10. 工程实现建议
+图片：输入/质量校验 + 文本解析 → 原图主检测 → 条件 VLM / 开放候选 → 规则融合 → 必要人工审核 → 按文本调用后置工具 → 校验结果与报告。单图不虚构轨迹或时序证据。
 
-推荐服务拆分：
+视频：输入/文本解析 → 分块解码与质量分析 → 主检测 → 跟踪和事件聚合 → 最佳多帧证据 → 条件 VLM / 开放候选及负结果审计 → 审核与后置工具 → 事件时间轴和报告。
 
-```text
-video-ingest
-yolo26-detector
-tracker-event-builder
-review-router
-vlm-reviewer
-open-vocabulary-candidate-service
-segmentation-measurement
-event-state-machine
-human-review-api
-report-service
-```
+首版默认主检测覆盖所有可解码视频帧，分块与批处理控制资源。可选降采样必须显式记录处理范围、采样策略、解码缺口与盲区；候选窗口加密不能证明采样间隙没有缺陷。时间以媒体原始时间戳为准，不用固定 FPS 猜测可变帧率视频时间。
 
-接口应异步化：长视频任务返回 `job_id`，事件复检使用 `review_job_id` 去重。VLM 超时或宕机时，YOLO26 快速环继续运行，事件标记为 `review_pending`；YOLOE 不可用时记录候选召回能力降级。
+块边界保留重叠证据或跟踪状态并确定性去重。事件表示一次连续可见的缺陷片段，不保证跨回访/镜头跳转仍是同一物理缺陷。只向 VLM 提交少量有代表性的证据，不逐帧调用。
 
-VLM 服务可以优先评估自托管 Qwen-VL 系列配合 vLLM，也可以把 reviewer 做成与模型无关的 OpenAI-compatible 接口。模型大小、量化方式、显存、P50/P95 延迟和结构化输出稳定性必须用本项目证据包实测，不应仅依据通用榜单选型。
+### 10.3 YOLOE、VLM 与结果判定
 
-### 10.1 Agent 与状态机的实现边界
-
-Agent 不是第三个视觉模型，而是受约束的工作流编排器。阈值、去重、超时、重试和状态迁移必须由普通代码完成；VLM 只负责视觉语义复检；最终确认、报警和机器人控制由状态机或人工完成。首版用持久化状态机加任务队列即可，无需一开始引入自由规划 Agent。
-
-白名单工具建议限定为：
-
-```text
-get_event / get_evidence_frames / request_vlm_review
-request_open_vocab_scan / request_segmentation
-create_human_review / lookup_standard / draft_report
-```
-
-工具只能接受 JSON Schema 参数，并检查权限、幂等键和预算。单事件建议限制为最多 1 次开放扫描、2 次 VLM 调用和 1 次自动补证，超过预算转人工，防止循环调用。Agent 不能修改原始框、凭空生成尺寸、自动写回训练真值或绕过状态机。
-
-### 10.2 事件、路由与融合
-
-数据应按 `frame -> detection -> track -> event -> review -> final finding` 分层保存。每次写入携带 `event_id + version` 做乐观锁；复检任务使用 `vlm:{event_id}:{version}` 作为幂等键。YOLO 原始输出、VLM 原始响应和规则结果分别保存，不能相互覆盖。
-
-路由首版采用逐类规则：`BX/FS/PL` 在中低置信、跨帧类别不稳定或低画质时优先复检；`AJ/BLOCK` 仅复检中低置信和模型冲突事件。YOLO 无框时，只有开放词表扫描才能补候选；新候选先成为 `TENTATIVE`，经跨帧关联与 VLM 后才能确认。
-
-不要直接相加 YOLO 分数和 VLM 自报置信度。首版用决策表：`accept -> CONFIRMED`、`reject -> REJECTED`、`abstain -> HUMAN_REVIEW`、`need_more_context -> EVIDENCE_REQUESTED`；自动补证最多一次。积累人工真值后，再用 YOLO 统计量、轨迹稳定性、图像质量、VLM 决策和候选源一致性训练逻辑回归或 GBDT，并做概率校准。
-
-### 10.3 VLM 请求、部署与降级
-
-一次 VLM 请求包含带框全图、1.5～2 倍上下文 ROI 和最多三张同轨迹清晰帧；先回答可观察属性，再输出五类严格 JSON。输入图、Prompt、原型图和模型版本均保存哈希。实时链路只等待 YOLO，VLM 通过 `high_risk / normal / audit` 三个异步队列更新事件。
-
-边缘端运行解码、YOLO26、tracker、环形缓存和本地事件队列；中心 GPU 运行 VLM、开放词表模型和分割。网络中断时按事件积压，恢复后不补传全部帧。降级顺序固定为：报告停用、开放扫描停用、VLM 转异步积压；YOLO26、原视频与事件日志始终保留。
-
-最小闭环应先实现 `YOLO26 -> ByteTrack -> DefectEvent -> router -> VLM reviewer -> state machine -> human review JSON`。证明事件级收益后再加入 YOLOE，最后增加分割、量测和报告 Agent。
-
-### 10.4 统一任务入口与文本指令
-
-系统入口不是“先选择模型”，而是提交一个统一任务包：
-
-```json
-{
-  "task_id": "task-20260825-001",
-  "media": {"type": "image|video", "uri": "..."},
-  "instruction": "找出所有疑似腐蚀和破裂，给出位置、证据并生成简要报告",
-  "options": {"mode": "balanced", "human_review": true}
-}
-```
-
-任务解析器先把自然语言转换为受约束的 `TaskPlan`，至少包含：目标类别、任务动作、输出格式、精度/速度偏好和工具预算。类别只能落到五类或 `unknown_anomaly`；动作只能来自 `detect / verify / compare / segment / measure / retrieve_standard / summarize / export_report` 白名单。解析器不能因为文本中没有写“检测”就跳过基础 YOLO 初查，也不能把用户文本直接拼成数据库、shell 或模型服务参数。
-
-例如“检查是否有破裂，计算大致区域并生成报告”可解析为：
-
-```json
-{
-  "target_labels": ["PL"],
-  "actions": ["detect", "verify", "segment", "summarize", "export_report"],
-  "review_policy": "target_and_uncertain",
-  "output": {"language": "zh-CN", "include_evidence": true}
-}
-```
-
-### 10.5 单帧图片管线
-
-```text
-图片 + 文本
-  -> 媒体校验/质量评分
-  -> 文本解析为 TaskPlan
-  -> YOLO26 五类初查
-  -> 候选路由
-      -> 高置信简单候选：规则确认或按文本要求复查
-      -> 弱类/中低置信/质量差：VLM ROI + 全图复查
-      -> 无框但文本明确询问某缺陷：开放词表/全图 VLM 审计
-  -> 状态机融合
-  -> 按 TaskPlan 调用分割、规范检索、对比或报告工具
-  -> ImageTaskResult
-```
-
-单帧没有跨帧证据，因此 `reject/abstain` 应更保守。VLM 输入同时包含原图、带框图和上下文 ROI；若图像质量不足，返回 `need_better_image` 或人工审核，不能虚构时序稳定性。单帧任务可以同步返回初查结果，但 VLM、分割和报告较慢时仍建议通过 `task_id` 查询最终状态。
-
-### 10.6 视频管线
-
-```text
-视频 + 文本
-  -> 解码、元数据与质量检查
-  -> 文本解析为 TaskPlan
-  -> 分层采样 + YOLO26 批量初查
-  -> 候选片段扩展（命中点前后若干秒）
-  -> 稠密检测 + ByteTrack/BoT-SORT
-  -> 轨迹聚合为 DefectEvent
-  -> 每事件筛选最佳 1～3 帧
-  -> VLM 事件级复查
-  -> 必要时开放词表扫描候选片段/周期审计片段
-  -> 去重、状态机与时间轴
-  -> 按 TaskPlan 调用工具
-  -> VideoTaskResult + 事件清单 + 证据片段
-```
-
-视频不能只做固定间隔抽帧，否则短暂缺陷可能落在采样间隙。建议采用三级筛选：
-
-1. 全视频低成本粗扫：按目标最短可见时长确定基础采样率，并计算模糊、亮度、场景变化；
-2. 候选片段扩展：YOLO 命中、质量突变、轨迹中断或周期审计点的前后窗口提高帧率；
-3. 事件精查：对候选窗口逐帧或高帧率检测，跟踪去重后只向 VLM 提交最佳多帧证据。
-
-关键帧评分可综合 `YOLO置信度、清晰度、目标面积、遮挡、过曝、轨迹中心性`，并通过时间间隔约束避免三张证据帧几乎相同。最终结果按事件而不是帧计数，同一缺陷连续出现两百帧仍是一条事件。
-
-### 10.7 两条管线共享的工具执行层
-
-文本要求应在检测事实形成后执行。典型映射如下：
-
-| 文本意图 | 工具链 | 约束 |
+| 能力 | 作用 | 调用条件 |
 |---|---|---|
-| “找出/检查缺陷” | YOLO -> VLM reviewer | 基础必跑 |
-| “只看腐蚀和破裂” | 五类检测后过滤 FS/PL，疑似混淆仍保留审核 | 不能让过滤降低底层候选召回 |
-| “标出区域” | bbox overlay；需要精确边界时调用 segmentation | 框和掩膜分开标注 |
-| “计算尺寸/堵塞率” | segmentation -> calibrated measurement | 没有尺度来源时只能输出像素量或不可量测 |
-| “比较前后变化” | event matching -> change analysis | 需要两份媒体或历史事件 |
-| “依据规范评级” | retrieve_standard -> rule engine | 引用版本化条款 |
-| “生成报告” | confirmed facts -> report service | 不允许补写不存在的事实 |
+| 可替换主检测器，首个为已有 YOLO26 | 五类定位与初查 | 所有图片和纳入覆盖范围的视频帧 |
+| VLM API | 候选复检、全图负结果审计、请求补证 | 弱类/中低置信、冲突、画质问题、负结果审计或文本要求 |
+| YOLOE，首个开放候选工具 | 无框漏检定位、五类以外疑似异常 | 疑似漏检、周期窗口、开放类别请求或 VLM 补证请求 |
 
-Agent 依据 `TaskPlan` 调用工具，但工具结果必须写回任务状态，由规则校验器检查前置条件。例如没有标定信息时，`measure_real_size` 必须失败为 `scale_unavailable`，Agent 只能解释限制，不能改用 VLM 猜尺寸。
+YOLOE 与 VLM 不必同时调用一次，也没有固定的唯一前后顺序：可先全图 VLM 审计再要求定位，或先补候选再 VLM 复核。只有 ROI 复检不能覆盖主检测器完全漏报，因此零结果仍需全图/视频周期审计。
 
-### 10.8 统一输出与完成条件
+VLM 输出 accept / revise / reject / abstain / need_more_context；这是建议，不是直接的业务状态迁移。规则综合原图、检测器、时序和审计证据：冲突时不能仅凭 VLM 自报信心删除强证据；补证仍冲突则转人工。其他候选必须经人工确认；VLM 可提供 open_label，不能自行确认为新缺陷类别。
 
-图片和视频共享 `Finding` Schema；视频结果额外包含起止时间、轨迹和证据片段：
+### 10.4 类别、审核与工作流状态分离
 
-```json
-{
-  "task_id": "task-20260825-001",
-  "status": "completed|partial|needs_review|failed",
-  "instruction_result": {"actions_completed": [], "actions_skipped": []},
-  "findings": [{
-    "finding_id": "finding-001",
-    "label": "PL",
-    "decision": "confirmed",
-    "bbox_xyxy": [312, 148, 487, 296],
-    "time_range_ms": [12400, 15320],
-    "evidence_uris": [],
-    "measurement": null,
-    "review_trace": []
-  }],
-  "warnings": []
-}
-```
-
-完成条件必须同时覆盖视觉任务和文本任务：检测流程结束不代表任务完成；只有 `TaskPlan` 中所有动作完成、明确跳过并给出原因，或转入人工审核后，任务才能进入终态。视频长任务立即返回 `task_id`，通过状态查询或事件推送返回 `ingesting -> screening -> reviewing -> tool_execution -> completed` 进度。
-
-### 10.9 YOLOE 与 VLM 的条件调用关系
-
-YOLOE 与 VLM 不需要对每张图或每个事件都各执行一次。两者解决的问题不同：
-
-| 模块 | 核心问题 | 默认调用 |
-|---|---|---|
-| YOLO26 | 五类缺陷在哪里 | 所有图片、视频筛选帧必跑 |
-| YOLOE | YOLO26 是否完全漏掉目标，是否存在五类之外的候选 | 零结果审计、疑似漏报、周期抽检或文本询问其他类别时触发 |
-| VLM | 已有候选是否正确、应属于五类/其他/不确定，以及如何解释 | 中低置信、弱类、模型冲突、YOLO零结果审计或用户明确要求复查时触发 |
-
-推荐链路为 `YOLO26 -> 条件触发 YOLOE -> 候选并集与去重 -> 条件触发 VLM -> 状态机`。如果 YOLO26 已高置信且跨帧稳定，可直接确认或仅抽样复查；如果 YOLOE 新增候选，该候选必须经过 VLM/时序确认。单图 YOLO 零结果时可做一次全图 VLM 审计；长视频零结果时只对周期样本、质量异常和场景变化片段做 YOLOE/VLM 审计。
-
-### 10.10 五类、正常与其他类别的判定协议
-
-系统保留两个标签字段：
-
-- `canonical_label`：固定枚举 `PL/BX/FS/BLOCK/AJ/NORMAL/OTHER/UNCERTAIN`；
-- `open_label`：VLM 或开放词表模型给出的其他类别名称，可为空。
-
-决策顺序如下：
-
-1. YOLO26 检出五类候选，VLM接受时报告对应五类；
-2. VLM认为五类错报且能稳定识别另一异常时，报告 `OTHER + open_label`；
-3. VLM只能判断“存在其他异常”但无法可靠命名时，报告 `OTHER/其他异常`，不能强行命名；
-4. YOLO26无候选，经规定的负样本审计仍无异常时，报告 `NORMAL`；
-5. 模型冲突、画质不足或证据不足时，报告 `UNCERTAIN` 并转人工，不能报告正常。
-
-视频中的 `NORMAL` 表示“在当前覆盖率、阈值和画质条件下未发现缺陷”，同时输出审计覆盖率与低质量未覆盖片段。开放名称进入正式报告前应经过同义词表、专业术语库或人工审核，避免VLM产生不稳定名称。
-
-### 10.11 分割与深度工具
-
-分割不是所有候选必跑。只有在用户要求精确区域/量测、缺陷已确认、需要可视化证据或准备伪标签时触发。首版可用 YOLOE-seg 或 SAM 2，以 YOLO框作为 box prompt；视频用首个高质量帧初始化掩膜并传播，再用面积跳变、边界稳定性和人工抽检做质量控制。对于 PL、FS、BLOCK，后续应训练领域分割模型，因为通用提示分割能给边界，却不保证边界具有工程语义。
-
-深度工具分三档：
-
-1. 单目 Depth Pro/Depth Anything：用于相对凹凸、表面变化和候选排序；在管道域验证前不能直接给出工程尺寸；
-2. 单目 + 已知管径/相机标定：可做带假设的近似量化，并输出误差区间；
-3. 双目、RGB-D、线激光或 LiDAR：用于正式长度、面积、堵塞率和变形率量测。
-
-调用顺序为 `confirmed finding -> segmentation mask -> depth/calibration -> geometric measurement -> rule validation`。VLM只解释结果，不参与像素到毫米的计算。
-
-### 10.12 图像恢复组件
-
-首版不需要自行训练。可直接评估带预训练权重的通用模型：DehazeFormer用于去雾，Restormer或MPRNet用于去模糊/去噪，Real-ESRGAN用于超分辨率；视频恢复优先选择具有时序一致性的模型。所有增强均按质量门控触发，并保留原图。
-
-上线条件不是增强图看起来更清晰，而是在固定的真实脏数据集上证明 `YOLO/VLM事件指标` 改善。原图和增强图都推理；一致时增强可作为辅助证据，冲突时转复检。通用模型无收益或制造裂纹、纹理伪影时，再用真实管网的退化—清晰对、合成退化或自监督方法微调，不能让生成式超分结果成为几何量测依据。
-
-### 10.13 Agent 系统选型与推荐实现
-
-PipeInspector 是目前任务形态最接近的参考：它把增强、Grounding DINO、Grounded SAM、Depth Pro和LLM编排结合到管网检测与量化流程中，可借鉴工具拆分，但不能直接当作本项目五类生产系统。
-
-工程实现建议采用“确定性工作流 + 有限Agent”：
-
-- 视觉主流程和状态恢复：Temporal；适合长视频、重试、断点续跑和人工审核等待；
-- Agent图与人工中断：LangGraph；适合显式节点、持久状态和human-in-the-loop；
-- 若主要使用OpenAI模型：OpenAI Agents SDK可提供结构化工具调用、guardrails、handoff和trace；
-- 视觉工具：YOLO26、YOLOE、SAM 2、Depth Pro/Depth Anything封装成独立服务，由工作流调用。
-
-推荐不是多Agent自由协商，而是一个 `TaskOrchestrator` 加少量确定节点：
-
-```text
-TaskOrchestrator
-  -> parse_instruction
-  -> inspect_media
-  -> image_pipeline | video_pipeline
-  -> candidate_fusion
-  -> review_policy
-  -> segmentation/measurement/standard/report tools
-  -> validate_result
-  -> human_review if needed
-  -> finalize
-```
-
-LLM只在 `parse_instruction、VLM review、tool selection、report drafting` 节点参与；候选融合、状态迁移、尺寸计算和最终校验都是确定性代码。这样既能处理自由文本，又能复现每一步检测结论。
-
-### 10.14 图像增强的主动调用判定
-
-增强工具不能由 Agent 根据肉眼描述自由决定，应由 `QualityGate + ProbeEvaluator` 两级门控。
-
-第一级 `QualityGate` 对原图或视频片段计算结构化质量向量：
-
-```json
-{
-  "blur": {"score": 0.72, "type": "motion", "direction_deg": 18},
-  "haze": 0.61,
-  "low_light": 0.20,
-  "glare": 0.48,
-  "noise": 0.31,
-  "compression": 0.27,
-  "effective_resolution": 0.55,
-  "quality_confidence": 0.86
-}
-```
-
-指标应组合传统可解释特征与轻量质量模型：Laplacian/Tenengrad和边缘宽度判断模糊，暗通道/对比度/透射特征判断雾，直方图判断过暗过曝，饱和高光面积判断反光，块效应判断压缩。视频按片段聚合并检测质量变化，不逐帧反复切换增强模型。
-
-第二级 `ProbeEvaluator` 只在质量分接近阈值、退化类型不确定或原图检测异常时运行一个低成本探测：
-
-```text
-原图检测结果
-  + 候选增强图检测结果
-  -> 比较候选数量、置信稳定性、跨帧一致性和伪影风险
-  -> use_as_auxiliary | reject_enhancement | send_review
-```
-
-调用矩阵：
-
-| 条件 | 动作 |
+| 字段 | 取值 / 含义 |
 |---|---|
-| 质量合格 | 只处理原图 |
-| 明显雾且不是镜头污渍/强反光 | 生成去雾辅助图 |
-| 明显运动/失焦模糊，仍有可恢复边缘 | 生成去模糊辅助图 |
-| 小目标像素不足且原图清晰 | 对ROI做超分辅助，不放大整帧 |
-| 严重过曝、完全失焦、遮挡 | 不做“恢复”，标记不可恢复并请求重拍/人工 |
-| 原图与增强图预测一致 | 增强图作为辅助证据 |
-| 原图与增强图冲突 | 不自动采用增强结果，进入VLM/人工复检 |
+| Finding.canonical_label | PL / BX / FS / BLOCK / AJ / OTHER；定位前的未分类候选可为空 |
+| Finding.open_label | 其他类别建议名称，可空；不是新枚举 |
+| Finding.review_status | tentative / confirmed / rejected / needs_review |
+| Task.inspection_result | pending / normal / defects_found / inconclusive |
+| Task.runtime_status | queued / running / waiting_review / completed / partial / failed / cancelled |
+| Task.stage | 解码、检测、事件聚合、复检、工具执行、审核、报告等当前阶段 |
 
-增强永远生成派生资产，不覆盖原图。量测默认使用原图、标定图和原始深度；生成式超分只用于观察与候选召回。阈值应通过真实管网退化集搜索，目标函数不是图像质量分，而是检测事件收益减去新增误报、延迟和成本。
+NORMAL 不是目标检测类别；UNCERTAIN 不是第七种缺陷。未映射的开放词表对象不自动等于缺陷，先判断是否为异常，再决定是否建立 OTHER 待审候选。
 
-### 10.15 可恢复长视频工作流
+“正常”要求当前检查范围有足够画质与覆盖、完成规定的负结果审计、没有确认缺陷或未解决候选。原始候选可因充分证据被驳回后得到正常；必需复检失败、质量不可判、覆盖不足不能当正常。局部已确认缺陷与其他片段证据不足可以同时存在，报告必须同时展示发现与限制。
 
-每个任务是持久化 `InspectionWorkflow`，而不是内存中的函数调用。推荐阶段：
+Sewer2403 五类负样本可能来自其他原始类别，不能直接作为真正常标签；见[五类实验报告](../yolov26/docs/sewer2403_5class_experiment_report.md)。正常判定需要人工确认的负例回归集。
 
-```text
-CREATED
--> INGESTING
--> MEDIA_VALIDATION
--> QUALITY_ANALYSIS
--> COARSE_DETECTION
--> CANDIDATE_EXPANSION
--> DENSE_DETECTION
--> TRACKING_EVENT_BUILD
--> OPEN_SET_AUDIT
--> VLM_REVIEW
--> TOOL_EXECUTION
--> RESULT_VALIDATION
--> HUMAN_REVIEW_WAIT（可选）
--> REPORTING
--> COMPLETED | PARTIAL | FAILED | CANCELLED
-```
+### 10.5 持久化、可靠调用与进度
 
-进度接口同时返回阶段、阶段内进度和总体估算：
+每个媒体任务对应持久 InspectionWorkflow。进度输出 task_id、stage、stage_progress、overall_progress（估算）、已处理帧/块、active_tool、retry_count、waiting_reason、updated_at；不能把检测进度 100% 误当整个任务完成。
 
-```json
-{
-  "task_id": "task-001",
-  "stage": "DENSE_DETECTION",
-  "stage_progress": 0.63,
-  "overall_progress": 0.41,
-  "processed_frames": 18420,
-  "total_frames": 29100,
-  "active_tool": "detector-service:model-v3",
-  "retry_count": 1,
-  "waiting_reason": null,
-  "updated_at": "..."
-}
-```
+每块保存 input_asset_id/version、时间/帧范围、运行配置版本和输出资产清单。已完成块提交检查点；重启后从未完成块继续，必要时恢复重叠边界。任务开始固定模型、Prompt 和配置版本；新版本通过显式新运行重处理，不能在恢复时静默混用。
 
-视频切为具有确定边界的 `VideoChunk`，每个分块保存帧范围、输入哈希、处理版本和输出清单。成功分块立即提交检查点；故障后只重跑未完成或版本失效的分块。事件聚合在分块边界保留重叠窗口和tracker handoff state，避免断点造成缺陷轨迹断裂。
+所有工具声明输入/输出 Schema、前置条件、资源、超时、重试、幂等和副作用。调用记录 call_id、业务幂等键、attempt、输入资产 ID、工具/模型版本和结果/错误。暂定单事件最多一次自动补证、一次开放扫描、两次语义复检；网络重试另设上限并计入成本。
 
-### 10.16 可靠工具调用协议
+本地活动可能至少执行一次，用数据库唯一键、结果复用及原子提交避免重复结果；不声称外部 API 恰好执行一次。超时可能已经产生费用，需记录不确定状态并限制重试；参数错误、缺输入、不可恢复 OOM 不盲目重复。长活动发送 heartbeat，GPU 活动控制资源和取消。
 
-所有视觉模型和业务能力都注册为版本化工具，至少声明：
+顺序由显式依赖管理，例如有效候选 → 分割 → 像素/相对量；校验后的事实 → 报告。增强可在低质量复检前，分割也可为待审候选提供补证，不要求所有路径强制经过所有模型。
 
-```text
-tool_name / version / input_schema / output_schema
-capabilities / resource_requirement / timeout
-retry_policy / idempotent / deterministic
-preconditions / side_effects / health_status
-```
+人工审核通过持久信号/更新恢复，等待是非终态且不占 GPU；审核请求带版本和幂等键，防止重复或过期结果覆盖。用户必需动作全部完成才 completed，必要步骤未完成则 partial/failed 并解释。取消保留已完成证据；续跑取消任务需显式关联新运行。
 
-工作流只负责顺序、并行和状态，工具不自行调用下游工具。工具调用记录 `call_id、idempotency_key、attempt、input_hash、model_version、artifact_uris、started_at、heartbeat、result/error`。GPU推理等幂等工具可指数退避重试；参数错误、内容不支持和显存配置错误不盲目重试。长调用发送heartbeat，并在分块边界保存checkpoint。
+Temporal 历史、业务库和资产目录必须持久化；工作流完成以外部写入已确认、所有必需动作已校验为准。故障恢复只承诺测试过的进程/网络故障，不把同机持久化说成磁盘损坏后的灾备。
 
-顺序依赖由显式DAG保证，例如：
+### 10.6 增强、分割与深度
 
-```text
-detect
-  -> candidate_fusion
-  -> review
-  -> segmentation
-  -> depth_and_calibration
-  -> measurement
-  -> standard_rule
-  -> report
-```
+首版复用预训练模型，不自行训练。候选为 DehazeFormer（去雾）、Restormer/MPRNet（去模糊）、Real-ESRGAN（超分）、SAM 2（提示分割）、Depth Anything/Depth Pro（深度）；接入前确认权重、许可、显存和真实输入效果，具体版本在对应任务锁定，不同时加载全部模型。
 
-`segmentation`必须读取已确认候选，`measurement`必须读取掩膜和尺度来源，`report`只能读取校验后的finding。人工审核通过工作流signal恢复；等待期间不占GPU worker。取消任务时停止新分块、允许正在写入的原子步骤完成，并保留已完成结果用于续跑。
+质量门控先看清晰度、对比度、亮度/过曝、有效目标像素、反光/污渍与视频变化，再决定是否试用一种针对性增强。没有通用“模糊分 > 某值必调模型”的可靠常数；质量评分不是缺陷概率。
 
-### 10.17 检测模型解耦
+| 输入情形 | 动作 |
+|---|---|
+| 质量足够 | 只用原图 |
+| 可恢复模糊 / 疑似雾化 | 在有代表性的帧/ROI 上试用对应增强，并与原图比较 |
+| 原图清晰但目标像素不足 | ROI 超分作为辅助观察 |
+| 严重过曝、完全失焦或遮挡 | 标记不可判，请求更好输入或人工；不生成假细节 |
+| 原图与增强图冲突 | 保留两份证据，进入复检；不自动选择分数更高者 |
 
-系统不使用 `yolo26-detector` 作为业务接口名，而使用通用 `detector-service` 和 `DetectorAdapter`。所有检测器输出统一格式：
+增强产生派生资产，绝不覆盖原图；候选数/置信度升高不证明正确。自动触发默认策略要由真实退化集效果支持，无收益则关闭该自动触发但保留显式工具能力。
 
-```json
-{
-  "detector_id": "yolo26-sewer-5c",
-  "model_version": "2026.08.25",
-  "label_space_version": "sewer-core-v1",
-  "frame_id": 18425,
-  "detections": [{
-    "bbox_xyxy": [312, 148, 487, 296],
-    "canonical_label": "FS",
-    "native_label": "FS",
-    "score": 0.58,
-    "mask_uri": null,
-    "embedding_uri": null
-  }]
-}
-```
+分割按精确区域请求、可视化或补证需求调用；SAM 2 可以检测框提示。深度只用于相对形状分析；无尺度时只报像素面积、相对深度及明确的投影比例，不能称作真实长度/体积堵塞率。生成式超分不作为量测真值。
 
-适配器接口至少包含 `load、warmup、predict_image、predict_batch、health、metadata`。跟踪器、VLM路由器和Agent只能依赖统一输出，不能读取YOLO专有对象。类别通过独立 `LabelMapper` 映射到 `sewer-core-v1` 五类；无法映射的检测进入 `OTHER` 候选，不丢弃原生标签。
+### 10.7 报告与后置任务
 
-配置决定当前角色：
+基本 JSON/HTML 报告从图片闭环开始交付，后续增加视频证据和可选分析。报告由已校验事实生成；未审核建议与确认结论分开，所有跳过/失败动作说明原因。
 
-```yaml
-detectors:
-  primary:
-    provider: ultralytics
-    adapter: YoloDetectorAdapter
-    model: yolo26-sewer-5c
-  open_set:
-    provider: yoloe
-    adapter: OpenVocabularyDetectorAdapter
-```
+历史比较需要第二份或已存媒体，并保留匹配不确定性；规范检索需要真实版本化文档和条款定位，没有规范或所需测量不能评级。缺少外部输入时返回明确不可完成原因，不让 LLM 编造尺寸、里程、条款或维修结论。
 
-后续可将主检测器替换为其他YOLO版本、RT-DETR、Grounding DINO或自研模型，也可shadow并行新旧模型。替换流程必须先做统一测试集评估、输出契约测试和shadow对比，再修改配置提升为primary；业务工作流不需要改动。
+### 10.8 检测器解耦与开发边界
 
-## 11. 最终推荐版本
+DetectorAdapter 至少提供模型元信息、能力声明、加载/预热和图片/批量推理；输出标准 bbox 坐标、原生标签/分数、五类映射及版本。跟踪、复检、Agent 只依赖标准契约，不读取 YOLO 专有对象。类别映射、阈值和资源配置随模型版本管理。
 
-当前最值得实施的系统是：
+首个真实适配器接已有 YOLO26，开放词表先接 YOLOE；用测试替身验证替换契约。将来替换真实模型仍需兼容与效果评估，不预建未需要的插件平台或多模型常驻集群。
 
-```text
-Sewer2403 五类 YOLO26s
-  + ByteTrack 起步、BoT-SORT/运动补偿对照
-  + DefectEvent 事件聚合
-  + BX/FS/PL 优先的多帧 VLM 复检
-  + accept/revise/reject/abstain/need_more_context
-  + YOLOE 周期与疑难窗口补候选
-  + 外部状态机和人工审核
-  + 后续把审核结果蒸馏回 YOLO26
-```
+日常追溯使用资产 ID、版本和调用记录，不强制生成输入/模型/Prompt 哈希。开发 harness 使用 Trellis + jj + 相关测试和简短交接；与产品的 Temporal 恢复机制分开。训练、蒸馏、SLAM、传感器标定和分布式平台不在本次开发范围。
 
-这条路线的优势是每个模块都能单独消融和替换：YOLO 负责实时固定类检测，tracker 负责时序，VLM 负责语义证据与拒识，YOLOE 负责补候选，几何模块负责真实量测，状态机负责最终决策。它既适合工程落地，也能形成“事件路由、多证据复检、补召回和知识蒸馏”的论文与专利主线。
+## 11. 深入阅读（研究参考）
 
-## 12. 深入阅读
-
-- `research/architecture_yolo26_vlm_pipe_inspection.md`：完整架构、长视频和接口细节；
-- `research/summary_yolo_vlm_pipe_inspection.md`：管网论文、Prompt、量测和部署总览；
-- `research/summary_vlm_enhanced_yolo_detection_survey.md`：VLM 如何参与检测、伪标签和域适应；
-- `research/summary_multimodal_pipe_anomaly_detection.md`：深度、双目、激光和点云量测；
-- `research/summary_pipe_dirty_data_preprocessing.md`：脏数据与鲁棒训练。
+- [管网论文与 Prompt](research/summary_yolo_vlm_pipe_inspection.md)
+- [VLM 参与检测、伪标签与域适应](research/summary_vlm_enhanced_yolo_detection_survey.md)
+- [脏数据与预处理](research/summary_pipe_dirty_data_preprocessing.md)
+- [旧完整架构](research/architecture_yolo26_vlm_pipe_inspection.md)：含旧 SEDD 三类/扩展研究假设，不能覆盖本主方案。
