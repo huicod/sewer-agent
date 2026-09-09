@@ -23,6 +23,8 @@
   "relatedFiles": [],
   "notes": "",
   "meta": {
-    "roadmap_tasks": "T02"
+    "roadmap_tasks": "T02",
+    "jj_change": "tsksxomp",
+    "pending": "provider/model/base URL and local API credentials only; trusted checkpoint GPU smoke passed"
   }
 }

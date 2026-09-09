@@ -4,5 +4,5 @@
 - Project .venv reuses existing torch/CUDA via system-site-packages; all new dependencies installed into .venv, no base modifications.
 - Created FastAPI liveness endpoint, masked Settings and three tests. RED: three tests failed on missing app/config imports before implementation. GREEN: `.venv/bin/python -m pytest backend/tests -q`: 3 passed, 0 warnings; `.venv/bin/ruff check backend`: all checks passed.
 - Initially Starlette's TestClient emitted a deprecation warning; tests now use existing httpx ASGITransport directly. Generated egg-info was untracked and remains local.
-- Actual conventions live in backend/conventions.md; unused frontend templates are not claimed as implemented code.
+- Actual conventions live in .trellis/spec/backend/conventions.md; unused frontend templates are not claimed as implemented code.
 - T02 investigations are separate from T01 completion. No live API, GPU inference or durable runtime claim yet. No remote push.
