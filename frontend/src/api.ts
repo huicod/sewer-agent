@@ -85,6 +85,10 @@ export function createTask(submission: TaskSubmission): Promise<TaskRecord> {
   });
 }
 
+export function startTask(taskId: string): Promise<TaskRecord> {
+  return requestJson<TaskRecord>(`/api/tasks/${encodeURIComponent(taskId)}/start`, isTaskRecord, { method: "POST" });
+}
+
 export function getTask(taskId: string): Promise<TaskRecord> {
   return requestJson<TaskRecord>(`/api/tasks/${encodeURIComponent(taskId)}`, isTaskRecord);
 }

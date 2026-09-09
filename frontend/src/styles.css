@@ -299,3 +299,11 @@ textarea {
     grid-template-columns: 1fr;
   }
 }
+.task-hint { color: #8ea59e; font-size: 0.82rem; }
+.task-meta { flex-wrap: wrap; margin-top: 1rem; }
+.findings { margin-top: 1.2rem; border-top: 1px solid #29473e; padding-top: 1rem; }
+.findings h4 { margin: 0 0 0.7rem; }
+.findings ul { display: grid; gap: 0.55rem; margin: 0; padding: 0; list-style: none; }
+.findings li { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 1rem; color: #c4d6d0; }
+.evidence-links { display: flex; gap: 0.65rem; }
+.evidence-links a { color: #71e5bd; }

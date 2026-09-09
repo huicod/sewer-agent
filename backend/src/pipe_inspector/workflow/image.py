@@ -1,0 +1,70 @@
+"""Replay-safe image workflow. No filesystem, database, models or credentials here."""
+
+from datetime import timedelta
+
+from temporalio import workflow
+from temporalio.common import RetryPolicy
+from temporalio.exceptions import ActivityError, ApplicationError
+
+
+@workflow.defn
+class ImageInspectionWorkflow:
+    def __init__(self):
+        self.stage = "queued"
+
+    @workflow.run
+    async def run(self, run: dict) -> dict:
+        error = None
+        storage_retry = RetryPolicy(maximum_attempts=10, maximum_interval=timedelta(seconds=10))
+        finalize_retry = RetryPolicy(
+            maximum_attempts=0,
+            initial_interval=timedelta(seconds=1),
+            backoff_coefficient=2,
+            maximum_interval=timedelta(seconds=30),
+        )
+        try:
+            self.stage = "detecting"
+            await workflow.execute_activity(
+                "publish_image_stage",
+                {"run": run, "stage": self.stage},
+                start_to_close_timeout=timedelta(seconds=20),
+                retry_policy=storage_retry,
+            )
+            await workflow.execute_activity(
+                "detect_image",
+                run,
+                task_queue=run["config"]["gpu_queue"],
+                start_to_close_timeout=timedelta(seconds=180),
+                retry_policy=RetryPolicy(
+                    maximum_attempts=3,
+                    initial_interval=timedelta(seconds=1),
+                    maximum_interval=timedelta(seconds=5),
+                ),
+            )
+            self.stage = "verifying"
+            await workflow.execute_activity(
+                "verify_image",
+                run,
+                start_to_close_timeout=timedelta(seconds=run["config"]["api_timeout_seconds"] + 30),
+                retry_policy=RetryPolicy(
+                    maximum_attempts=3,
+                    initial_interval=timedelta(seconds=1),
+                    maximum_interval=timedelta(seconds=5),
+                ),
+            )
+        except ActivityError as exc:
+            cause = exc.cause
+            error = cause.type if isinstance(cause, ApplicationError) else "activity_interrupted"
+        self.stage = "reporting"
+        result = await workflow.execute_activity(
+            "finish_image",
+            {"run": run, "error": error},
+            start_to_close_timeout=timedelta(seconds=20),
+            retry_policy=finalize_retry,
+        )
+        self.stage = "finished"
+        return result
+
+    @workflow.query
+    def current_stage(self) -> str:
+        return self.stage

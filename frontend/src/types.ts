@@ -23,11 +23,40 @@ export type RuntimeStatus =
   | "failed"
   | "cancelled";
 
+export type InspectionResult = "pending" | "normal" | "defects_found" | "inconclusive";
+export type ReviewStatus = "tentative" | "confirmed" | "rejected" | "needs_review";
+export type DetectionLabel = "AJ" | "BX" | "FS" | "PL" | "BLOCK" | "OTHER";
+
+export type EvidenceRef = {
+  asset: AssetRef;
+  region: { width: number; height: number; bbox_xyxy: [number, number, number, number] } | null;
+  frame_index: number | null;
+  timestamp_seconds: number | null;
+};
+
+export type Finding = {
+  finding_id: string;
+  task_id: string;
+  canonical_label: DetectionLabel | null;
+  open_label: string | null;
+  review_status: ReviewStatus;
+  source: "detector" | "open_detector" | "vlm" | "human";
+  score: number | null;
+  evidence: EvidenceRef[];
+  confirmed_by: "rules" | "human" | null;
+};
+
+export type CoverageSummary = {
+  sufficient_coverage: boolean;
+  sufficient_quality: boolean;
+  negative_audit_complete: boolean;
+};
+
 export type TaskSnapshot = {
   schema_version: "1";
   task_id: string;
   runtime_status: RuntimeStatus;
-  inspection_result: string;
+  inspection_result: InspectionResult;
   stage: string;
   stage_progress: number;
   overall_progress: number;
@@ -37,6 +66,8 @@ export type TaskSnapshot = {
   retry_count: number;
   waiting_reason: string | null;
   updated_at: string;
+  findings: Finding[];
+  coverage: CoverageSummary;
 };
 
 export type TaskRecord = {

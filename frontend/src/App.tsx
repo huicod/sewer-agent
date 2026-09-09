@@ -1,10 +1,13 @@
 import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
 
-import { ApiError, createSession, createTask, getSession, getTask, uploadAsset } from "./api";
+import { ApiError, createSession, createTask, getSession, getTask, startTask, uploadAsset } from "./api";
 import type { AssetRef, RuntimeStatus, SessionRecord, TaskRecord } from "./types";
 
 const SESSION_KEY = "pipe-inspector.session-id";
 const ACTIVE_STATUSES = new Set<RuntimeStatus>(["queued", "running", "waiting_review"]);
+
+const RESULT_TEXT = { pending: "待定", normal: "正常", defects_found: "发现缺陷", inconclusive: "无法确定" } as const;
+const REVIEW_TEXT = { tentative: "暂定", confirmed: "已确认", rejected: "已排除", needs_review: "需复核" } as const;
 
 const STATUS_TEXT: Record<RuntimeStatus, string> = {
   queued: "等待处理",
@@ -46,8 +49,20 @@ function upsertTask(tasks: TaskRecord[], next: TaskRecord): TaskRecord[] {
   return tasks.map((task, taskIndex) => (taskIndex === index ? next : task));
 }
 
-function TaskCard({ task }: { task: TaskRecord }) {
-  const progress = Math.round(Math.min(1, Math.max(0, task.snapshot.overall_progress)) * 100);
+function evidenceUrl(asset: AssetRef): string {
+  return `/api/assets/${encodeURIComponent(asset.asset_id)}/versions/${asset.version}/content`;
+}
+
+type TaskCardProps = {
+  task: TaskRecord;
+  starting: boolean;
+  onStart: (taskId: string) => void;
+};
+
+function TaskCard({ task, starting, onStart }: TaskCardProps) {
+  const progress = Math.round(
+    Math.min(1, Math.max(0, task.snapshot.overall_progress)) * 100,
+  );
   const queued = task.snapshot.runtime_status === "queued";
 
   return (
@@ -61,7 +76,25 @@ function TaskCard({ task }: { task: TaskRecord }) {
           {STATUS_TEXT[task.snapshot.runtime_status]}
         </span>
       </div>
-      {queued ? <p className="truth-note">已接收入队，检查执行尚未接入</p> : null}
+      {queued ? (
+        <>
+          <p className="truth-note">已上传并入队，等待启动图片检查</p>
+          <p className="task-hint">当前仅图片可执行；视频执行尚未接入。</p>
+          <button
+            type="button"
+            disabled={starting}
+            onClick={() => onStart(task.snapshot.task_id)}
+          >
+            {starting ? "正在启动…" : "启动图片检查"}
+          </button>
+        </>
+      ) : null}
+      {task.snapshot.runtime_status === "running" ? (
+        <p className="truth-note">图片检查正在执行</p>
+      ) : null}
+      {task.snapshot.runtime_status === "partial" ? (
+        <p className="truth-note">检查部分完成；未解决项尚无人工处理入口</p>
+      ) : null}
       {task.snapshot.runtime_status === "failed" ? (
         <p className="task-error">服务器报告任务处理失败</p>
       ) : null}
@@ -87,10 +120,50 @@ function TaskCard({ task }: { task: TaskRecord }) {
           <dd>{task.snapshot.stage}</dd>
         </div>
         <div>
+          <dt>检查结论</dt>
+          <dd>{RESULT_TEXT[task.snapshot.inspection_result]}</dd>
+        </div>
+        <div>
+          <dt>活动工具</dt>
+          <dd>{task.snapshot.active_tool ?? "—"}</dd>
+        </div>
+        <div>
+          <dt>重试次数</dt>
+          <dd>{task.snapshot.retry_count}</dd>
+        </div>
+        <div>
           <dt>任务编号</dt>
           <dd title={task.snapshot.task_id}>{task.snapshot.task_id.slice(0, 8)}</dd>
         </div>
       </dl>
+      {task.snapshot.findings.length > 0 ? (
+        <div className="findings">
+          <h4>发现项</h4>
+          <ul>
+            {task.snapshot.findings.map((finding) => (
+              <li key={finding.finding_id}>
+                <strong>
+                  {finding.canonical_label ?? "未分类"}
+                  {finding.open_label ? ` · ${finding.open_label}` : ""}
+                </strong>
+                <span>{REVIEW_TEXT[finding.review_status]}</span>
+                <span className="evidence-links">
+                  {finding.evidence.map((evidence, index) => (
+                    <a
+                      key={`${evidence.asset.asset_id}-${evidence.asset.version}-${index}`}
+                      href={evidenceUrl(evidence.asset)}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      原始证据 {index + 1}
+                    </a>
+                  ))}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
     </article>
   );
 }
@@ -102,6 +175,7 @@ export default function App({ pollIntervalMs = 2_000 }: AppProps) {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [startingTaskIds, setStartingTaskIds] = useState<Set<string>>(() => new Set());
   const fileInput = useRef<HTMLInputElement>(null);
   const form = useRef<HTMLFormElement>(null);
   const pendingSubmission = useRef<PendingSubmission | null>(null);
@@ -179,6 +253,23 @@ export default function App({ pollIntervalMs = 2_000 }: AppProps) {
       window.clearInterval(timer);
     };
   }, [activeTaskKey, pollIntervalMs]);
+
+  async function startInspection(taskId: string) {
+    setStartingTaskIds((current) => new Set(current).add(taskId));
+    setError(null);
+    try {
+      const started = await startTask(taskId);
+      setTasks((current) => upsertTask(current, started));
+    } catch (nextError) {
+      setError(formatError(nextError));
+    } finally {
+      setStartingTaskIds((current) => {
+        const next = new Set(current);
+        next.delete(taskId);
+        return next;
+      });
+    }
+  }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -307,7 +398,12 @@ export default function App({ pollIntervalMs = 2_000 }: AppProps) {
         ) : null}
         <div className="task-grid">
           {tasks.map((task) => (
-            <TaskCard key={task.snapshot.task_id} task={task} />
+            <TaskCard
+              key={task.snapshot.task_id}
+              task={task}
+              starting={startingTaskIds.has(task.snapshot.task_id)}
+              onStart={(taskId) => void startInspection(taskId)}
+            />
           ))}
         </div>
       </section>

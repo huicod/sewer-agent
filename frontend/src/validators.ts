@@ -1,6 +1,7 @@
 import type {
   AssetRecord,
   AssetRef,
+  Finding,
   RuntimeStatus,
   SessionDetail,
   SessionRecord,
@@ -18,6 +19,12 @@ const RUNTIME_STATUSES = new Set<RuntimeStatus>([
   "partial",
   "failed",
   "cancelled",
+]);
+const INSPECTION_RESULTS = new Set([
+  "pending",
+  "normal",
+  "defects_found",
+  "inconclusive",
 ]);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -82,6 +89,77 @@ export function isSessionRecord(value: unknown): value is SessionRecord {
   return isRecord(value) && isUuid(value.session_id) && isTimestamp(value.created_at);
 }
 
+function isNullableNonNegativeNumber(value: unknown): value is number | null {
+  return value === null || (typeof value === "number" && Number.isFinite(value) && value >= 0);
+}
+
+function isEvidenceRef(value: unknown): boolean {
+  if (!isRecord(value) || !isAssetRef(value.asset)) return false;
+  if (!isNullableNonNegativeNumber(value.timestamp_seconds)) return false;
+  if (!(value.frame_index === null || isNonNegativeInteger(value.frame_index))) return false;
+  if ((value.frame_index === null) !== (value.timestamp_seconds === null)) return false;
+  if (value.region === null) return true;
+  if (
+    !isRecord(value.region) ||
+    !Number.isInteger(value.region.width) ||
+    !Number.isInteger(value.region.height)
+  ) {
+    return false;
+  }
+  const width = value.region.width as number;
+  const height = value.region.height as number;
+  if (
+    width <= 0 ||
+    height <= 0 ||
+    !Array.isArray(value.region.bbox_xyxy) ||
+    value.region.bbox_xyxy.length !== 4
+  ) {
+    return false;
+  }
+  const [x1, y1, x2, y2] = value.region.bbox_xyxy;
+  return (
+    [x1, y1, x2, y2].every(
+      (item) => typeof item === "number" && Number.isFinite(item),
+    ) &&
+    0 <= x1 && x1 < x2 && x2 <= width &&
+    0 <= y1 && y1 < y2 && y2 <= height
+  );
+}
+
+function isFinding(value: unknown): value is Finding {
+  const labels = new Set(["AJ", "BX", "FS", "PL", "BLOCK", "OTHER"]);
+  const statuses = new Set(["tentative", "confirmed", "rejected", "needs_review"]);
+  const sources = new Set(["detector", "open_detector", "vlm", "human"]);
+  return (
+    isRecord(value) &&
+    isUuid(value.finding_id) &&
+    isUuid(value.task_id) &&
+    (value.canonical_label === null ||
+      (typeof value.canonical_label === "string" && labels.has(value.canonical_label))) &&
+    (value.open_label === null || isNonEmptyString(value.open_label)) &&
+    typeof value.review_status === "string" &&
+    statuses.has(value.review_status) &&
+    typeof value.source === "string" &&
+    sources.has(value.source) &&
+    (value.score === null || isProgress(value.score)) &&
+    Array.isArray(value.evidence) &&
+    value.evidence.length > 0 &&
+    value.evidence.every(isEvidenceRef) &&
+    (value.confirmed_by === null ||
+      value.confirmed_by === "rules" ||
+      value.confirmed_by === "human")
+  );
+}
+
+function isCoverage(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    typeof value.sufficient_coverage === "boolean" &&
+    typeof value.sufficient_quality === "boolean" &&
+    typeof value.negative_audit_complete === "boolean"
+  );
+}
+
 function isTaskSnapshot(value: unknown): value is TaskSnapshot {
   return (
     isRecord(value) &&
@@ -89,7 +167,8 @@ function isTaskSnapshot(value: unknown): value is TaskSnapshot {
     isUuid(value.task_id) &&
     typeof value.runtime_status === "string" &&
     RUNTIME_STATUSES.has(value.runtime_status as RuntimeStatus) &&
-    isNonEmptyString(value.inspection_result) &&
+    typeof value.inspection_result === "string" &&
+    INSPECTION_RESULTS.has(value.inspection_result) &&
     isNonEmptyString(value.stage) &&
     isProgress(value.stage_progress) &&
     isProgress(value.overall_progress) &&
@@ -98,7 +177,9 @@ function isTaskSnapshot(value: unknown): value is TaskSnapshot {
     isNullableString(value.active_tool) &&
     isNonNegativeInteger(value.retry_count) &&
     isNullableString(value.waiting_reason) &&
-    isTimestamp(value.updated_at)
+    isTimestamp(value.updated_at) &&
+    Array.isArray(value.findings) && value.findings.every(isFinding) &&
+    isCoverage(value.coverage)
   );
 }
 

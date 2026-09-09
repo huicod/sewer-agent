@@ -59,6 +59,8 @@ describe("intake API boundary", () => {
         retry_count: 0,
         waiting_reason: null,
         updated_at: "2026-09-09T09:00:00Z",
+        findings: [],
+        coverage: { sufficient_coverage: false, sufficient_quality: false, negative_audit_complete: false },
       },
     };
     const fetchMock = vi.fn().mockResolvedValue(

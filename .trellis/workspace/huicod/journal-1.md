@@ -155,3 +155,36 @@ User authorized trusted checkpoint loading: GPU AJ smoke passed. T03 contracts a
 - 已知限制：缺真实 LLM/VLM 配置与 CCTV 视频效果资料；首帧校验不代表全视频无损；尚未做视觉浏览器验收。开发态 StrictMode 可能多留一个空会话；崩溃/歧义 DB 提交可能留未引用原始字节，不自动删除。
 - API 密钥仅放服务器 .env，不粘贴到聊天/仓库。模型训练、第二套调度器、文件/模型哈希、公共部署和管理平台均不在本阶段范围。
 - GitHub 仍只有首次资料推送；后续开发全部保存在本地 jj，未经授权不自动推送。
+
+
+## Session 6: T05 图片工作流与 API 待验交接
+
+**Date**: 2026-09-10
+**Task**: T05 图片工作流与 API 待验交接
+
+### Summary
+
+T05 已接通图片检测与条件复检、本地 GPU/Temporal 验证通过；独立审查及恢复修复已通过，真实 VLM 待配置。
+
+### Main Changes
+
+- jj change mxopyywt；父检查点 T04 0c6d664b；本轮未推送 GitHub。
+- 已实现显式图片启动、检测与质量门、VLM全图审核、持久结果/工具记录、页面状态和证据；连续对话仍属T06。
+
+### Git Commits
+
+(No commits - planning session)
+
+### Testing
+
+- [OK] 真实GPU生产工作流1 passed（AJ、defects_found、verify skipped）；真实Temporal恢复1 passed，HTTP到Temporal再到结果查询1 passed。
+- [OK] 最终后端248 passed/4 skipped，前端15 tests和构建通过，Ruff clean；真实Temporal故障注入验证通过，独立复审PASS，详见当前任务runtime-report/review。
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- T05实现与本地审查通过；下一步配置真实VLM并做受控样例联调，再进入T06。不重做T04，不把mock当模型效果验收。
+- VLM首选qwen3-vl-plus，备选qwen3-vl-flash；需服务商/模型ID/地域/Base URL，Key只写本机.env。

@@ -1,6 +1,6 @@
 # 后端开发入口
 
-当前已完成 T03 统一契约、T04 会话/上传/持久任务入口与最小界面；真实 API 联调待配置，T05 检测执行与 T06 对话 Agent 尚未接通。总范围见 [总体开发计划](../project_management/DEVELOPMENT_PLAN.md)，活动任务与验收证据保存在 `.trellis/`。
+当前已完成 T03 统一契约、T04 会话/上传/持久任务入口，并接通 T05 图片检测与条件复检工作流；真实 API 联调遇到认证失败，待确认 Key 对应地址，T06 连续对话与文本规划尚未接通。总范围见 [总体开发计划](../project_management/DEVELOPMENT_PLAN.md)，活动任务与验收证据保存在 `.trellis/`。
 
 ## 本服务器环境
 
@@ -57,7 +57,7 @@ SEWER_RUN_LIVE_API=1 SEWER_LIVE_IMAGE=var/fixtures/sewer2403-sample.jpg \
   .venv/bin/python -m pytest backend/tests/integration/test_live_api.py -q
 ```
 
-这只验证文本/图像请求与结构化返回的协议兼容，不验证缺陷识别准确率。当前真实联调未执行。
+这只验证文本/图像请求与结构化返回的协议兼容，不验证缺陷识别准确率。2026-09-10 已使用用户指定的 qwen3.8-max 向北京官方地址发送一次有界文本请求，返回 authentication_failed；尚未上传 CCTV 图片，不能标记真实 LLM/VLM 验证通过。
 
 ## 检测器状态
 
@@ -104,7 +104,7 @@ PATH="/root/autodl-tmp/server/.tools/node/bin:$PATH" npm --prefix frontend run d
 - POST /api/sessions 建立会话；GET /api/sessions/{id} 恢复该会话的提交与状态。
 - POST /api/assets 接收 multipart 的 file 字段，返回 AssetRecord；GET /api/assets/{id}/versions/1 取元数据，加 /content 取原始字节。
 - POST /api/tasks 接收 request_id、session_id、input_asset、instruction；GET /api/tasks/{id} 查询。重复 request_id 与相同内容返回原任务，内容不同返回 409。
-- 当前任务只持久入队（queued/pending），不会自动运行检测，也不会给出正常结论。实际检测工作流在 T05、对话理解与追加工具操作在 T06 接入。
+- 提交后仍先持久入队（queued/pending），不自动运行。T05 通过下述显式启动接口执行图片检查；文本已保存但尚未解析执行，连续对话和文本工具规划在 T06 接入。
 - 原图 JPEG/PNG 全量校验；视频 MP4/MOV/AVI/MKV 使用 FFmpeg 校验元数据与首帧。整段视频的解码缺口在后续检测覆盖中记录；首帧通过不是整段完整性保证。
 - 默认单文件 1 GiB、画面 4000 万像素、媒体探测 20 秒；环境变量见 .env.example。上传依赖系统 ffmpeg/ffprobe，不使用客户端 MIME 或扩展名判断内容。
 - PostgreSQL 保存会话/资产/任务元数据，本地 var/assets 保存原始文件。两者需一起备份。进程在文件写完、元数据提交前崩溃可能留下未引用文件；本阶段不自动清理，避免误删证据。
@@ -116,3 +116,26 @@ SEWER_RUN_STORAGE_TEST=1 .venv/bin/python -m pytest backend/tests/integration/te
 ```
 
 媒体单元测试也使用 ffmpeg 构造短视频；没有安装媒体工具的环境不能宣称视频验收通过。
+
+## 图片工作流（T05）
+
+在既有服务启动后，重新执行一次业务表初始化以新增运行、工具记录和检查点表，然后在两个终端分别运行 worker：
+
+```bash
+.venv/bin/python scripts/init_storage.py
+.venv/bin/python scripts/inspection_worker.py cpu
+# 另一个终端；同机只运行一个 GPU worker，内部并发固定为 1
+.venv/bin/python scripts/inspection_worker.py gpu
+```
+
+- 页面“启动图片检查”或 POST /api/tasks/{id}/start 显式启动，返回 202。相同任务重复点击沿用固定工作流 ID 与首次落盘配置；启动请求超时可重试，不另建任务。视频当前返回 409；终态重处理需新建任务。
+- GET /api/tasks/{id} 的 snapshot 包含实际阶段、重试次数、结论和证据；GET /api/tasks/{id}/calls 查看每个工具的各次尝试。成功 Activity 结果落检查点，可跨 worker 重启复用。
+- 原图检测和质量评估后，零检测、低于 0.85 的候选、FS/BX 或低质量会触发 VLM 全图审核。其他高置信候选可跳过复检。质量阈值和分数阈值只是首轮工程策略，尚未校准，不能当作缺陷概率或精度保证。
+- 正常必须满足画质、全图检测覆盖和完成的全图阴性审核。OTHER、强证据冲突或不能判断的候选为待复核；T05 暂以 partial 保存，T09 才提供真正的人工等待/审核流程。
+- VLM 传输最多 3 次尝试；鉴权/配置/结构错误不重试，超时/网络失败标记 uncertain。检测端的可恢复传输失败最多重试 3 次；本地最终落库可耐久重试，但不会再执行检测或 VLM。供应商可能已处理请求，不能保证无重复计费。当前只记录次数与状态，未计量真实 token/金额。
+- VLM 使用原图（默认最多 8 MiB），不暗中缩放、去雾或增强。超过限制或复检失败会显示不完整结果，保留检测证据，不报告正常。增强模型接入属于 T12。
+- 恢复时要求检测器/标签空间及规则、Prompt、VLM 配置版本一致；不要原地覆盖同版本权重。此阶段未实现视频恢复、用户取消或进程开机自启；对应 T07/T08/T16。
+
+用户已选定 `qwen3.8-max`，LLM/VLM 两个角色均复用本地 `DASHSCOPE_API_KEY`。精确 Base URL 仍需与 Key 所属服务商/地域匹配；当前北京官方地址认证失败，未自动切换地域。官方模型说明支持视觉输入，但本项目实际效果仍待验证：[Qwen3.8-max](https://help.aliyun.com/zh/model-studio/qwen3-8-max)。
+
+配置示例见 `.env.example`。共享 Key 仅自动用于官方 HTTPS Qwen 地址；其他兼容服务需要明确设置对应角色的 Key，不能把共享密钥自动发往任意地址。`SEWER_API_ENABLE_THINKING=false` 与 `SEWER_API_MAX_OUTPUT_TOKENS=4096` 限制输出；参数在任务启动时固定。测试可临时覆盖上限为 256，正常工作流不自动使用测试值。

@@ -6,16 +6,21 @@ from fastapi.exception_handlers import http_exception_handler
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException
 
+from pipe_inspector.api.inspection import inspection_router
 from pipe_inspector.api.intake import intake_router
 from pipe_inspector.api.limits import UPLOAD_LIMIT_DETAIL, BodyLimitMiddleware
 from pipe_inspector.config import Settings
 from pipe_inspector.media import MediaError, MediaStore
+from pipe_inspector.storage.inspection import InspectionRepository
 from pipe_inspector.storage.repository import MissingRecord, PostgresRepository, SubmissionConflict
+from pipe_inspector.workflow.start import InspectionStarter, InspectionStartError
 
 
-def create_app(settings: Settings | None = None, *, repository: PostgresRepository | None = None):
+def create_app(
+    settings: Settings | None = None, *, repository: PostgresRepository | None = None, starter=None
+):
     settings = settings or Settings()
-    repo = repository or PostgresRepository(settings.database_dsn)
+    repo = repository or InspectionRepository(settings.database_dsn)
     app = FastAPI(title="Sewer Agent", version="0.1.0")
     app.add_middleware(BodyLimitMiddleware, max_upload_bytes=settings.max_upload_bytes)
     media = MediaStore(
@@ -25,6 +30,11 @@ def create_app(settings: Settings | None = None, *, repository: PostgresReposito
         probe_timeout_seconds=settings.media_probe_timeout_seconds,
     )
     app.include_router(intake_router(repo, media))
+    app.include_router(inspection_router(repo, starter or InspectionStarter(settings, repo)))
+
+    @app.exception_handler(InspectionStartError)
+    async def start_error(request: Request, exc: InspectionStartError):
+        return JSONResponse({"detail": {"code": exc.code, "message": str(exc)}}, exc.status_code)
 
     @app.get("/health")
     def health() -> dict[str, str]:

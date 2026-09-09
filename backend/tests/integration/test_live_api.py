@@ -55,6 +55,8 @@ async def test_configured_provider_returns_structured_result(kind: str):
         model=getattr(settings, f"{kind}_model"),
         api_key=getattr(settings, f"{kind}_api_key"),
         timeout_seconds=settings.api_timeout_seconds,
+        enable_thinking=settings.api_enable_thinking,
+        max_output_tokens=settings.api_max_output_tokens,
     )
     result = await client.generate([{"role": "user", "content": content}], SmokeResponse)
     assert result.acknowledgement == "sewer-agent"

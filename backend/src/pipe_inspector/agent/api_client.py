@@ -38,6 +38,8 @@ class OpenAICompatibleClient:
         api_key: SecretStr,
         timeout_seconds: float = 60,
         transport: httpx.AsyncBaseTransport | None = None,
+        enable_thinking: bool | None = None,
+        max_output_tokens: int | None = None,
     ) -> None:
         try:
             url = httpx.URL(base_url.strip())
@@ -54,6 +56,14 @@ class OpenAICompatibleClient:
         if not valid_url or not model.strip() or not valid_key or timeout_seconds <= 0:
             raise self._error("invalid_configuration")
 
+        if max_output_tokens is not None and (
+            isinstance(max_output_tokens, bool)
+            or not isinstance(max_output_tokens, int)
+            or not 1 <= max_output_tokens <= 8192
+        ):
+            raise self._error("invalid_configuration")
+        self._enable_thinking = enable_thinking
+        self._max_output_tokens = max_output_tokens
         self._endpoint = f"{str(url).rstrip('/')}/chat/completions"
         self._model = model.strip()
         self._api_key = api_key
@@ -71,6 +81,11 @@ class OpenAICompatibleClient:
             "messages": list(messages),
             "response_format": {"type": "json_object"},
         }
+
+        if self._enable_thinking is not None:
+            payload["enable_thinking"] = self._enable_thinking
+        if self._max_output_tokens is not None:
+            payload["max_tokens"] = self._max_output_tokens
 
         try:
             async with httpx.AsyncClient(

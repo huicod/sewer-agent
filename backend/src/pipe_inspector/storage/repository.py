@@ -43,7 +43,10 @@ class PostgresRepository:
         return sql.Identifier(self._schema, name)
 
     def _connect(self) -> psycopg.Connection:
-        return psycopg.connect(self._dsn.get_secret_value(), connect_timeout=5)
+        try:
+            return psycopg.connect(self._dsn.get_secret_value(), connect_timeout=5)
+        except psycopg.OperationalError:
+            raise psycopg.OperationalError("database connection failed") from None
 
     def initialize(self) -> None:
         sessions = self._table("sewer_sessions")

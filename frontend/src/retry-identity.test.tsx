@@ -41,6 +41,8 @@ function task(assetId: string) {
       retry_count: 0,
       waiting_reason: null,
       updated_at: createdAt,
+      findings: [],
+      coverage: { sufficient_coverage: false, sufficient_quality: false, negative_audit_complete: false },
     },
   };
 }
@@ -104,7 +106,7 @@ describe("task submission retry identity", () => {
 
     await user.upload(screen.getByLabelText("现场文件"), secondFile);
     await user.click(screen.getByRole("button", { name: "提交检查" }));
-    await screen.findByText("已接收入队，检查执行尚未接入");
+    await screen.findByText("已上传并入队，等待启动图片检查");
 
     const uploadCalls = fetchMock.mock.calls.filter(([url]) => url === "/api/assets");
     expect(uploadCalls).toHaveLength(2);

@@ -88,10 +88,70 @@ describe("conversation-ready intake shell", () => {
     await user.type(screen.getByLabelText("检查要求"), "检查破损");
     await user.click(screen.getByRole("button", { name: "提交检查" }));
 
-    expect(await screen.findByText("已接收入队，检查执行尚未接入")).toBeTruthy();
+    expect(await screen.findByText("已上传并入队，等待启动图片检查")).toBeTruthy();
     expect(screen.getByText("0%")) .toBeTruthy();
     expect(localStorage.getItem("pipe-inspector.session-id")).toBe(sessionId);
     expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
+  it("starts only the existing task and displays the returned inspection result", async () => {
+    localStorage.setItem("pipe-inspector.session-id", sessionId);
+    const running = {
+      ...task("running"),
+      snapshot: {
+        ...task("running").snapshot,
+        stage: "detecting",
+        stage_progress: 0.4,
+        overall_progress: 0.35,
+        active_tool: "yolo-primary",
+        retry_count: 1,
+      },
+    };
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(
+        jsonResponse({
+          session: { session_id: sessionId, created_at: createdAt },
+          tasks: [task()],
+        }),
+      )
+      .mockResolvedValueOnce(jsonResponse(running, 202));
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+
+    render(<App pollIntervalMs={60_000} />);
+    await user.click(await screen.findByRole("button", { name: "启动图片检查" }));
+
+    expect(await screen.findByText("detecting")).toBeTruthy();
+    expect(screen.getByText("yolo-primary")).toBeTruthy();
+    expect(screen.getByText("待定")).toBeTruthy();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock.mock.calls[1]).toEqual([
+      "/api/tasks/" + taskId + "/start",
+      { method: "POST" },
+    ]);
+    expect(fetchMock.mock.calls.some(([url]) => url === "/api/assets")).toBe(false);
+    expect(fetchMock.mock.calls.some(([url]) => url === "/api/tasks")).toBe(false);
+  });
+
+  it("shows a safe start failure and keeps the same task available for retry", async () => {
+    localStorage.setItem("pipe-inspector.session-id", sessionId);
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(
+        jsonResponse({
+          session: { session_id: sessionId, created_at: createdAt },
+          tasks: [task()],
+        }),
+      )
+      .mockResolvedValueOnce(jsonResponse({ detail: { message: "图片检查服务暂不可用" } }, 503));
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+
+    render(<App pollIntervalMs={60_000} />);
+    await user.click(await screen.findByRole("button", { name: "启动图片检查" }));
+
+    expect((await screen.findByRole("alert")).textContent).toContain("图片检查服务暂不可用");
+    expect(screen.queryByText("正常")).toBeNull();
+    expect(screen.getByRole("button", { name: "启动图片检查" })).toBeTruthy();
   });
 
   it("recovers the saved session and its tasks after reload", async () => {

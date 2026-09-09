@@ -1,0 +1,57 @@
+#!/usr/bin/env python3
+"""Run one CPU/API worker or one serial GPU worker on this host."""
+
+import argparse
+import asyncio
+import logging
+from concurrent.futures import ThreadPoolExecutor
+from datetime import timedelta
+
+from pipe_inspector.config import Settings
+from pipe_inspector.media import MediaStore
+from pipe_inspector.storage.inspection import InspectionRepository
+from pipe_inspector.workflow.activities import ImageActivities
+from pipe_inspector.workflow.image import ImageInspectionWorkflow
+from temporalio.client import Client
+from temporalio.worker import Worker
+
+
+async def serve(kind: str) -> None:
+    settings = Settings()
+    repo = InspectionRepository(settings.database_dsn)
+    media = MediaStore(
+        settings.asset_root,
+        max_upload_bytes=settings.max_upload_bytes,
+        max_pixels=settings.max_media_pixels,
+        probe_timeout_seconds=settings.media_probe_timeout_seconds,
+    )
+    activities = ImageActivities(settings, repo, media)
+    client = await Client.connect(settings.temporal_address, namespace=settings.temporal_namespace)
+    gpu = kind == "gpu"
+    # Temporal logs Activity arguments on failure. Our DB tool records contain safe codes;
+    # disable this particular SDK logger to avoid duplicating private metadata in logs.
+    logging.getLogger("temporalio.activity").setLevel(logging.CRITICAL)
+    with ThreadPoolExecutor(max_workers=1 if gpu else 4) as executor:
+        worker = Worker(
+            client,
+            task_queue=settings.task_queue + ("-gpu" if gpu else ""),
+            workflows=[] if gpu else [ImageInspectionWorkflow],
+            activities=[activities.detect_image]
+            if gpu
+            else [activities.publish_stage, activities.verify_image, activities.finish_image],
+            activity_executor=executor,
+            max_concurrent_activities=1 if gpu else 4,
+            graceful_shutdown_timeout=timedelta(seconds=10),
+        )
+        print(f"inspection {kind} worker ready; queue={worker.task_queue}", flush=True)
+        await worker.run()
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("kind", choices=("cpu", "gpu"))
+    args = parser.parse_args()
+    try:
+        asyncio.run(serve(args.kind))
+    except KeyboardInterrupt:
+        pass
