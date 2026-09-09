@@ -1,0 +1,28 @@
+{
+  "id": "m1-intake",
+  "name": "m1-intake",
+  "title": "T04: media intake task API and minimal Web UI",
+  "description": "Implement the approved T04 upload/media validation, persistent asset/task API, progress queries and minimal Web shell.",
+  "status": "completed",
+  "dev_type": null,
+  "scope": null,
+  "package": null,
+  "priority": "P2",
+  "creator": "huicod",
+  "assignee": "huicod",
+  "createdAt": "2026-09-09",
+  "completedAt": "2026-09-09",
+  "branch": null,
+  "base_branch": "main",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "T04 APPROVED: backend176passed12skipped; realPG/HTTP9passed; frontend11passed+build; report.md/review.md. NextT05. No push.",
+  "meta": {
+    "roadmap_tasks": "T04"
+  }
+}

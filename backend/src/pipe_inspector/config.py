@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from pydantic import SecretStr
+from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -10,6 +10,9 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="SEWER_", env_file=".env", extra="ignore")
 
     asset_root: Path = Path("var/assets")
+    max_upload_bytes: int = Field(default=1024**3, gt=0)
+    max_media_pixels: int = Field(default=40_000_000, gt=0)
+    media_probe_timeout_seconds: float = Field(default=20, gt=0, allow_inf_nan=False)
     database_dsn: SecretStr = SecretStr("postgresql://sewer_agent@127.0.0.1:5432/sewer_agent")
     temporal_address: str = "127.0.0.1:7233"
     temporal_namespace: str = "default"

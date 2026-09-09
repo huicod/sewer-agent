@@ -1,6 +1,6 @@
 # 后端开发入口
 
-当前已通过 M0 本地模型/恢复验证，已完成 M1/T03 统一契约；真实 API 联调待配置，还不是完整图片/视频产品。总范围见 [总体开发计划](../project_management/DEVELOPMENT_PLAN.md)，活动任务与验收证据保存在 `.trellis/`。
+当前已完成 T03 统一契约、T04 会话/上传/持久任务入口与最小界面；真实 API 联调待配置，T05 检测执行与 T06 对话 Agent 尚未接通。总范围见 [总体开发计划](../project_management/DEVELOPMENT_PLAN.md)，活动任务与验收证据保存在 `.trellis/`。
 
 ## 本服务器环境
 
@@ -20,7 +20,7 @@
 .venv/bin/uvicorn pipe_inspector.api.app:create_app --factory --host 127.0.0.1 --port 8000
 ```
 
-当前 HTTP 接口只有 `GET /health`，表示 API 进程存活，不代表检测器/API 供应商/数据库已就绪。
+`GET /health` 仅表示 API 进程存活，不代表检测器/API 供应商/数据库已就绪。T04 的会话、上传和任务接口见下节。
 
 ## 本机持久化服务
 
@@ -82,3 +82,37 @@ plan = TaskPlan.model_validate({
 ```
 
 这里的 PL 是报告关注范围，基础检测仍覆盖五类。验证通过表示计划结构合法，不表示工具已安装、证据已确认或计划已执行；这些由后续工作流负责。
+
+## 文件/文本任务入口（T04）
+
+先启动本机持久服务，再显式初始化业务表（可重复运行；不会清空已有数据）：
+
+```bash
+.venv/bin/python scripts/runtime.py start
+.venv/bin/python scripts/init_storage.py
+.venv/bin/uvicorn pipe_inspector.api.app:create_app --factory --host 127.0.0.1 --port 8000
+```
+
+另一个终端启动界面（本机隔离 Node 位于 .tools/node，未替换系统 Node）：
+
+```bash
+PATH="/root/autodl-tmp/server/.tools/node/bin:$PATH" npm --prefix frontend run dev -- --host 127.0.0.1
+```
+
+通过 SSH 转发本机 5173 端口后浏览；Vite 同源代理 /api 到 127.0.0.1:8000。当前无鉴权，不直接绑定公网。
+
+- POST /api/sessions 建立会话；GET /api/sessions/{id} 恢复该会话的提交与状态。
+- POST /api/assets 接收 multipart 的 file 字段，返回 AssetRecord；GET /api/assets/{id}/versions/1 取元数据，加 /content 取原始字节。
+- POST /api/tasks 接收 request_id、session_id、input_asset、instruction；GET /api/tasks/{id} 查询。重复 request_id 与相同内容返回原任务，内容不同返回 409。
+- 当前任务只持久入队（queued/pending），不会自动运行检测，也不会给出正常结论。实际检测工作流在 T05、对话理解与追加工具操作在 T06 接入。
+- 原图 JPEG/PNG 全量校验；视频 MP4/MOV/AVI/MKV 使用 FFmpeg 校验元数据与首帧。整段视频的解码缺口在后续检测覆盖中记录；首帧通过不是整段完整性保证。
+- 默认单文件 1 GiB、画面 4000 万像素、媒体探测 20 秒；环境变量见 .env.example。上传依赖系统 ffmpeg/ffprobe，不使用客户端 MIME 或扩展名判断内容。
+- PostgreSQL 保存会话/资产/任务元数据，本地 var/assets 保存原始文件。两者需一起备份。进程在文件写完、元数据提交前崩溃可能留下未引用文件；本阶段不自动清理，避免误删证据。
+
+实际存储集成验收（仅创建/删除随机命名的测试 schema，不重启数据库或 Temporal）：
+
+```bash
+SEWER_RUN_STORAGE_TEST=1 .venv/bin/python -m pytest backend/tests/integration/test_storage.py backend/tests/integration/test_intake_http.py -q
+```
+
+媒体单元测试也使用 ffmpeg 构造短视频；没有安装媒体工具的环境不能宣称视频验收通过。

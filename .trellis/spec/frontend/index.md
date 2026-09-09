@@ -4,6 +4,10 @@
 
 ---
 
+## Pre-Development Checklist
+
+Read [actual frontend conventions](./conventions.md) first. The other files remain upstream templates; they are not additional implemented requirements.
+
 ## Overview
 
 This directory contains guidelines for frontend development. Fill in each file with your project's specific conventions.

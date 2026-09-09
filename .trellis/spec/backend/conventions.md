@@ -11,3 +11,7 @@
 - Shared public contracts: `pipe_inspector.contracts`; use validated constructors/JSON parsing, not `model_copy(update=...)` for untrusted changes (Pydantic bypasses validation there).
 - `TaskPlan.target_labels` is reporting focus, not a detector class filter. Runtime gating and transitions remain in the upcoming workflow.
 - `ToolCall.idempotency_key` identifies a logical operation across attempts; record `attempt` separately. Database uniqueness/atomic commits must enforce this in the storage layer.
+- Intake uses contracts/intake.py; initial submissions reference original image/video AssetRef IDs. The HTTP layer owns media upload and never accepts client filesystem paths.
+- PostgresRepository uses short psycopg transactions and explicit init_storage.py DDL; no schema mutation during request/import. UUID request_id is unique and binds one immutable submission across retries.
+- MediaStore preserves original bytes, uses Pillow for JPEG/PNG and bounded, file-only FFmpeg for video metadata/first-frame admission. Full video integrity/coverage belongs to later inspection.
+- Run storage integration explicitly with SEWER_RUN_STORAGE_TEST=1; each test uses and drops only its unique test-owned schema. Do not restart Temporal/PostgreSQL for intake tests.
