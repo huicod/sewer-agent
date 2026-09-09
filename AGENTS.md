@@ -33,8 +33,8 @@ This file applies to the whole repository. Platform instructions and the user's 
 ## Workflow-tool precedence
 
 - `grill-me` owns the read-only project-knowledge interview. In this repository it asks one question at a time; after the user confirms alignment, the main agent persists the agreed facts separately.
-- Trellis owns the durable task/spec/workspace lifecycle after project initialization. Its CLI is installed and the developer name is confirmed as `huicod`; initialization waits for approval of `project_management/DEVELOPMENT_PLAN.md` and requires a post-init review.
+- Trellis is initialized for `huicod` and owns active tasks and journals. Read `.trellis/workflow.md` project overrides; automatic Git commits are disabled. The overall plan was approved for implementation on 2026-09-09.
 - Superpowers supplies implementation techniques such as TDD, systematic debugging, verification, and code review. It does not replace Trellis task state or this repository's governance.
-- `project_management/DEVELOPMENT_PLAN.md` is the sole overall roadmap. Trellis owns active task/journal details after initialization. Implementation has not started; wait for the owner's approval.
+- `project_management/DEVELOPMENT_PLAN.md` is the sole overall roadmap. Implementation is authorized; advance its scoped tasks and save evidence in Trellis. New scope and remote pushes still require authorization.
 - Do not let Trellis and Superpowers run competing planning state machines for the same task. The main agent selects and states one controlling workflow.
 - Any Superpowers or Trellis instruction that mutates Git branches, worktrees, staging, commits, or merges is overridden here: use the documented jj change/workspace flow, and require explicit review before mutable Git compatibility operations.

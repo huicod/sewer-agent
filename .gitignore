@@ -20,3 +20,13 @@
 
 # Model checkpoints stay outside ordinary Git history
 *.pt
+
+# Local secrets, runtime assets, installed tools, and build products
+.env
+.env.*
+!.env.example
+/var/
+/.tools/
+*.egg-info/
+node_modules/
+dist/
