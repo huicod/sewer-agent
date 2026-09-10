@@ -15,3 +15,6 @@
 - PostgresRepository uses short psycopg transactions and explicit init_storage.py DDL; no schema mutation during request/import. UUID request_id is unique and binds one immutable submission across retries.
 - MediaStore preserves original bytes, uses Pillow for JPEG/PNG and bounded, file-only FFmpeg for video metadata/first-frame admission. Full video integrity/coverage belongs to later inspection.
 - Run storage integration explicitly with SEWER_RUN_STORAGE_TEST=1; each test uses and drops only its unique test-owned schema. Do not restart Temporal/PostgreSQL for intake tests.
+
+- Shared DASHSCOPE_API_KEY is an explicit exception to the SEWER_ prefix: reuse only for explicitly configured Qwen roles on allowlisted official HTTPS hosts. Other providers need explicit role keys; never dump configuration secrets.
+- OpenAICompatibleClient response_model validates locally; it does not transmit JSON Schema. Structured parsers must include their schema in the actual messages, with a captured-request test.

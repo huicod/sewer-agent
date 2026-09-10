@@ -276,3 +276,30 @@ def test_storage_methods_reject_cross_task_call_and_missing_task(inspection_stor
         store.save_step(task.snapshot.task_id, "detect", {"detections": []}, mismatched)
     with pytest.raises(MissingRecord, match="^record not found$"):
         store.update_snapshot(TaskSnapshot(task_id=uuid4(), updated_at=datetime.now(timezone.utc)))
+
+
+async def test_reports_read_persisted_terminal_result_after_repository_reopen(
+    inspection_store, tmp_path
+):
+    from httpx import ASGITransport, AsyncClient
+    from pipe_inspector.api.app import create_app
+
+    store, settings, schema = inspection_store
+    task, _ = create_task(store)
+    snapshot = TaskSnapshot(
+        task_id=task.snapshot.task_id,
+        updated_at=datetime.now(timezone.utc),
+        runtime_status="partial",
+        inspection_result="inconclusive",
+        waiting_reason="复检暂未完成",
+    )
+    store.update_snapshot(snapshot)
+    reopened = InspectionRepository(settings.database_dsn, schema=schema)
+    app = create_app(Settings(_env_file=None, asset_root=tmp_path), repository=reopened)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        exported = await client.get(f"/api/tasks/{snapshot.task_id}/report?format=json")
+        page = await client.get(f"/api/tasks/{snapshot.task_id}/report?format=html")
+    assert exported.status_code == page.status_code == 200
+    assert exported.json()["task"]["snapshot"] == snapshot.model_dump(mode="json")
+    assert "复检暂未完成" in page.text
+    assert reopened.get_task(snapshot.task_id).snapshot == snapshot

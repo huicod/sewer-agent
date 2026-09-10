@@ -188,3 +188,37 @@ T05 已接通图片检测与条件复检、本地 GPU/Temporal 验证通过；�
 
 - T05实现与本地审查通过；下一步配置真实VLM并做受控样例联调，再进入T06。不重做T04，不把mock当模型效果验收。
 - VLM首选qwen3-vl-plus，备选qwen3-vl-flash；需服务商/模型ID/地域/Base URL，Key只写本机.env。
+
+
+## Session 7: Qwen API 接入与 T06-A 基础能力
+
+**Date**: 2026-09-10
+**Task**: Qwen API 接入与 T06-A 基础能力
+
+### Summary
+
+Qwen共享Key接入与有界请求已实现；北京文本probe认证失败，等待真实Base URL。T06-A解析计划和证据报告已实现，304测试通过，独立复核通过；T06-B未实现。
+
+### Main Changes
+
+- 用户明确模型qwen3.8-max；.env保留DASHSCOPE_API_KEY并追加非敏感角色配置，0600且忽略入库；首次真实文本请求authentication_failed，无图片上传或跨地域重试。
+- T05本地检查点d1565d95，真实API待验；当前T06稳定jj change xovuunkz。解析器向模型发送Schema，服务端限制工具计划；JSON/HTML报告仅读取终态证据。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `74e22a4a9f3b` | (see git log) |
+
+### Testing
+
+- [OK] 最终后端+真实本地PG/Temporal：304 passed,4 skipped；Ruff和diff检查通过。跳过真实GPU、两个付费API及共享服务重启，未宣称这些通过。
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- 先读当前T06任务的implement.md/runtime-report.md/review.md；切片A不重做。T06-B接消息持久化、Temporal对话与关联操作、聊天UI；完整首版Agent尚未交付。
+- 等待Key对应的Base URL/去掉Key的调用示例后，少量有界文本与原图请求完成真实联调；不要把Key发到猜测地址，不自动推送GitHub。

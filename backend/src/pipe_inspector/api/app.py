@@ -9,6 +9,7 @@ from starlette.exceptions import HTTPException
 from pipe_inspector.api.inspection import inspection_router
 from pipe_inspector.api.intake import intake_router
 from pipe_inspector.api.limits import UPLOAD_LIMIT_DETAIL, BodyLimitMiddleware
+from pipe_inspector.api.reports import report_router
 from pipe_inspector.config import Settings
 from pipe_inspector.media import MediaError, MediaStore
 from pipe_inspector.storage.inspection import InspectionRepository
@@ -30,6 +31,7 @@ def create_app(
         probe_timeout_seconds=settings.media_probe_timeout_seconds,
     )
     app.include_router(intake_router(repo, media))
+    app.include_router(report_router(repo))
     app.include_router(inspection_router(repo, starter or InspectionStarter(settings, repo)))
 
     @app.exception_handler(InspectionStartError)

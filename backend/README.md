@@ -1,6 +1,6 @@
 # 后端开发入口
 
-当前已完成 T03 统一契约、T04 会话/上传/持久任务入口，并接通 T05 图片检测与条件复检工作流；真实 API 联调遇到认证失败，待确认 Key 对应地址，T06 连续对话与文本规划尚未接通。总范围见 [总体开发计划](../project_management/DEVELOPMENT_PLAN.md)，活动任务与验收证据保存在 `.trellis/`。
+当前已完成 T03 统一契约、T04 会话/上传/持久任务入口，并接通 T05 图片检测与条件复检工作流；真实 API 联调遇到认证失败，待确认 Key 对应地址，T06-A 已有意图解析/计划编译基础及报告端点，连续对话仍待 T06-B 接入。总范围见 [总体开发计划](../project_management/DEVELOPMENT_PLAN.md)，活动任务与验收证据保存在 `.trellis/`。
 
 ## 本服务器环境
 
@@ -139,3 +139,12 @@ SEWER_RUN_STORAGE_TEST=1 .venv/bin/python -m pytest backend/tests/integration/te
 用户已选定 `qwen3.8-max`，LLM/VLM 两个角色均复用本地 `DASHSCOPE_API_KEY`。精确 Base URL 仍需与 Key 所属服务商/地域匹配；当前北京官方地址认证失败，未自动切换地域。官方模型说明支持视觉输入，但本项目实际效果仍待验证：[Qwen3.8-max](https://help.aliyun.com/zh/model-studio/qwen3-8-max)。
 
 配置示例见 `.env.example`。共享 Key 仅自动用于官方 HTTPS Qwen 地址；其他兼容服务需要明确设置对应角色的 Key，不能把共享密钥自动发往任意地址。`SEWER_API_ENABLE_THINKING=false` 与 `SEWER_API_MAX_OUTPUT_TOKENS=4096` 限制输出；参数在任务启动时固定。测试可临时覆盖上限为 256，正常工作流不自动使用测试值。
+
+## 对话规划基础与证据报告（T06-A）
+
+- `IntentParser` 将有限历史与用户文本转换为严格意图；`compile_inspection_plan` 由服务端生成工具顺序、保留复检策略节点并校验当前可用工具。查询/报告等只读意图不生成新的检测计划。当前解析模块尚未接到产品消息入口，上传文本仍按 T05 保存而不解析执行。
+- `GET /api/tasks/{id}/report?format=json` 导出版本化 TaskReport（任务快照＋工具尝试）；`format=html` 查看转义后的中文证据报告。仅终态可导出；进行中返回 409。partial/failed/cancelled 不被包装为正常，报告保留待审、覆盖及工具错误。
+- 报告仅查询存储，不调用模型、不改变旧结论；HTML 证据链接指向服务器媒体接口，不包含离线打包的原图。
+- T06-B 尚需消息持久化、幂等对话处理、追加关联操作及聊天界面；本切片不能替代这些完整 Agent 交互。
+
+相关测试：`backend/tests/test_conversation_intent.py`、`test_reports.py`；真实 PostgreSQL 报告回读随 `SEWER_RUN_STORAGE_TEST=1` 执行。

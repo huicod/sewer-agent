@@ -74,3 +74,39 @@ async def test_structured_qwen_request_can_disable_thinking_and_bound_output():
         max_output_tokens=256,
     )
     assert (await client.generate([{"role": "user", "content": "Return JSON"}], Result)).ok
+
+
+def test_both_qwen_roles_can_share_one_key_with_pinned_request_limits():
+    from pipe_inspector.workflow.activities import ImageActivities
+    from pipe_inspector.workflow.start import run_config
+    from temporalio.exceptions import ApplicationError
+
+    settings = Settings(
+        _env_file=None,
+        DASHSCOPE_API_KEY="fixture-shared",
+        llm_base_url=BASE_URL,
+        llm_model="qwen3.8-max",
+        vlm_base_url=BASE_URL,
+        vlm_model="qwen3.8-max",
+        api_enable_thinking=False,
+        api_max_output_tokens=4096,
+    )
+    assert settings.llm_configured and settings.vlm_configured
+    config = run_config(settings)
+    assert config["api_enable_thinking"] is False
+    assert config["api_max_output_tokens"] == 4096
+    assert "fixture-shared" not in json.dumps(config)
+    activities = ImageActivities(settings, None, None)
+    activities._check_versions(config, vlm=True)
+    with pytest.raises(ApplicationError, match="differs from pinned"):
+        activities._check_versions(config | {"api_max_output_tokens": 256}, vlm=True)
+
+
+@pytest.mark.parametrize("value", [0, -1, 8193, True, 1.5])
+def test_invalid_output_cap_is_rejected_before_network(value):
+    from pipe_inspector.agent.api_client import APIClientError
+
+    with pytest.raises(APIClientError, match="invalid_configuration"):
+        OpenAICompatibleClient(
+            BASE_URL, "qwen3.8-max", SecretStr("fixture"), max_output_tokens=value
+        )

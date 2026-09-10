@@ -2,10 +2,10 @@
   "id": "m1-conversation",
   "name": "m1-conversation",
   "title": "T06 对话规划与证据报告",
-  "description": "",
-  "status": "planning",
-  "dev_type": null,
-  "scope": null,
+  "description": "T06-A constrained intent/plan foundations and evidence reports; T06-B durable multi-turn chat/execution/UI pending",
+  "status": "in_progress",
+  "dev_type": "backend",
+  "scope": "T06",
   "package": null,
   "priority": "P1",
   "creator": "huicod",
@@ -22,5 +22,14 @@
   "parent": null,
   "relatedFiles": [],
   "notes": "",
-  "meta": {}
+  "meta": {
+    "roadmap_tasks": "T06",
+    "jj_change": "xovuunkz",
+    "slice_a": "complete",
+    "validation": "304 passed, 4 skipped; Ruff/diff clean",
+    "review": "passed",
+    "slice_b": "not_implemented",
+    "live_api": "blocked_authentication",
+    "tested_code_checkpoint": "74e22a4a9f3b"
+  }
 }

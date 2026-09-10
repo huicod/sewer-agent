@@ -25,6 +25,9 @@
   "meta": {
     "roadmap_tasks": "T02",
     "jj_change": "tsksxomp",
-    "pending": "provider/model/base URL and local API credentials only; trusted checkpoint GPU smoke passed"
+    "pending": "Actual Key provider/Base URL alignment and successful LLM/VLM probes; trusted GPU and durable runtime already passed",
+    "live_api": "blocked_authentication",
+    "provider_model": "qwen3.8-max",
+    "next": "Confirm key provider/Base URL; Beijing text probe failed, no live image upload"
   }
 }

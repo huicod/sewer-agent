@@ -1,19 +1,13 @@
 # T06 对话规划与证据报告
+目标：从上传任务入口演进为可多轮追问、引用证据并追加合法工具操作的任务型 Agent。总体范围沿用已批准 DEVELOPMENT_PLAN.md，不另增平台。
 
-## Goal
+约束：检测始终覆盖五类；正常结论由既有证据规则决定；OTHER 保持人工确认。LLM/VLM 走 API，本地工具走现有适配器；Temporal 是唯一耐久编排。模型输出不能指定路径、地址、代码、凭据或自行增加预算。
 
-TBD.
+验收：
+- [ ] 多轮消息与关联任务持久化；刷新恢复；重复发送幂等。
+- [ ] 查结果/追问/报告复用已有证据，不重新检测；追加复检创建关联操作并保留原结果。
+- [x] 文本解析输出受约束意图；服务端构建并校验工具顺序、预算和可用性；不支持的操作明确说明。
+- [x] JSON/HTML 报告来自存储快照和调用记录，保留正常/缺陷/不完整、待审与覆盖限制，不编造结论。
+- [ ] 聊天与文件上传 UI、真实 API 验证及工作流恢复用例通过。
 
-## Requirements
-
-- TBD
-
-## Acceptance Criteria
-
-- [ ] TBD
-
-## Notes
-
-- Keep `prd.md` focused on requirements, constraints, and acceptance criteria.
-- Lightweight tasks can remain PRD-only.
-- For complex tasks, add `design.md` for technical design and `implement.md` for execution planning before `task.py start`.
+当前切片 A：先实现意图解析/合法计划编译与只读报告端点，均可离线验证；尚不接管 T05 文本执行。切片 B 再接入会话持久化、Temporal 对话处理/追加操作、UI。真实 API 认证失败待确认 Base URL，不能把替身结果当真实联调通过。
