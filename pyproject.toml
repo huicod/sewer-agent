@@ -23,6 +23,8 @@ dependencies = [
 dev = ["pytest==9.1.1", "pytest-asyncio==1.4.0", "ruff==0.16.6"]
 # Verified against the existing trusted YOLO26 checkpoint with one real GPU image.
 gpu = ["ultralytics==8.4.46"]
+# Optional SDKs for reproducing the provider's published API examples.
+qwen-sdk = ["openai==3.11.0", "dashscope==1.27.4"]
 
 [tool.setuptools.packages.find]
 where = ["backend/src"]
