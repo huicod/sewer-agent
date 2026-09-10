@@ -118,7 +118,7 @@ async def test_inspect_without_media_and_supplement_do_not_fake_execution():
         store.turn, ConversationIntent(kind="supplement", actions=("verify",), message="再次复检")
     )
     assert "上传" in missing["reply"]
-    assert "尚未接入" in unsupported["reply"]
+    assert "选择" in unsupported["reply"]
     assert not store.created and starter.start.call_count == 0
 
 
@@ -133,3 +133,60 @@ async def test_start_failure_preserves_created_task_link_for_recovery():
             turn, ConversationIntent(kind="inspect", message="检查")
         )
     assert store.turn.linked_task_id == store.task.snapshot.task_id
+
+
+@pytest.mark.parametrize("start_fails", [False, True])
+async def test_supplement_persists_child_link_before_start(start_fails):
+    store = Store()
+    parent_id = store.task.snapshot.task_id
+    turn = TurnRecord.model_validate(store.turn.model_dump() | {"task_id": parent_id})
+    child = SimpleNamespace(snapshot=SimpleNamespace(task_id=uuid4()))
+
+    async def start(child_id):
+        assert child_id == child.snapshot.task_id == store.turn.linked_task_id
+        if start_fails:
+            raise InspectionStartError("workflow_unavailable", "未确认")
+
+    starter = SimpleNamespace(
+        admit_supplement=AsyncMock(return_value=child), start=AsyncMock(side_effect=start)
+    )
+    dispatch = ConversationDispatcher(store, starter)
+    intent = ConversationIntent(
+        kind="supplement", actions=("verify", "export_report"), message="再复检一次"
+    )
+    if start_fails:
+        with pytest.raises(InspectionStartError):
+            await dispatch.handle(turn, intent)
+    else:
+        result = await dispatch.handle(turn, intent)
+        assert result["linked_task_id"] == str(child.snapshot.task_id)
+        assert "原结果" in result["reply"]
+    args = starter.admit_supplement.call_args.args
+    assert args[0] == parent_id
+    assert args[1].request_id == turn.request_id
+    assert args[1].input_asset == store.asset
+    assert not store.created
+
+
+@pytest.mark.parametrize("invalid", ["tool", "asset"])
+async def test_supplement_rejects_unavailable_tools_and_asset_substitution(invalid):
+    store = Store()
+    turn = TurnRecord.model_validate(
+        store.turn.model_dump()
+        | {
+            "task_id": store.task.snapshot.task_id,
+            "input_asset": AssetRef(asset_id=uuid4()) if invalid == "asset" else None,
+        }
+    )
+    starter = SimpleNamespace(admit_supplement=AsyncMock(), start=AsyncMock())
+    result = await ConversationDispatcher(store, starter).handle(
+        turn,
+        ConversationIntent(
+            kind="supplement",
+            actions=("verify", "segment") if invalid == "tool" else ("verify",),
+            message="追加",
+        ),
+    )
+    assert "未执行" in result["reply"]
+    starter.admit_supplement.assert_not_awaited()
+    starter.start.assert_not_awaited()

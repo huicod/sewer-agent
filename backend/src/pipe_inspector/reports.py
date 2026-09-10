@@ -54,6 +54,13 @@ def render_html(report: TaskReport) -> str:
         "<p>" + evidence_link(task.input_asset) + "</p>",
         f"<h2>证据覆盖</h2><p>{covered}；{quality}；{audited}</p>",
     ]
+    if task.parent_task_id:
+        lines.append(
+            '<p>关联追加复检：<a href="/api/tasks/'
+            f'{task.parent_task_id}/report?format=html">原任务报告</a>'
+            "。复用原图片及原检测证据，未重新运行检测器；原结果未改写。"
+            "原检测器版本和调用记录见原任务报告。</p>"
+        )
     if snapshot.waiting_reason:
         lines.append("<p>限制/待处理：" + escape(snapshot.waiting_reason) + "</p>")
     lines.append("<h2>检测发现</h2>")

@@ -1,6 +1,6 @@
 # T06-B1 交接与验收（2026-09-10）
 
-本文件是本阶段最新交接；T06-A 的 implement/runtime-report/review 及旧认证失败记录保留为历史。总体路线图仍仅维护 `project_management/DEVELOPMENT_PLAN.md`。
+本文件保留 B1 历史验收；最新 B2/T06 完成交接见 [supplement-report.md](supplement-report.md)，以下 B2 待办已由后续阶段完成。T06-A 及旧认证失败记录保留为历史。总体路线图仍仅维护 `project_management/DEVELOPMENT_PLAN.md`。
 
 ## 已交付
 

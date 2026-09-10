@@ -200,7 +200,9 @@ export function isTaskRecord(value: unknown): value is TaskRecord {
     isAssetRef(value.input_asset) &&
     isNonEmptyString(value.instruction) &&
     isTimestamp(value.created_at) &&
-    isTaskSnapshot(value.snapshot)
+    isTaskSnapshot(value.snapshot) &&
+    (value.parent_task_id === undefined || value.parent_task_id === null ||
+      (isUuid(value.parent_task_id) && value.parent_task_id !== value.snapshot.task_id))
   );
 }
 

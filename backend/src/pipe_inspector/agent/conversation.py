@@ -7,6 +7,7 @@ from pipe_inspector.contracts.intake import TaskSubmission
 from pipe_inspector.contracts.planning import ActionKind
 from pipe_inspector.reports import LABELS, RESULTS, REVIEWS
 from pipe_inspector.storage.repository import MissingRecord
+from pipe_inspector.storage.supplements import SupplementNotAllowed
 
 AVAILABLE_ACTIONS = frozenset(
     {ActionKind.DETECT, ActionKind.VERIFY, ActionKind.SUMMARIZE, ActionKind.EXPORT_REPORT}
@@ -45,9 +46,9 @@ class ConversationDispatcher:
     async def handle(self, turn, intent):
         if intent.kind in {"clarify", "refuse"}:
             return self._reply(intent.message)
-        if intent.kind == "supplement":
-            return self._reply("关联补充复检尚未接入，本次没有执行新工具，也没有改写原结果。")
         task = await self._target(turn)
+        if intent.kind == "supplement":
+            return await self._supplement(turn, intent, task)
         if intent.kind == "inspect":
             try:
                 plan = compile_inspection_plan(intent, available_actions=AVAILABLE_ACTIONS)
@@ -123,3 +124,46 @@ class ConversationDispatcher:
             if isinstance(summary, str) and summary:
                 lines.append("VLM 复检说明（建议，状态以上述已保存结果为准）：" + summary[:1000])
         return self._reply("\n".join(lines), snapshot.task_id)
+
+    async def _supplement(self, turn, intent, task):
+        allowed = {ActionKind.VERIFY, ActionKind.SUMMARIZE, ActionKind.EXPORT_REPORT}
+        if ActionKind.VERIFY not in intent.actions or not set(intent.actions) <= allowed:
+            return self._reply(
+                "当前追加操作仅支持 VLM 复检及其报告；请求包含未部署工具，本次未执行任何追加操作。"
+            )
+        if task is None:
+            return self._reply("请先选择一个已完成或部分完成的图片任务，再请求追加复检。")
+        parent_id = task.snapshot.task_id
+        if turn.input_asset is not None and turn.input_asset != task.input_asset:
+            return self._reply(
+                "追加复检必须使用原任务图片；本次未执行。若要检查新图片，请发起新检查。", parent_id
+            )
+        try:
+            child = await self.starter.admit_supplement(
+                parent_id,
+                TaskSubmission(
+                    request_id=turn.request_id,
+                    session_id=turn.session_id,
+                    input_asset=task.input_asset,
+                    instruction=turn.text,
+                ),
+            )
+        except SupplementNotAllowed as exc:
+            message = {
+                "supplement_limit": (
+                    "该原任务的追加复检次数已用完（最多一次）；"
+                    "仅启动确认失败时可重试同一关联任务；已结束复检不再执行。"
+                ),
+                "source_not_ready": "原任务尚未完成或不处于可复检状态，请先查看原任务进度。",
+                "image_only": "当前追加复检仅支持图片任务，视频复检尚未接入。",
+                "source_evidence_missing": "原任务缺少有效的检测证据，无法追加复检。",
+            }[exc.code]
+            return self._reply(message + "本次未执行新工具，原结果保持不变。", parent_id)
+        child_id = child.snapshot.task_id
+        # Link before Temporal start: ambiguous network failure must not orphan the child.
+        await asyncio.to_thread(self.repo.update_turn, turn.request_id, linked_task_id=child_id)
+        await self.starter.start(child_id)
+        return self._reply(
+            "关联复检已启动，复用原图片和检测证据，不重新运行检测器；原结果保留。新的复检结果尚未完成，可在关联任务中查看进度和报告。",
+            child_id,
+        )

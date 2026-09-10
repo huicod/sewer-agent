@@ -125,28 +125,34 @@ function TaskCard({ task, starting, onStart }: TaskCardProps) {
     <article className="task-card">
       <div className="task-card__heading">
         <div>
-          <p className="eyebrow">检查任务</p>
+          <p className="eyebrow">{task.parent_task_id ? "关联追加复检" : "检查任务"}</p>
           <h3>{task.instruction}</h3>
         </div>
         <span className={`status status--${task.snapshot.runtime_status}`}>
           {STATUS_TEXT[task.snapshot.runtime_status]}
         </span>
       </div>
+      {task.parent_task_id ? (
+        <p className="task-hint">
+          复用原图片和检测证据，原结果保持不变。{" "}
+          <a href={reportUrl(task.parent_task_id, "html")} target="_blank" rel="noreferrer">原任务报告</a>
+        </p>
+      ) : null}
       {queued ? (
         <>
-          <p className="truth-note">已上传并入队，等待启动图片检查</p>
+          <p className="truth-note">{task.parent_task_id ? "复检已入队，等待执行；重复启动沿用同一任务" : "已上传并入队，等待启动图片检查"}</p>
           <p className="task-hint">当前仅图片可执行；视频执行尚未接入。</p>
           <button
             type="button"
             disabled={starting}
             onClick={() => onStart(task.snapshot.task_id)}
           >
-            {starting ? "正在启动…" : "启动图片检查"}
+            {starting ? "正在启动…" : task.parent_task_id ? "启动关联复检" : "启动图片检查"}
           </button>
         </>
       ) : null}
       {task.snapshot.runtime_status === "running" ? (
-        <p className="truth-note">图片检查正在执行</p>
+        <p className="truth-note">{task.parent_task_id ? "关联复检正在执行（不重新检测）" : "图片检查正在执行"}</p>
       ) : null}
       {task.snapshot.runtime_status === "partial" ? (
         <p className="truth-note">检查部分完成；未解决项尚无人工处理入口</p>
@@ -602,7 +608,7 @@ export default function App({ pollIntervalMs = 2_000 }: AppProps) {
           <span>{turns.length} 条</span>
         </div>
         <p className="conversation-note">
-          可询问已存证据、请求报告或上传新资料。补充操作和视频执行尚未支持，助手会明确说明限制。
+          可询问已存证据、请求报告或上传新资料。每个已完成或部分完成的原图片任务可追加一次 VLM 复检；视频执行及其他工具尚未接入。
           附件与已有任务二选一，选择一项会清除另一项。
         </p>
         <div className="transcript" aria-live="polite">

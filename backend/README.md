@@ -1,6 +1,6 @@
 # 后端开发入口
 
-当前已接通图片检测、条件 VLM 复检，以及 T06-B1 持久对话＋附件入口：对话可启动图片检查、追问已存证据和获取报告。Qwen 文本与原图复检已真实联调通过；关联补充复检、视频执行、人工审核等待仍在后续阶段。总范围见 [总体开发计划](../project_management/DEVELOPMENT_PLAN.md)，验收证据保存在 `.trellis/`。
+当前已接通图片检测、条件 VLM 复检，以及持久对话＋附件入口：对话可启动图片检查、追问已存证据、获取报告和追加一次关联复检。Qwen 文本与原图复检已真实联调通过；视频执行、人工审核等待仍在后续阶段。总范围见 [总体开发计划](../project_management/DEVELOPMENT_PLAN.md)，验收证据保存在 `.trellis/`。
 
 ## 本服务器环境
 
@@ -142,16 +142,20 @@ SEWER_RUN_STORAGE_TEST=1 .venv/bin/python -m pytest backend/tests/integration/te
 
 配置示例见 `.env.example`。共享 Key 仅自动用于官方 HTTPS Qwen 地址；其他兼容服务需要明确设置对应角色的 Key，不能把共享密钥自动发往任意地址。`SEWER_API_ENABLE_THINKING=false` 与 `SEWER_API_MAX_OUTPUT_TOKENS=4096` 限制输出；参数在任务启动时固定。测试可临时覆盖上限为 256，正常工作流不自动使用测试值。
 
-## 持久对话与证据报告（T06-A / B1）
+## 持久对话、关联复检与证据报告（T06）
 
-- 重新执行 `scripts/init_storage.py` 新增对话表，并重启 API 与 CPU worker；GPU worker 命令不变。网页“检查助手”支持文本、可选附件或已有任务；手动入队入口仍保留。
+- 升级后重新执行 `scripts/init_storage.py` 新增对话/复检关联表，并重启 API 与 CPU worker；GPU worker 命令不变。该操作不删除旧数据。网页“检查助手”支持文本、可选附件或已有任务；手动入队入口仍保留。
 - `POST /api/sessions/{session_id}/turns` 接收 `request_id`、`text`、可选 `input_asset` / `task_id`，返回 202；同一路径 GET 恢复最近 50 条消息，加 `/{request_id}` 查询单条阶段。未指定任务时，沿用最近一次已完成对话的关联任务；超出保留窗口时应显式选择。
 - PostgreSQL 保存原始消息、意图/计划/分派检查点；Temporal 依次规划、执行、结束。每会话最多一条活跃消息；启动确认失败可原样重发相同 request_id，刷新后也能用“确认启动”重试。终态不可被重试改写。
 - `IntentParser` 使用最多 5 轮已完成历史（10 条消息）；服务端构建受约束计划，拒绝未部署工具。对话新检查始终执行五类；意图解析认定用户请求 `verify` 时不得跳过 VLM，其他情形沿用条件复检规则。文本识别仍可能误解意图、增加已允许工具的调用，不能承诺语义判断完全准确；必要复检失败保留 partial，不冒充完成。
-- 回答“已启动”只表示关联检查已提交，不表示检查完成；检测阶段由关联任务显示。查询/解释引用保存的结论、发现、覆盖和复检说明，不重新跑模型；意图解析本身仍调用一次 LLM。无证据、视频执行、补充操作或未部署工具均明确说明限制。
+- 回答“已启动”只表示关联检查已提交，不表示检查完成；检测阶段由关联任务显示。查询/解释引用保存的结论、发现、覆盖和复检说明，不重新跑模型；意图解析本身仍调用一次 LLM。无证据、视频执行或未部署工具均明确说明限制。
 - `GET /api/tasks/{id}/report?format=json` 导出版本化 TaskReport（任务快照＋工具尝试）；`format=html` 查看转义后的中文证据报告。仅终态可导出；进行中返回 409。partial/failed/cancelled 不被包装为正常，报告保留待审、覆盖及工具错误。
 - 报告仅查询存储，不调用模型、不改变旧结论；HTML 证据链接指向服务器媒体接口，不包含离线打包的原图。
-- B2 尚需关联补充复检：沿用原始证据、保留旧终态并限制追加次数。当前不会把 supplement 偷换成重新检测。视频、人工审核等待及后置工具仍未交付，不能称完整首版已完成。
+- 选择已完成或部分完成的原图片任务，发送“请对这个任务追加一次 VLM 复检”：新建带 `parent_task_id` 的关联任务，复用原图及冻结的检测证据，不运行 GPU 检测、不改写原结果。页面和 HTML 报告可回到原任务报告，原检测版本/调用记录仍属于原任务。
+- 每个原任务最多一个复检子任务；重复 request_id 沿用首次身份与配置，子任务不能再追加子任务，失败也占用次数。启动确认失败可对同一子任务重试 `/start`；已结束的复检不因 `/start` 重做。复检只需 CPU/API worker，允许使用当前配置的 VLM，但重试不得切换模型或参数。
+- 追加操作仅允许 `verify`（可附带摘要/报告）；若同时要求尚未部署的分割/增强等工具，本次全部不执行。前后 VLM 实质判断冲突保留待审；原有 VLM 新增发现/OTHER 不因新回答遗漏而消失。缺失或弃权的原复检可由新的有效审核补足；复检失败不能得出正常。视频、人工审核等待及后置工具仍未交付，不能称完整首版已完成。
 - 任务和对话关联必须属于同一会话；上传资产沿用本机单用户全局模型，没有上传者所有权或用户鉴权。这不是多用户数据隔离方案，仍只能绑定本机使用。
 
 本地对话恢复测试：`SEWER_RUN_CONVERSATION_TEST=1 .venv/bin/pytest -q backend/tests/integration/test_conversation_workflow.py -m 'not live_api'`。只使用隔离测试 schema/队列，不重启共享服务；另加 `SEWER_RUN_LIVE_API=1` 并选择 `-k real_qwen` 才会付费调用文本 API。真实测试使用合成已存证据验证查询分派，不代表正常样本验收。远端成功但尚未保存本地检查点的崩溃窗口仍可能重复付费，不能承诺 exactly-once。
+
+关联复检的本地 PG/Temporal 验证：`SEWER_RUN_CONVERSATION_TEST=1 .venv/bin/pytest -q backend/tests/integration/test_image_supplement_integration.py`；无需 GPU 或付费 API，覆盖限流重试、重复分派、保留 OTHER、Worker 替换及最终写库失败恢复。

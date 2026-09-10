@@ -9,18 +9,20 @@ from datetime import timedelta
 
 from pipe_inspector.config import Settings
 from pipe_inspector.media import MediaStore
-from pipe_inspector.storage.conversation import ConversationRepository
+from pipe_inspector.storage.supplements import SupplementRepository
 from pipe_inspector.workflow.activities import ImageActivities
 from pipe_inspector.workflow.conversation import ConversationWorkflow
 from pipe_inspector.workflow.conversation_activities import TurnActivities
 from pipe_inspector.workflow.image import ImageInspectionWorkflow
+from pipe_inspector.workflow.supplement import ImageSupplementWorkflow
+from pipe_inspector.workflow.supplement_activities import SupplementActivities
 from temporalio.client import Client
 from temporalio.worker import Worker
 
 
 async def serve(kind: str) -> None:
     settings = Settings()
-    repo = ConversationRepository(settings.database_dsn)
+    repo = SupplementRepository(settings.database_dsn)
     media = MediaStore(
         settings.asset_root,
         max_upload_bytes=settings.max_upload_bytes,
@@ -28,6 +30,7 @@ async def serve(kind: str) -> None:
         probe_timeout_seconds=settings.media_probe_timeout_seconds,
     )
     activities = ImageActivities(settings, repo, media)
+    supplements = SupplementActivities(settings, repo, media)
     turns = TurnActivities(settings, repo)
     client = await Client.connect(settings.temporal_address, namespace=settings.temporal_namespace)
     gpu = kind == "gpu"
@@ -38,13 +41,16 @@ async def serve(kind: str) -> None:
         worker = Worker(
             client,
             task_queue=settings.task_queue + ("-gpu" if gpu else ""),
-            workflows=[] if gpu else [ImageInspectionWorkflow, ConversationWorkflow],
+            workflows=[]
+            if gpu
+            else [ImageInspectionWorkflow, ConversationWorkflow, ImageSupplementWorkflow],
             activities=[activities.detect_image]
             if gpu
             else [
                 activities.publish_stage,
                 activities.verify_image,
                 activities.finish_image,
+                supplements.finish_supplement,
                 turns.parse_turn,
                 turns.dispatch_turn,
                 turns.finish_turn,

@@ -219,13 +219,8 @@ class InspectionRepository(PostgresRepository):
                 if current.snapshot == snapshot:
                     return current
                 raise SubmissionConflict
-            updated = TaskRecord(
-                request_id=current.request_id,
-                session_id=current.session_id,
-                input_asset=current.input_asset,
-                instruction=current.instruction,
-                created_at=current.created_at,
-                snapshot=snapshot,
+            updated = TaskRecord.model_validate(
+                current.model_dump() | {"snapshot": snapshot}
             )
             connection.execute(
                 sql.SQL("UPDATE {} SET record = %s WHERE task_id = %s").format(

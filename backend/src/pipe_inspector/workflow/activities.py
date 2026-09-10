@@ -10,6 +10,7 @@ from temporalio.exceptions import ApplicationError
 from pipe_inspector.agent.api_client import APIClientError, OpenAICompatibleClient
 from pipe_inspector.agent.image_policy import decide_image, review_required
 from pipe_inspector.agent.image_review import ImageReviewer
+from pipe_inspector.agent.supplement_policy import SUPPLEMENT_POLICY_VERSION
 from pipe_inspector.contracts.common import ImageRegion
 from pipe_inspector.contracts.findings import EvidenceRef, Finding, FindingSource, ReviewStatus
 from pipe_inspector.contracts.inspection import ImageObservation, ImageReview
@@ -48,6 +49,8 @@ class ImageActivities:
 
     def _check_versions(self, config, *, detector=False, vlm=False):
         expected = {"policy_version": POLICY_VERSION, "prompt_version": PROMPT_VERSION}
+        if config.get("operation") == "supplement_review":
+            expected["supplement_policy_version"] = SUPPLEMENT_POLICY_VERSION
         if detector:
             expected.update(
                 {
@@ -258,6 +261,11 @@ class ImageActivities:
             call,
         )
 
+    def _decide(self, run, task, observation, review, error):
+        return decide_image(
+            task.snapshot.task_id, task.input_asset, observation, review, review_error=error
+        )
+
     @activity.defn(name="finish_image")
     def finish_image(self, payload: dict) -> dict:
         run = payload["run"]
@@ -312,13 +320,7 @@ class ImageActivities:
                     if saved_review and saved_review.get("review")
                     else None
                 )
-                decision = decide_image(
-                    task_id,
-                    task.input_asset,
-                    observation,
-                    review,
-                    review_error=error,
-                )
+                decision = self._decide(run, task, observation, review, error)
                 partial = (
                     bool(error)
                     or decision.needs_review

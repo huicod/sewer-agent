@@ -4,14 +4,19 @@ import asyncio
 from uuid import UUID, uuid4
 
 import httpx
+from pydantic import ValidationError
 from temporalio.client import Client
 from temporalio.common import WorkflowIDReusePolicy
 from temporalio.exceptions import WorkflowAlreadyStartedError
 from temporalio.service import RPCError
 
+from pipe_inspector.agent.supplement_policy import SUPPLEMENT_POLICY_VERSION
 from pipe_inspector.config import Settings
+from pipe_inspector.contracts.inspection import ImageObservation
+from pipe_inspector.contracts.intake import TaskSubmission
 from pipe_inspector.contracts.planning import TaskPlan
 from pipe_inspector.storage.repository import SubmissionConflict
+from pipe_inspector.storage.supplements import SupplementNotAllowed
 from pipe_inspector.vision.detector import UltralyticsDetector
 
 POLICY_VERSION = "image-policy-v1"
@@ -72,6 +77,22 @@ class InspectionStarter:
     def __init__(self, settings, repository, *, connect=Client.connect):
         self.settings, self.repo, self.connect = settings, repository, connect
 
+    async def admit_supplement(self, parent_task_id: UUID, submission: TaskSubmission):
+        raw = await asyncio.to_thread(self.repo.load_step, parent_task_id, "detect")
+        try:
+            observation = ImageObservation.model_validate(raw)
+        except ValidationError:
+            raise SupplementNotAllowed("source_evidence_missing") from None
+        config = run_config(self.settings, detector=observation.detection, force_review=True)
+        config.update(
+            operation="supplement_review",
+            parent_task_id=str(parent_task_id),
+            supplement_policy_version=SUPPLEMENT_POLICY_VERSION,
+        )
+        return await asyncio.to_thread(
+            self.repo.admit_supplement, parent_task_id, submission, config
+        )
+
     async def start(
         self, task_id: UUID, *, force_review: bool = False, plan: TaskPlan | None = None
     ):
@@ -84,6 +105,16 @@ class InspectionStarter:
         if record.snapshot.is_terminal and plan is None:
             return record
         run = await asyncio.to_thread(self.repo.get_run, task_id)
+        parent_task_id = getattr(record, "parent_task_id", None)
+        if parent_task_id is not None and (
+            run is None
+            or run["config"].get("operation") != "supplement_review"
+            or run["config"].get("parent_task_id") != str(parent_task_id)
+            or run["config"].get("force_review") is not True
+        ):
+            raise InspectionStartError(
+                "supplement_run_invalid", "关联复检的固定运行记录无效，不能改为重新检测", 409
+            )
         if run is None and not record.snapshot.is_terminal:
             try:
                 run = await asyncio.to_thread(
@@ -112,7 +143,7 @@ class InspectionStarter:
                     self.settings.temporal_address, namespace=self.settings.temporal_namespace
                 )
                 await client.start_workflow(
-                    "ImageInspectionWorkflow",
+                    "ImageSupplementWorkflow" if parent_task_id else "ImageInspectionWorkflow",
                     run,
                     id=f"inspection:{task_id}",
                     task_queue=self.settings.task_queue,

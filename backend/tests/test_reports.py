@@ -12,6 +12,7 @@ from pipe_inspector.contracts.intake import TaskRecord
 from pipe_inspector.contracts.reports import TaskReport
 from pipe_inspector.contracts.tasks import TaskSnapshot
 from pipe_inspector.contracts.tools import ToolCall, ToolError
+from pipe_inspector.reports import render_html
 from pipe_inspector.storage.repository import MissingRecord
 
 
@@ -58,6 +59,16 @@ def report_fixture(status="partial"):
         error=ToolError(code="timeout", retryable=True, message="工具执行未完成：timeout"),
     )
     return task, call
+
+
+def test_supplement_report_links_original_without_inventing_a_detection_call():
+    task, call = report_fixture()
+    parent_id = uuid4()
+    child = TaskRecord.model_validate(task.model_dump() | {"parent_task_id": parent_id})
+    html = render_html(TaskReport(task=child, tool_calls=(call,)))
+    assert f"/api/tasks/{parent_id}/report?format=html" in html
+    assert "原任务报告" in html and "未重新运行检测器" in html
+    assert "detect v1" not in html
 
 
 @pytest.fixture

@@ -2,8 +2,8 @@
   "id": "m1-conversation",
   "name": "m1-conversation",
   "title": "T06 对话规划与证据报告",
-  "description": "T06-A and B1 delivered: durable conversation, image dispatch, saved-evidence answers and UI; B2 linked supplemental review pending",
-  "status": "in_progress",
+  "description": "T06-A/B1/B2 delivered: durable conversation, image dispatch, saved-evidence reports and bounded linked re-review; next T07 video",
+  "status": "completed",
   "dev_type": "backend",
   "scope": "T06",
   "package": null,
@@ -11,7 +11,7 @@
   "creator": "huicod",
   "assignee": "huicod",
   "createdAt": "2026-09-10",
-  "completedAt": null,
+  "completedAt": "2026-09-10",
   "branch": null,
   "base_branch": "main",
   "worktree_path": null,
@@ -24,14 +24,14 @@
   "notes": "",
   "meta": {
     "roadmap_tasks": "T06",
-    "jj_change": "zmoplozu",
+    "jj_change": "mkomtpts",
     "slice_a": "complete",
-    "validation": "348 backend passed, 6 skipped; 26 frontend passed and build; Ruff/diff clean; real Qwen conversation passed separately",
+    "validation": "398 backend passed, 6 skipped; 27 frontend passed and build; Ruff lint/diff clean; local PG/Temporal B2 recovery passed",
     "review": "passed",
     "slice_b1": "complete",
-    "slice_b2": "pending",
+    "slice_b2": "complete",
     "live_api": "passed_2026-09-10",
-    "next": "Design and implement bounded linked supplemental review without mutating original terminal task",
-    "evidence": "conversation-report.md"
+    "next": "T07 video decoding, detector coverage, event aggregation and evidence selection",
+    "evidence": "supplement-report.md"
   }
 }

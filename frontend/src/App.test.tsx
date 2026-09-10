@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import App from "./App";
+import { isTaskRecord } from "./validators";
 
 const sessionId = "33333333-3333-4333-8333-333333333333";
 const taskId = "44444444-4444-4444-8444-444444444444";
@@ -68,6 +69,28 @@ afterEach(() => {
 });
 
 describe("conversation-ready intake shell", () => {
+  it("validates optional parent links and resumes the linked review task", async () => {
+    const parentId = "55555555-5555-4555-8555-555555555555";
+    const child = { ...task(), parent_task_id: parentId };
+    expect(isTaskRecord(task())).toBe(true);
+    expect(isTaskRecord({ ...task(), parent_task_id: null })).toBe(true);
+    expect(isTaskRecord(child)).toBe(true);
+    expect(isTaskRecord({ ...task(), parent_task_id: "javascript:bad" })).toBe(false);
+    expect(isTaskRecord({ ...task(), parent_task_id: taskId })).toBe(false);
+    localStorage.setItem("pipe-inspector.session-id", sessionId);
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ session: { session_id: sessionId, created_at: createdAt }, tasks: [child] }))
+      .mockResolvedValueOnce(jsonResponse([]))
+      .mockResolvedValueOnce(jsonResponse({ ...task("running"), parent_task_id: parentId }, 202));
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+    render(<App pollIntervalMs={60_000} />);
+    await user.click(await screen.findByRole("button", { name: "启动关联复检" }));
+    expect(await screen.findByText("关联复检正在执行（不重新检测）")).toBeTruthy();
+    expect(screen.getByRole("link", { name: "原任务报告" }).getAttribute("href")).toBe(`/api/tasks/${parentId}/report?format=html`);
+    expect(fetchMock.mock.calls[2]?.[0]).toBe(`/api/tasks/${taskId}/start`);
+  });
+
   it("creates a session, uploads evidence and displays a truthful queued task", async () => {
     const fetchMock = vi
       .fn()

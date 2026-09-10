@@ -6,6 +6,6 @@
 2. IntentParser 复用现有 JSON 客户端；历史是有限的 user/assistant 文本，不能注入 system 角色。无内部重试、无工具执行；解析失败沿用安全错误码。
 3. 报告端点 GET /api/tasks/{id}/report?format=json|html 仅读取终态快照和调用记录；运行中返回 report_not_ready。HTML 全部转义、无脚本，链接仅由服务端 AssetRef 生成；JSON 是版本化包裹，非模型自由摘要。内容包含运行状态、结论、覆盖、原始证据和工具失败/跳过记录。
 
-切片 B1 已接通消息表及 request_id 幂等键、会话内选定任务边界、固定 workflow ID 和 Activity 检查点、多轮上下文、Web 对话入口。图片新检查的显式复检意图覆盖默认跳过策略；查询/报告只引用存储。切片 B2 待实现关联补充操作，沿用原始证据且不修改旧终态。复用现有存储约定，不预建通用插件框架。
+切片 B1 已接通消息表及 request_id 幂等键、会话内选定任务边界、固定 workflow ID 和 Activity 检查点、多轮上下文、Web 对话入口。图片新检查的显式复检意图覆盖默认跳过策略；查询/报告只引用存储。切片 B2 已实现一次关联复检：原图片任务 completed/partial 后才能追加；子任务原子保存原检测及源快照，独立 verify/finalize，不改写旧终态。失败占用次数、子任务不能继续追加；前后实质冲突及原 OTHER 保持待审。复用现有存储约定，不预建通用插件框架。
 
 接口检查：解析模块依赖既有 TaskPlan 与 JSON 客户端；报告只读 TaskRecord/ToolCall。B1 存储/UI 分开写入，根 Agent 整合 API/Workflow、验证并操作 jj。T05 真实原图 API 联调已通过；这不代表模型精度验收。

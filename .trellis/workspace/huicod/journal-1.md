@@ -257,3 +257,38 @@ SDK、真实 Qwen 文本/原图/对话联调通过；T06-B1 对话上传、图�
 
 - 先读 .trellis/tasks/09-10-m1-conversation/conversation-report.md、backend/README.md 与总体计划；下一步仅 B2 关联补充复检，再 T07/T08 视频，不把 B1 称完整首版。
 - 无需再问 Key/Base URL；旧认证失败已解除但历史原因未定。Key 仅 .env，视频效果验收仍缺真实 CCTV 视频。API/worker/Web 按 README 启动，仅本机；不自动推送。
+
+
+## Session 9: T06-B2 关联复检完成与视频阶段交接
+
+**Date**: 2026-09-10
+**Task**: T06-B2 关联复检完成与视频阶段交接
+
+### Summary
+
+T06-A/B1/B2 工程验证完成；对话支持一次关联 VLM 复检，冻结原证据且不重复检测，下一步 T07 视频。
+
+### Main Changes
+
+- 稳定 jj change mkomtpts；父 B1 70a4af21；本轮未推送 GitHub，Trellis 仅保存当前任务和必要交接。
+- 原子关联与预算、verify-only Temporal 工作流、原 OTHER/冲突保留、父报告链接；复用现有适配器，未增依赖/模型/哈希。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `52b111a3f4e3` | (see git log) |
+
+### Testing
+
+- [OK] 最终后端398 passed/6 skipped（51.47s），包含真实PG/Temporal；前端27 passed及构建通过；Ruff lint/diff通过。
+- [OK] 独立Sol审查与修复复核通过；配置变化保留原待审，生产共享verifier在API前检查策略版本。未新增付费请求或GPU推理。
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- 恢复先读 .trellis/tasks/09-10-m1-conversation/supplement-report.md 和总体开发计划；T06已完成，不重做。开始T07视频解码、事件聚合、证据选帧，再T08长任务恢复/T09人工审核。
+- PostgreSQL/Temporal运行；关联表已初始化；smoke CPU worker已停，API/GPU/Web按README启动。现有Qwen配置可用，真实CCTV视频效果验收仍需用户样例。

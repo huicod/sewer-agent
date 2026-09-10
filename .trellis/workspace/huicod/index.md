@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 8
+- **Total Sessions**: 9
 - **Last Active**: 2026-09-10
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~259 | Active |
+| `journal-1.md` | ~294 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 9 | 2026-09-10 | T06-B2 关联复检完成与视频阶段交接 | `52b111a3f4e3` | `-` |
 | 8 | 2026-09-10 | Qwen 实测通过与 T06-B1 持久对话闭环 | `56e3298ed279` | `-` |
 | 7 | 2026-09-10 | Qwen API 接入与 T06-A 基础能力 | `74e22a4a9f3b` | `-` |
 | 6 | 2026-09-10 | T05 图片工作流与 API 待验交接 | - | `-` |
@@ -43,7 +44,7 @@
 
 ## Notes
 
-- 恢复开发先读 journal-1.md 的 Session 8 和 T06 conversation-report.md；T02/T05 API 验证已通过，T06-B1 已交付，下一步 B2 关联补充复检。历史待办以最新交接为准。
+- 恢复开发先读 journal-1.md 的 Session 9 和 T06 supplement-report.md；T01–T06 工程验证已完成，下一步 T07 视频解码、事件聚合及证据选帧。历史待办以最新交接为准。
 
 - Sessions are appended to journal files
 - New journal file created when current exceeds 2000 lines

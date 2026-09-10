@@ -2,7 +2,7 @@
 
 from uuid import UUID
 
-from pydantic import AwareDatetime, Field
+from pydantic import AwareDatetime, Field, model_validator
 
 from .assets import AssetRef
 from .common import ContractModel
@@ -28,6 +28,13 @@ class TaskRecord(ContractModel):
     instruction: str = Field(min_length=1, max_length=4000)
     created_at: AwareDatetime
     snapshot: TaskSnapshot
+    parent_task_id: UUID | None = None
+
+    @model_validator(mode="after")
+    def validate_parent_link(self) -> "TaskRecord":
+        if self.parent_task_id == self.snapshot.task_id:
+            raise ValueError("task cannot be its own parent")
+        return self
 
 
 class SessionDetail(ContractModel):

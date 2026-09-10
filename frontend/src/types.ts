@@ -71,6 +71,7 @@ export type TaskSnapshot = {
 };
 
 export type TaskRecord = {
+  parent_task_id?: string | null;
   request_id: string;
   session_id: string;
   input_asset: AssetRef;

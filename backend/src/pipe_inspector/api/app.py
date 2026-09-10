@@ -13,8 +13,9 @@ from pipe_inspector.api.limits import UPLOAD_LIMIT_DETAIL, BodyLimitMiddleware
 from pipe_inspector.api.reports import report_router
 from pipe_inspector.config import Settings
 from pipe_inspector.media import MediaError, MediaStore
-from pipe_inspector.storage.conversation import ConversationBusy, ConversationRepository
+from pipe_inspector.storage.conversation import ConversationBusy
 from pipe_inspector.storage.repository import MissingRecord, PostgresRepository, SubmissionConflict
+from pipe_inspector.storage.supplements import SupplementRepository
 from pipe_inspector.workflow.conversation_start import ConversationStarter
 from pipe_inspector.workflow.start import InspectionStarter, InspectionStartError
 
@@ -27,7 +28,7 @@ def create_app(
     conversation_starter=None,
 ):
     settings = settings or Settings()
-    repo = repository or ConversationRepository(settings.database_dsn)
+    repo = repository or SupplementRepository(settings.database_dsn)
     app = FastAPI(title="Sewer Agent", version="0.1.0")
     app.add_middleware(BodyLimitMiddleware, max_upload_bytes=settings.max_upload_bytes)
     media = MediaStore(
