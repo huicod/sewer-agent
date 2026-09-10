@@ -2,7 +2,7 @@
   "id": "m1-conversation",
   "name": "m1-conversation",
   "title": "T06 对话规划与证据报告",
-  "description": "T06-A constrained intent/plan foundations and evidence reports; T06-B durable multi-turn chat/execution/UI pending",
+  "description": "T06-A and B1 delivered: durable conversation, image dispatch, saved-evidence answers and UI; B2 linked supplemental review pending",
   "status": "in_progress",
   "dev_type": "backend",
   "scope": "T06",
@@ -24,12 +24,14 @@
   "notes": "",
   "meta": {
     "roadmap_tasks": "T06",
-    "jj_change": "xovuunkz",
+    "jj_change": "zmoplozu",
     "slice_a": "complete",
-    "validation": "304 passed, 4 skipped; Ruff/diff clean",
+    "validation": "348 backend passed, 6 skipped; 26 frontend passed and build; Ruff/diff clean; real Qwen conversation passed separately",
     "review": "passed",
-    "slice_b": "not_implemented",
-    "live_api": "blocked_authentication",
-    "tested_code_checkpoint": "74e22a4a9f3b"
+    "slice_b1": "complete",
+    "slice_b2": "pending",
+    "live_api": "passed_2026-09-10",
+    "next": "Design and implement bounded linked supplemental review without mutating original terminal task",
+    "evidence": "conversation-report.md"
   }
 }

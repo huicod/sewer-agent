@@ -3,13 +3,13 @@
 
 import psycopg
 from pipe_inspector.config import Settings
-from pipe_inspector.storage.inspection import InspectionRepository
+from pipe_inspector.storage.conversation import ConversationRepository
 
 
 def main() -> None:
     try:
         settings = Settings()
-        InspectionRepository(settings.database_dsn).initialize()
+        ConversationRepository(settings.database_dsn).initialize()
     except psycopg.Error:
         raise SystemExit("application storage initialization failed") from None
     print("application storage initialized")

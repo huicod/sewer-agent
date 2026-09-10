@@ -9,8 +9,10 @@ from datetime import timedelta
 
 from pipe_inspector.config import Settings
 from pipe_inspector.media import MediaStore
-from pipe_inspector.storage.inspection import InspectionRepository
+from pipe_inspector.storage.conversation import ConversationRepository
 from pipe_inspector.workflow.activities import ImageActivities
+from pipe_inspector.workflow.conversation import ConversationWorkflow
+from pipe_inspector.workflow.conversation_activities import TurnActivities
 from pipe_inspector.workflow.image import ImageInspectionWorkflow
 from temporalio.client import Client
 from temporalio.worker import Worker
@@ -18,7 +20,7 @@ from temporalio.worker import Worker
 
 async def serve(kind: str) -> None:
     settings = Settings()
-    repo = InspectionRepository(settings.database_dsn)
+    repo = ConversationRepository(settings.database_dsn)
     media = MediaStore(
         settings.asset_root,
         max_upload_bytes=settings.max_upload_bytes,
@@ -26,6 +28,7 @@ async def serve(kind: str) -> None:
         probe_timeout_seconds=settings.media_probe_timeout_seconds,
     )
     activities = ImageActivities(settings, repo, media)
+    turns = TurnActivities(settings, repo)
     client = await Client.connect(settings.temporal_address, namespace=settings.temporal_namespace)
     gpu = kind == "gpu"
     # Temporal logs Activity arguments on failure. Our DB tool records contain safe codes;
@@ -35,10 +38,17 @@ async def serve(kind: str) -> None:
         worker = Worker(
             client,
             task_queue=settings.task_queue + ("-gpu" if gpu else ""),
-            workflows=[] if gpu else [ImageInspectionWorkflow],
+            workflows=[] if gpu else [ImageInspectionWorkflow, ConversationWorkflow],
             activities=[activities.detect_image]
             if gpu
-            else [activities.publish_stage, activities.verify_image, activities.finish_image],
+            else [
+                activities.publish_stage,
+                activities.verify_image,
+                activities.finish_image,
+                turns.parse_turn,
+                turns.dispatch_turn,
+                turns.finish_turn,
+            ],
             activity_executor=executor,
             max_concurrent_activities=1 if gpu else 4,
             graceful_shutdown_timeout=timedelta(seconds=10),

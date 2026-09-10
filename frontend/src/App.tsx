@@ -1,10 +1,29 @@
 import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
 
-import { ApiError, createSession, createTask, getSession, getTask, startTask, uploadAsset } from "./api";
-import type { AssetRef, RuntimeStatus, SessionRecord, TaskRecord } from "./types";
+import {
+  ApiError,
+  createSession,
+  createTask,
+  createTurn,
+  getSession,
+  getTask,
+  getTurn,
+  listTurns,
+  startTask,
+  uploadAsset,
+} from "./api";
+import type {
+  AssetRef,
+  RuntimeStatus,
+  SessionRecord,
+  TaskRecord,
+  TurnRecord,
+  TurnSubmission,
+} from "./types";
 
 const SESSION_KEY = "pipe-inspector.session-id";
 const ACTIVE_STATUSES = new Set<RuntimeStatus>(["queued", "running", "waiting_review"]);
+const ACTIVE_TURN_STATUSES = new Set(["queued", "running"]);
 
 const RESULT_TEXT = { pending: "待定", normal: "正常", defects_found: "发现缺陷", inconclusive: "无法确定" } as const;
 const REVIEW_TEXT = { tentative: "暂定", confirmed: "已确认", rejected: "已排除", needs_review: "需复核" } as const;
@@ -18,6 +37,12 @@ const STATUS_TEXT: Record<RuntimeStatus, string> = {
   failed: "处理失败",
   cancelled: "已取消",
 };
+const TURN_STAGE_TEXT = {
+  queued: "等待处理",
+  planning: "正在规划",
+  executing: "正在执行",
+  finished: "已结束",
+} as const;
 
 type PendingSubmission = {
   file: File;
@@ -27,12 +52,25 @@ type PendingSubmission = {
   inputAsset: AssetRef;
 };
 
+type PendingTurn = TurnSubmission & {
+  file: File | null;
+  sessionId: string;
+};
+
 type AppProps = {
   pollIntervalMs?: number;
 };
 
 export function isActiveTask(task: TaskRecord): boolean {
   return ACTIVE_STATUSES.has(task.snapshot.runtime_status);
+}
+
+function isTerminalTask(task: TaskRecord): boolean {
+  return !isActiveTask(task);
+}
+
+function isActiveTurn(turn: TurnRecord): boolean {
+  return ACTIVE_TURN_STATUSES.has(turn.status);
 }
 
 function formatError(error: unknown): string {
@@ -49,8 +87,26 @@ function upsertTask(tasks: TaskRecord[], next: TaskRecord): TaskRecord[] {
   return tasks.map((task, taskIndex) => (taskIndex === index ? next : task));
 }
 
+function upsertTurn(turns: TurnRecord[], next: TurnRecord): TurnRecord[] {
+  const index = turns.findIndex((turn) => turn.request_id === next.request_id);
+  if (index < 0) return [...turns, next];
+  return turns.map((turn, turnIndex) => (turnIndex === index ? next : turn));
+}
+
 function evidenceUrl(asset: AssetRef): string {
   return `/api/assets/${encodeURIComponent(asset.asset_id)}/versions/${asset.version}/content`;
+}
+
+function reportUrl(taskId: string, format: "json" | "html"): string {
+  return `/api/tasks/${encodeURIComponent(taskId)}/report?format=${format}`;
+}
+
+function linkedTaskStatus(task: TaskRecord | undefined): string {
+  if (!task || isActiveTask(task)) return "对话已回复；关联检查仍在继续";
+  if (task.snapshot.runtime_status === "completed") return "关联检查已完成";
+  if (task.snapshot.runtime_status === "partial") return "关联检查仅部分完成";
+  if (task.snapshot.runtime_status === "failed") return "关联检查已失败";
+  return "关联检查已取消";
 }
 
 type TaskCardProps = {
@@ -164,6 +220,45 @@ function TaskCard({ task, starting, onStart }: TaskCardProps) {
           </ul>
         </div>
       ) : null}
+      {isTerminalTask(task) ? (
+        <div className="report-links" aria-label="检查报告">
+          <a href={reportUrl(task.snapshot.task_id, "json")} target="_blank" rel="noreferrer">JSON 报告</a>
+          <a href={reportUrl(task.snapshot.task_id, "html")} target="_blank" rel="noreferrer">HTML 报告</a>
+        </div>
+      ) : null}
+    </article>
+  );
+}
+
+type TurnCardProps = {
+  turn: TurnRecord;
+  linkedTask: TaskRecord | undefined;
+  resending: boolean;
+  onResend: (turn: TurnRecord) => void;
+};
+
+function TurnCard({ turn, linkedTask, resending, onResend }: TurnCardProps) {
+  return (
+    <article className="turn-card">
+      <div className="turn-message turn-message--user">
+        <span>你</span>
+        <p>{turn.text}</p>
+      </div>
+      <div className="turn-message turn-message--assistant">
+        <span>助手 · {TURN_STAGE_TEXT[turn.stage]}</span>
+        {turn.reply ? <p>{turn.reply}</p> : <p className="muted">服务器正在处理这条消息。</p>}
+        {turn.status === "failed" ? (
+          <p className="task-error">处理失败{turn.error_code ? `：${turn.error_code}` : ""}</p>
+        ) : null}
+        {turn.status === "queued" ? (
+          <button type="button" className="secondary-button" disabled={resending} onClick={() => onResend(turn)}>
+            {resending ? "正在确认…" : "确认启动"}
+          </button>
+        ) : null}
+        {turn.status === "completed" && turn.linked_task_id ? (
+          <p className="linked-status">{linkedTaskStatus(linkedTask)}</p>
+        ) : null}
+      </div>
     </article>
   );
 }
@@ -171,14 +266,23 @@ function TaskCard({ task, starting, onStart }: TaskCardProps) {
 export default function App({ pollIntervalMs = 2_000 }: AppProps) {
   const [session, setSession] = useState<SessionRecord | null>(null);
   const [tasks, setTasks] = useState<TaskRecord[]>([]);
+  const [turns, setTurns] = useState<TurnRecord[]>([]);
   const [instruction, setInstruction] = useState("");
+  const [conversationText, setConversationText] = useState("");
+  const [conversationFile, setConversationFile] = useState<File | null>(null);
+  const [selectedTaskId, setSelectedTaskId] = useState("");
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [turnSubmitting, setTurnSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [conversationError, setConversationError] = useState<string | null>(null);
   const [startingTaskIds, setStartingTaskIds] = useState<Set<string>>(() => new Set());
   const fileInput = useRef<HTMLInputElement>(null);
   const form = useRef<HTMLFormElement>(null);
+  const conversationForm = useRef<HTMLFormElement>(null);
+  const conversationFileInput = useRef<HTMLInputElement>(null);
   const pendingSubmission = useRef<PendingSubmission | null>(null);
+  const pendingTurn = useRef<PendingTurn | null>(null);
 
   async function startNewSession() {
     setLoading(true);
@@ -188,6 +292,8 @@ export default function App({ pollIntervalMs = 2_000 }: AppProps) {
       localStorage.setItem(SESSION_KEY, next.session_id);
       setSession(next);
       setTasks([]);
+      setTurns([]);
+      pendingTurn.current = null;
     } catch (nextError) {
       setError(formatError(nextError));
     } finally {
@@ -199,8 +305,9 @@ export default function App({ pollIntervalMs = 2_000 }: AppProps) {
     let cancelled = false;
     const savedSessionId = localStorage.getItem(SESSION_KEY);
     const load = savedSessionId
-      ? getSession(savedSessionId)
-      : createSession().then((nextSession) => ({ session: nextSession, tasks: [] }));
+      ? Promise.all([getSession(savedSessionId), listTurns(savedSessionId)])
+          .then(([detail, restoredTurns]) => ({ ...detail, turns: restoredTurns }))
+      : createSession().then((nextSession) => ({ session: nextSession, tasks: [], turns: [] }));
 
     void load
       .then((detail) => {
@@ -208,6 +315,7 @@ export default function App({ pollIntervalMs = 2_000 }: AppProps) {
         localStorage.setItem(SESSION_KEY, detail.session.session_id);
         setSession(detail.session);
         setTasks(detail.tasks);
+        setTurns(detail.turns);
       })
       .catch((nextError: unknown) => {
         if (!cancelled) setError(formatError(nextError));
@@ -220,6 +328,66 @@ export default function App({ pollIntervalMs = 2_000 }: AppProps) {
       cancelled = true;
     };
   }, []);
+
+  const activeTurnIds = useMemo(
+    () => turns.filter(isActiveTurn).map((turn) => turn.request_id),
+    [turns],
+  );
+  const activeTurnKey = activeTurnIds.join(",");
+
+  useEffect(() => {
+    if (!session || !activeTurnKey) return;
+    const requestIds = activeTurnKey.split(",");
+    let stopped = false;
+    let polling = false;
+    const timer = window.setInterval(() => {
+      if (polling) return;
+      polling = true;
+      void Promise.all(requestIds.map((requestId) => getTurn(session.session_id, requestId)))
+        .then((updates) => {
+          if (stopped) return;
+          setTurns((current) => updates.reduce(upsertTurn, current));
+          if (updates.every((turn) => !isActiveTurn(turn))) {
+            stopped = true;
+            window.clearInterval(timer);
+          }
+        })
+        .catch((nextError: unknown) => {
+          if (!stopped) setConversationError(formatError(nextError));
+        })
+        .finally(() => {
+          polling = false;
+        });
+    }, pollIntervalMs);
+    return () => {
+      stopped = true;
+      window.clearInterval(timer);
+    };
+  }, [activeTurnKey, pollIntervalMs, session]);
+
+  const linkedTaskKey = useMemo(
+    () => Array.from(new Set(turns.map((turn) => turn.linked_task_id).filter((id): id is string => Boolean(id)))).join(","),
+    [turns],
+  );
+  const knownTaskKey = tasks.map((task) => task.snapshot.task_id).join(",");
+
+  useEffect(() => {
+    if (!linkedTaskKey) return;
+    const known = new Set(knownTaskKey ? knownTaskKey.split(",") : []);
+    const missing = linkedTaskKey.split(",").filter((taskId) => !known.has(taskId));
+    if (!missing.length) return;
+    let stopped = false;
+    void Promise.all(missing.map((taskId) => getTask(taskId)))
+      .then((linkedTasks) => {
+        if (!stopped) setTasks((current) => linkedTasks.reduce(upsertTask, current));
+      })
+      .catch((nextError: unknown) => {
+        if (!stopped) setError(formatError(nextError));
+      });
+    return () => {
+      stopped = true;
+    };
+  }, [knownTaskKey, linkedTaskKey]);
 
   const activeTaskIds = useMemo(
     () => tasks.filter(isActiveTask).map((task) => task.snapshot.task_id),
@@ -323,6 +491,83 @@ export default function App({ pollIntervalMs = 2_000 }: AppProps) {
     }
   }
 
+  async function postTurn(submission: PendingTurn | TurnRecord) {
+    if (!session) return;
+    setTurnSubmitting(true);
+    setConversationError(null);
+    try {
+      const created = await createTurn(session.session_id, {
+        request_id: submission.request_id,
+        text: submission.text,
+        input_asset: submission.input_asset,
+        task_id: submission.task_id,
+      });
+      setTurns((current) => upsertTurn(current, created));
+      pendingTurn.current = null;
+      setConversationText("");
+      setConversationFile(null);
+      setSelectedTaskId("");
+      conversationForm.current?.reset();
+    } catch (nextError) {
+      const message = formatError(nextError);
+      setConversationError(
+        nextError instanceof ApiError && nextError.status === 0
+          ? `${message}。再次发送将使用相同请求编号，不会重复上传附件。`
+          : message,
+      );
+    } finally {
+      setTurnSubmitting(false);
+    }
+  }
+
+  async function submitTurn(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!session || activeTurnIds.length > 0) return;
+    const cleanText = conversationText.trim();
+    if (!cleanText) {
+      setConversationError("请输入对话内容");
+      return;
+    }
+    const taskId = selectedTaskId || null;
+    let pending = pendingTurn.current;
+    const sameIntent = Boolean(
+      pending && pending.sessionId === session.session_id && pending.text === cleanText &&
+      pending.task_id === taskId && pending.file === conversationFile,
+    );
+    if (!sameIntent) {
+      setTurnSubmitting(true);
+      setConversationError(null);
+      try {
+        const reusableAsset = pending?.file === conversationFile ? pending.input_asset : null;
+        const inputAsset = reusableAsset ?? (conversationFile ? (await uploadAsset(conversationFile)).ref : null);
+        pending = {
+          request_id: crypto.randomUUID(),
+          sessionId: session.session_id,
+          text: cleanText,
+          input_asset: inputAsset,
+          task_id: taskId,
+          file: conversationFile,
+        };
+        pendingTurn.current = pending;
+      } catch (nextError) {
+        setConversationError(formatError(nextError));
+        setTurnSubmitting(false);
+        return;
+      }
+      setTurnSubmitting(false);
+    }
+    if (pending) await postTurn(pending);
+  }
+
+  const hasActiveTurn = activeTurnIds.length > 0;
+  const pendingMatchesComposer = Boolean(
+    pendingTurn.current &&
+    pendingTurn.current.sessionId === session?.session_id &&
+    pendingTurn.current.text === conversationText.trim() &&
+    pendingTurn.current.task_id === (selectedTaskId || null) &&
+    pendingTurn.current.file === conversationFile,
+  );
+
   return (
     <main className="app-shell">
       <header className="masthead">
@@ -348,11 +593,95 @@ export default function App({ pollIntervalMs = 2_000 }: AppProps) {
         </div>
       ) : null}
 
+      <section className="conversation-panel" aria-labelledby="conversation-title">
+        <div className="tasks__heading">
+          <div>
+            <p className="eyebrow">持久对话</p>
+            <h2 id="conversation-title">检查助手</h2>
+          </div>
+          <span>{turns.length} 条</span>
+        </div>
+        <p className="conversation-note">
+          可询问已存证据、请求报告或上传新资料。补充操作和视频执行尚未支持，助手会明确说明限制。
+          附件与已有任务二选一，选择一项会清除另一项。
+        </p>
+        <div className="transcript" aria-live="polite">
+          {!loading && turns.length === 0 ? <p className="empty-state">尚无对话消息。</p> : null}
+          {turns.map((turn) => (
+            <TurnCard
+              key={turn.request_id}
+              turn={turn}
+              linkedTask={tasks.find((task) => task.snapshot.task_id === turn.linked_task_id)}
+              resending={turnSubmitting}
+              onResend={(nextTurn) => void postTurn(nextTurn)}
+            />
+          ))}
+        </div>
+        {conversationError ? <div className="conversation-error" role="alert">{conversationError}</div> : null}
+        <form ref={conversationForm} className="conversation-form" onSubmit={(event) => void submitTurn(event)}>
+          <label className="field">
+            <span>对话内容</span>
+            <textarea
+              value={conversationText}
+              onChange={(event) => setConversationText(event.target.value)}
+              maxLength={4_000}
+              rows={3}
+              placeholder="例如：请检查这张图片，或解释上一项检查结果"
+              disabled={!session || turnSubmitting || hasActiveTurn}
+            />
+          </label>
+          <div className="conversation-options">
+            <label className="field">
+              <span>对话附件（可选）</span>
+              <input
+                ref={conversationFileInput}
+                type="file"
+                accept=".jpg,.jpeg,.png,.mp4,.mov,.avi,.mkv,image/jpeg,image/png,video/*"
+                onChange={(event) => {
+                  const nextFile = event.target.files?.[0] ?? null;
+                  setConversationFile(nextFile);
+                  if (nextFile) setSelectedTaskId("");
+                }}
+                disabled={!session || turnSubmitting || hasActiveTurn}
+              />
+            </label>
+            <label className="field">
+              <span>关联已有任务（可选）</span>
+              <select
+                value={selectedTaskId}
+                onChange={(event) => {
+                  setSelectedTaskId(event.target.value);
+                  if (event.target.value) {
+                    setConversationFile(null);
+                    if (conversationFileInput.current) conversationFileInput.current.value = "";
+                  }
+                }}
+                disabled={!session || turnSubmitting || hasActiveTurn}
+              >
+                <option value="">不关联任务</option>
+                {tasks.map((task) => (
+                  <option key={task.snapshot.task_id} value={task.snapshot.task_id}>
+                    {task.snapshot.task_id.slice(0, 8)} · {task.instruction}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+          <div className="form-footer">
+            <small>{hasActiveTurn ? "当前消息完成后可继续对话" : `${conversationText.length} / 4000`}</small>
+            <button type="submit" disabled={!session || turnSubmitting || hasActiveTurn}>
+              {turnSubmitting ? "正在发送…" : pendingMatchesComposer ? "重新发送" : "发送消息"}
+            </button>
+          </div>
+        </form>
+      </section>
+
       <section className="intake-panel" aria-labelledby="intake-title">
         <div className="section-copy">
           <p className="eyebrow">新建检查</p>
           <h2 id="intake-title">提交现场资料</h2>
           <p>支持 JPEG、PNG、MP4、MOV、AVI 与 MKV。文件是否可用以服务器校验为准。</p>
+          <p>此入口只保存资料，需手动启动基础检查；按文本规划工具请使用上方检查助手。</p>
         </div>
         <form ref={form} onSubmit={(event) => void submit(event)}>
           <label className="field">

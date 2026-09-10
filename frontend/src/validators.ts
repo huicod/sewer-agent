@@ -7,6 +7,9 @@ import type {
   SessionRecord,
   TaskRecord,
   TaskSnapshot,
+  TurnRecord,
+  TurnStage,
+  TurnStatus,
 } from "./types";
 
 const UUID_PATTERN =
@@ -25,6 +28,12 @@ const INSPECTION_RESULTS = new Set([
   "normal",
   "defects_found",
   "inconclusive",
+]);
+const TURN_STATUSES = new Set<TurnStatus>(["queued", "running", "completed", "failed"]);
+const TURN_STAGES = new Set<TurnStage>(["queued", "planning", "executing", "finished"]);
+const TURN_FIELDS = new Set([
+  "request_id", "session_id", "text", "input_asset", "task_id", "created_at", "updated_at",
+  "status", "stage", "reply", "linked_task_id", "error_code", "attempts",
 ]);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -202,4 +211,30 @@ export function isSessionDetail(value: unknown): value is SessionDetail {
     Array.isArray(value.tasks) &&
     value.tasks.every(isTaskRecord)
   );
+}
+
+export function isTurnRecord(value: unknown): value is TurnRecord {
+  return (
+    isRecord(value) &&
+    Object.keys(value).length === TURN_FIELDS.size &&
+    Object.keys(value).every((key) => TURN_FIELDS.has(key)) &&
+    isUuid(value.request_id) &&
+    isUuid(value.session_id) &&
+    typeof value.text === "string" &&
+    value.text.length >= 1 && value.text.length <= 4_000 &&
+    (value.input_asset === null || isAssetRef(value.input_asset)) &&
+    (value.task_id === null || isUuid(value.task_id)) &&
+    isTimestamp(value.created_at) &&
+    isTimestamp(value.updated_at) &&
+    typeof value.status === "string" && TURN_STATUSES.has(value.status as TurnStatus) &&
+    typeof value.stage === "string" && TURN_STAGES.has(value.stage as TurnStage) &&
+    isNullableString(value.reply) &&
+    (value.linked_task_id === null || isUuid(value.linked_task_id)) &&
+    isNullableString(value.error_code) &&
+    isNonNegativeInteger(value.attempts)
+  );
+}
+
+export function isTurnList(value: unknown): value is TurnRecord[] {
+  return Array.isArray(value) && value.every(isTurnRecord);
 }

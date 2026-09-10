@@ -222,3 +222,38 @@ Qwen共享Key接入与有界请求已实现；北京文本probe认证失败，�
 
 - 先读当前T06任务的implement.md/runtime-report.md/review.md；切片A不重做。T06-B接消息持久化、Temporal对话与关联操作、聊天UI；完整首版Agent尚未交付。
 - 等待Key对应的Base URL/去掉Key的调用示例后，少量有界文本与原图请求完成真实联调；不要把Key发到猜测地址，不自动推送GitHub。
+
+
+## Session 8: Qwen 实测通过与 T06-B1 持久对话闭环
+
+**Date**: 2026-09-10
+**Task**: Qwen 实测通过与 T06-B1 持久对话闭环
+
+### Summary
+
+SDK、真实 Qwen 文本/原图/对话联调通过；T06-B1 对话上传、图片任务、证据回答与恢复已交付，独立审查通过；B2 关联补充复检待实现。
+
+### Main Changes
+
+- T02/T05 已完成工程验收；T06-A 不重做，B1 稳定 jj change zmoplozu，SDK 证据检查点 6b8c4942；未推送 GitHub。
+- 对话 Temporal 解析/分派/结束检查点、固定身份与显式复检计划；前端附件/旧任务互斥，查询只读证据。项目 .venv 已装 OpenAI/DashScope SDK，生产仍用 httpx。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `56e3298ed279` | (see git log) |
+
+### Testing
+
+- [OK] 后端真实本地 PG/Temporal 回归 348 passed / 6 skipped（25.48s）；前端 26 passed，类型检查/构建通过，Ruff/diff clean；独立审查最终 PASS。
+- [OK] 另行真实 Qwen 对话 1 passed（3.50s）；SDK 示例、结构化文本和选定原始 CCTV ImageReviewer 通过。额外 FS 建议待人工确认，非精度结论。
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- 先读 .trellis/tasks/09-10-m1-conversation/conversation-report.md、backend/README.md 与总体计划；下一步仅 B2 关联补充复检，再 T07/T08 视频，不把 B1 称完整首版。
+- 无需再问 Key/Base URL；旧认证失败已解除但历史原因未定。Key 仅 .env，视频效果验收仍缺真实 CCTV 视频。API/worker/Web 按 README 启动，仅本机；不自动推送。

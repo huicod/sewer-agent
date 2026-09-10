@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { ApiError, createTask, uploadAsset } from "./api";
+import { ApiError, createTask, createTurn, getTurn, listTurns, uploadAsset } from "./api";
 
 const asset = {
   ref: { asset_id: "11111111-1111-4111-8111-111111111111", version: 1 },
@@ -110,5 +110,60 @@ describe("intake API boundary", () => {
         message: "文件格式不受支持",
       }),
     );
+  });
+});
+
+describe("conversation API boundary", () => {
+  const sessionId = "33333333-3333-4333-8333-333333333333";
+  const requestId = "22222222-2222-4222-8222-222222222222";
+  const turn = {
+    request_id: requestId,
+    session_id: sessionId,
+    text: "检查附件",
+    input_asset: asset.ref,
+    task_id: null,
+    created_at: "2026-09-09T09:00:00Z",
+    updated_at: "2026-09-09T09:00:00Z",
+    status: "queued",
+    stage: "queued",
+    reply: null,
+    linked_task_id: null,
+    error_code: null,
+    attempts: 0,
+  };
+
+  it("submits the exact durable turn identity and intent", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify(turn), { status: 202, headers: { "content-type": "application/json" } }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await createTurn(sessionId, {
+      request_id: requestId,
+      text: "检查附件",
+      input_asset: asset.ref,
+      task_id: null,
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(`/api/sessions/${sessionId}/turns`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ request_id: requestId, text: "检查附件", input_asset: asset.ref, task_id: null }),
+    });
+  });
+
+  it("uses the collection and identity URLs for restoring and polling turns", async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify([turn]), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(turn), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await listTurns(sessionId);
+    await getTurn(sessionId, requestId);
+
+    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
+      `/api/sessions/${sessionId}/turns`,
+      `/api/sessions/${sessionId}/turns/${requestId}`,
+    ]);
   });
 });

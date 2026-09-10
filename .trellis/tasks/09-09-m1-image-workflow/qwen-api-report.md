@@ -1,5 +1,7 @@
 # Qwen integration — 2026-09-10
 
+Historical failed probe; the later successful SDK, text and original-image checks supersede the blocker below: [qwen-live-success.md](qwen-live-success.md).
+
 - User choice: qwen3.8-max; local DASHSCOPE_API_KEY shared by explicitly configured LLM/VLM roles. No credential values persisted in this report or history.
 - Official reference: https://help.aliyun.com/zh/model-studio/qwen3-8-max ; region reference: https://help.aliyun.com/zh/model-studio/base-url .
 - One actual text request to https://dashscope.aliyuncs.com/compatible-mode/v1, thinking disabled, max output 256: authentication_failed. No CCTV image was sent and no region/provider fallback was attempted.

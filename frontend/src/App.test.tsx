@@ -114,6 +114,7 @@ describe("conversation-ready intake shell", () => {
           tasks: [task()],
         }),
       )
+      .mockResolvedValueOnce(jsonResponse([]))
       .mockResolvedValueOnce(jsonResponse(running, 202));
     vi.stubGlobal("fetch", fetchMock);
     const user = userEvent.setup();
@@ -124,8 +125,8 @@ describe("conversation-ready intake shell", () => {
     expect(await screen.findByText("detecting")).toBeTruthy();
     expect(screen.getByText("yolo-primary")).toBeTruthy();
     expect(screen.getByText("待定")).toBeTruthy();
-    expect(fetchMock).toHaveBeenCalledTimes(2);
-    expect(fetchMock.mock.calls[1]).toEqual([
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(fetchMock.mock.calls[2]).toEqual([
       "/api/tasks/" + taskId + "/start",
       { method: "POST" },
     ]);
@@ -142,6 +143,7 @@ describe("conversation-ready intake shell", () => {
           tasks: [task()],
         }),
       )
+      .mockResolvedValueOnce(jsonResponse([]))
       .mockResolvedValueOnce(jsonResponse({ detail: { message: "图片检查服务暂不可用" } }, 503));
     vi.stubGlobal("fetch", fetchMock);
     const user = userEvent.setup();
@@ -156,12 +158,12 @@ describe("conversation-ready intake shell", () => {
 
   it("recovers the saved session and its tasks after reload", async () => {
     localStorage.setItem("pipe-inspector.session-id", sessionId);
-    const fetchMock = vi.fn().mockResolvedValueOnce(
-      jsonResponse({
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({
         session: { session_id: sessionId, created_at: createdAt },
         tasks: [task()],
-      }),
-    );
+      }))
+      .mockResolvedValueOnce(jsonResponse([]));
     vi.stubGlobal("fetch", fetchMock);
 
     render(<App pollIntervalMs={60_000} />);
@@ -181,6 +183,7 @@ describe("conversation-ready intake shell", () => {
           tasks: [],
         }),
       )
+      .mockResolvedValueOnce(jsonResponse([]))
       .mockResolvedValueOnce(
         jsonResponse(
           { detail: { code: "unsupported_media", message: "文件格式不受支持" } },
@@ -197,7 +200,8 @@ describe("conversation-ready intake shell", () => {
     await user.click(screen.getByRole("button", { name: "提交检查" }));
 
     expect((await screen.findByRole("alert")).textContent).toContain("文件格式不受支持");
-    expect(screen.queryByText(/助手/)).toBeNull();
+    expect(screen.getByText("0 条")).toBeTruthy();
+    expect(screen.queryByText("服务器正在处理这条消息。")).toBeNull();
   });
 
   it("polls queued work but stops polling terminal work", async () => {
@@ -210,6 +214,7 @@ describe("conversation-ready intake shell", () => {
           tasks: [task()],
         }),
       )
+      .mockResolvedValueOnce(jsonResponse([]))
       .mockResolvedValue(jsonResponse(task()));
     vi.stubGlobal("fetch", queuedFetch);
     const queuedView = render(<App pollIntervalMs={10} />);
@@ -218,16 +223,16 @@ describe("conversation-ready intake shell", () => {
     });
     queuedView.unmount();
 
-    const terminalFetch = vi.fn().mockResolvedValueOnce(
-      jsonResponse({
+    const terminalFetch = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({
         session: { session_id: sessionId, created_at: createdAt },
         tasks: [task("completed")],
-      }),
-    );
+      }))
+      .mockResolvedValueOnce(jsonResponse([]));
     vi.stubGlobal("fetch", terminalFetch);
     render(<App pollIntervalMs={10} />);
     await screen.findByText("检查破损");
     await new Promise((resolve) => setTimeout(resolve, 30));
-    expect(terminalFetch).toHaveBeenCalledTimes(1);
+    expect(terminalFetch).toHaveBeenCalledTimes(2);
   });
 });

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { ApiError, createSession, getSession, startTask, uploadAsset } from "./api";
+import { ApiError, createSession, getSession, listTurns, startTask, uploadAsset } from "./api";
 
 function success(payload: unknown) {
   return new Response(JSON.stringify(payload), {
@@ -185,6 +185,64 @@ describe("successful response validation", () => {
     );
 
     await expect(startTask("44444444-4444-4444-8444-444444444444")).rejects.toEqual(
+      expect.objectContaining<ApiError>({
+        name: "ApiError",
+        status: 200,
+        message: "服务返回的数据格式无效",
+      }),
+    );
+  });
+
+  it.each([
+    ["status", "teleported"],
+    ["stage", "imagining"],
+  ])("rejects an unknown turn %s", async (field, value) => {
+    const turn = {
+      request_id: "22222222-2222-4222-8222-222222222222",
+      session_id: "33333333-3333-4333-8333-333333333333",
+      text: "检查附件",
+      input_asset: null,
+      task_id: null,
+      created_at: "2026-09-09T09:00:00Z",
+      updated_at: "2026-09-09T09:00:00Z",
+      status: "queued",
+      stage: "queued",
+      reply: null,
+      linked_task_id: null,
+      error_code: null,
+      attempts: 0,
+      [field]: value,
+    };
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(success([turn])));
+
+    await expect(listTurns("33333333-3333-4333-8333-333333333333")).rejects.toEqual(
+      expect.objectContaining<ApiError>({
+        name: "ApiError",
+        status: 200,
+        message: "服务返回的数据格式无效",
+      }),
+    );
+  });
+
+  it("rejects an undocumented turn field instead of consuming model-provided links", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(success([{
+      request_id: "22222222-2222-4222-8222-222222222222",
+      session_id: "33333333-3333-4333-8333-333333333333",
+      text: "生成报告",
+      input_asset: null,
+      task_id: null,
+      created_at: "2026-09-09T09:00:00Z",
+      updated_at: "2026-09-09T09:00:00Z",
+      status: "completed",
+      stage: "finished",
+      reply: "报告已准备",
+      linked_task_id: null,
+      error_code: null,
+      attempts: 1,
+      report_url: "https://example.invalid/model-link",
+    }])));
+
+    await expect(listTurns("33333333-3333-4333-8333-333333333333")).rejects.toEqual(
       expect.objectContaining<ApiError>({
         name: "ApiError",
         status: 200,

@@ -1,0 +1,12 @@
+# T06-B1 conversation UI contract
+Only write frontend/** plus frontend-report.md here. Read AGENTS.md and frontend conventions. TDD, no dependencies, no nested agents/VCS; root handles backend. Integrate a conversation panel into existing App/session without removing working upload/task list/result behavior.
+Backend:
+POST /api/sessions/{session_id}/turns body {request_id UUID,text 1..4000,input_asset {asset_id,version}|null,task_id UUID|null} ->202 TurnRecord.
+GET /api/sessions/{session_id}/turns -> TurnRecord[] ordered.
+GET /api/sessions/{session_id}/turns/{request_id} -> TurnRecord.
+TurnRecord flat fields: body +session_id UUID,created_at/updated_at ISO strings,status queued|running|completed|failed,stage queued|planning|executing|finished,reply string|null,linked_task_id UUID|null,error_code string|null,attempts nonnegative int. No arbitrary hyperlinks/model HTML.
+
+UI: chat transcript of user text/reply/stage/error, text composer, optional CCTV upload reusing uploadAsset OR selection of existing task (mutually exclusive because every new upload gets a new asset ID). Persist session via existing mechanism; restore turns on reload. Poll pending turns ~2s, stop when terminal; cancel stale async callbacks on session change/unmount. One active turn/session: disable new submission while active; queued turn may repeat same POST to confirm start after network/Temporal failure. Failed network resend uses SAME request UUID/media ID/text/task; editing intent creates new identity. Do not duplicate upload on same retry. Inform separate image task continues after chat says started; linked task must become visible/polled in existing task list. GET report links only server-generated /api/tasks/{validated UUID}/report?format=json|html for terminal tasks. Render strings through React, never rawHTML. Unknown consumed enum/fields rejected by validators.
+
+B1 supports inspect, stored evidence query/report, clarify/refuse; supplement returns clear not-yet-supported response. Video intake stays accepted, execution not yet supported. UI cannot claim these worked. Keep styling modest and consistent, no full redesign.
+Tests: send/reload/poll stop, upload+retry identity, unknown response shape, task linking/report links; existing frontend suite and build must remain green. Use PATH=/root/autodl-tmp/server/.tools/node/bin:$PATH npm --prefix frontend test -- --run etc existing scripts. Report RED/GREEN and files; root owns integration review.

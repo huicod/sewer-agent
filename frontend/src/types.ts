@@ -95,3 +95,25 @@ export type TaskSubmission = {
   input_asset: AssetRef;
   instruction: string;
 };
+
+export type TurnStatus = "queued" | "running" | "completed" | "failed";
+export type TurnStage = "queued" | "planning" | "executing" | "finished";
+
+export type TurnSubmission = {
+  request_id: string;
+  text: string;
+  input_asset: AssetRef | null;
+  task_id: string | null;
+};
+
+export type TurnRecord = TurnSubmission & {
+  session_id: string;
+  created_at: string;
+  updated_at: string;
+  status: TurnStatus;
+  stage: TurnStage;
+  reply: string | null;
+  linked_task_id: string | null;
+  error_code: string | null;
+  attempts: number;
+};

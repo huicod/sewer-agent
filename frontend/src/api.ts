@@ -4,8 +4,17 @@ import type {
   SessionRecord,
   TaskRecord,
   TaskSubmission,
+  TurnRecord,
+  TurnSubmission,
 } from "./types";
-import { isAssetRecord, isSessionDetail, isSessionRecord, isTaskRecord } from "./validators";
+import {
+  isAssetRecord,
+  isSessionDetail,
+  isSessionRecord,
+  isTaskRecord,
+  isTurnList,
+  isTurnRecord,
+} from "./validators";
 
 export class ApiError extends Error {
   readonly status: number;
@@ -91,4 +100,23 @@ export function startTask(taskId: string): Promise<TaskRecord> {
 
 export function getTask(taskId: string): Promise<TaskRecord> {
   return requestJson<TaskRecord>(`/api/tasks/${encodeURIComponent(taskId)}`, isTaskRecord);
+}
+
+export function createTurn(sessionId: string, submission: TurnSubmission): Promise<TurnRecord> {
+  return requestJson<TurnRecord>(`/api/sessions/${encodeURIComponent(sessionId)}/turns`, isTurnRecord, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(submission),
+  });
+}
+
+export function listTurns(sessionId: string): Promise<TurnRecord[]> {
+  return requestJson<TurnRecord[]>(`/api/sessions/${encodeURIComponent(sessionId)}/turns`, isTurnList);
+}
+
+export function getTurn(sessionId: string, requestId: string): Promise<TurnRecord> {
+  return requestJson<TurnRecord>(
+    `/api/sessions/${encodeURIComponent(sessionId)}/turns/${encodeURIComponent(requestId)}`,
+    isTurnRecord,
+  );
 }

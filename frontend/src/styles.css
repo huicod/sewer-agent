@@ -22,7 +22,8 @@ body {
 
 button,
 input,
-textarea {
+textarea,
+select {
   font: inherit;
 }
 
@@ -118,6 +119,7 @@ h3 {
 }
 
 .intake-panel,
+.conversation-panel,
 .tasks {
   margin-top: 2.2rem;
   border: 1px solid #213a33;
@@ -150,7 +152,8 @@ h3 {
 }
 
 input[type="file"],
-textarea {
+textarea,
+select {
   width: 100%;
   border: 1px solid #315148;
   border-radius: 0.55rem;
@@ -173,6 +176,10 @@ input[type="file"]::file-selector-button {
 
 textarea {
   resize: vertical;
+  padding: 0.75rem;
+}
+
+select {
   padding: 0.75rem;
 }
 
@@ -307,3 +314,24 @@ textarea {
 .findings li { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 1rem; color: #c4d6d0; }
 .evidence-links { display: flex; gap: 0.65rem; }
 .evidence-links a { color: #71e5bd; }
+.conversation-note { color: #9ab2aa; }
+.transcript { display: grid; gap: 0.9rem; margin: 1.25rem 0; }
+.turn-card { display: grid; gap: 0.55rem; }
+.turn-message { max-width: min(88%, 46rem); border-radius: 0.75rem; padding: 0.8rem 1rem; }
+.turn-message > span { color: #78938a; font-size: 0.72rem; font-weight: 800; }
+.turn-message p { margin: 0.35rem 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.turn-message--user { justify-self: end; background: #173d33; }
+.turn-message--assistant { border: 1px solid #29473e; background: #0a1c18; }
+.muted { color: #9ab2aa; }
+.linked-status { color: #e8d898; font-size: 0.85rem; }
+.secondary-button { margin-top: 0.75rem; border: 1px solid #3c675b; color: #bcebdd; background: transparent; }
+.conversation-error { margin: 0.8rem 0; border-left: 3px solid #c96c61; padding: 0.7rem 0.9rem; color: #ffd7d1; background: rgba(99, 32, 27, 0.32); }
+.conversation-options { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-top: 1rem; }
+.conversation-options .field + .field { margin-top: 0; }
+.report-links { display: flex; gap: 1rem; margin-top: 1rem; border-top: 1px solid #29473e; padding-top: 0.9rem; }
+.report-links a { color: #71e5bd; }
+
+@media (max-width: 720px) {
+  .conversation-options { grid-template-columns: 1fr; }
+  .turn-message { max-width: 96%; }
+}

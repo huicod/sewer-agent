@@ -76,6 +76,7 @@ describe("task submission retry identity", () => {
           tasks: [],
         }),
       )
+      .mockResolvedValueOnce(response([]))
       .mockResolvedValueOnce(response(asset(firstAssetId), 201))
       .mockResolvedValueOnce(
         response(
@@ -110,8 +111,8 @@ describe("task submission retry identity", () => {
 
     const uploadCalls = fetchMock.mock.calls.filter(([url]) => url === "/api/assets");
     expect(uploadCalls).toHaveLength(2);
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(5));
-    const secondTaskRequest = fetchMock.mock.calls[4]?.[1] as RequestInit;
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(6));
+    const secondTaskRequest = fetchMock.mock.calls[5]?.[1] as RequestInit;
     expect(JSON.parse(String(secondTaskRequest.body)).input_asset).toEqual({
       asset_id: secondAssetId,
       version: 1,

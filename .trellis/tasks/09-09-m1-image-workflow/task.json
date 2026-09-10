@@ -3,7 +3,7 @@
   "name": "m1-image-workflow",
   "title": "T05: image inspection and conditional VLM workflow",
   "description": "Implement approved image detection, quality decisions, conditional VLM and negative audit with durable Temporal execution.",
-  "status": "in_progress",
+  "status": "completed",
   "dev_type": null,
   "scope": null,
   "package": null,
@@ -11,7 +11,7 @@
   "creator": "huicod",
   "assignee": "huicod",
   "createdAt": "2026-09-09",
-  "completedAt": null,
+  "completedAt": "2026-09-10",
   "branch": null,
   "base_branch": "main",
   "worktree_path": null,
@@ -21,15 +21,16 @@
   "children": [],
   "parent": null,
   "relatedFiles": [],
-  "notes": "Implementation, local tests and independent review passed on 2026-09-10. Live VLM configuration/sample acceptance pending; keep task in_progress. jj change mxopyywt; no GitHub push.",
+  "notes": "Implementation, local tests and independent review passed. Actual Qwen structured CCTV ImageReviewer passed on 2026-09-10; additional FS remains human-review suggestion, not accuracy proof. API evidence checkpoint 6b8c4942; no GitHub push.",
   "meta": {
     "roadmap_tasks": "T05",
     "implementation": "complete",
     "local_validation": "passed",
     "independent_review": "passed",
-    "live_vlm": "blocked_authentication",
+    "live_vlm": "passed_2026-09-10",
     "jj_change": "mxopyywt",
     "provider_model": "qwen3.8-max",
-    "api_next": "User to confirm Key provider and Base URL; one Beijing text call failed, no image upload"
+    "api_next": "Configuration verified; no additional Key or Base URL needed",
+    "evidence": "qwen-live-success.md"
   }
 }

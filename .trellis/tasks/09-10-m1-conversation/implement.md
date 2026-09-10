@@ -1,4 +1,6 @@
 # T06 执行记录
+历史切片 A 记录；当前 B1 已接通且 API 验证通过，最新状态见 [conversation-report.md](conversation-report.md)，下文旧待办不再作为当前入口。
+
 控制流程：Trellis 为唯一任务/日志；TDD、隔离文件范围和独立复核采用 Superpowers 技法。沿用仓库 jj 工作区，不创建额外 Git worktree，不重复规划审批。
 
 切片 A（本次实施）：

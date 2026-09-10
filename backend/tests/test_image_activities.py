@@ -151,3 +151,37 @@ def test_model_version_mismatch_stops_before_inference(setup):
         ActivityEnvironment().run(activities.detect_image, run)
     assert error.value.type == "configuration_changed"
     detector.predict_image.assert_not_called()
+
+
+@pytest.mark.parametrize("force_review", [False, True])
+async def test_explicit_review_overrides_strong_detection_skip(setup, force_review):
+    from pipe_inspector.contracts.detection import Detection
+
+    activities, store, run, detector = setup
+    detector.predict_image.return_value = DetectionBatch(
+        detector_id="test",
+        model_version="v1",
+        label_space_version="five",
+        width=16,
+        height=16,
+        detections=(
+            Detection(label="AJ", native_label="AJ", score=0.95, bbox_xyxy=(1, 1, 10, 10)),
+        ),
+    )
+    run["config"]["force_review"] = force_review
+    activities.reviewer = SimpleNamespace(
+        review=AsyncMock(side_effect=APIClientError("timeout", retryable=True))
+    )
+    env = ActivityEnvironment()
+    env.run(activities.detect_image, run)
+    if force_review:
+        with pytest.raises(ApplicationError):
+            await env.run(activities.verify_image, run)
+        result = env.run(activities.finish_image, {"run": run, "error": "timeout"})
+        assert result["runtime_status"] == "partial"
+        assert result["inspection_result"] != "normal"
+        activities.reviewer.review.assert_awaited_once()
+    else:
+        result = await env.run(activities.verify_image, run)
+        assert result["skipped"] is True
+        activities.reviewer.review.assert_not_awaited()

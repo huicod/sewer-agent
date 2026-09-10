@@ -10,6 +10,7 @@ from temporalio.exceptions import WorkflowAlreadyStartedError
 from temporalio.service import RPCError
 
 from pipe_inspector.config import Settings
+from pipe_inspector.contracts.planning import TaskPlan
 from pipe_inspector.storage.repository import SubmissionConflict
 from pipe_inspector.vision.detector import UltralyticsDetector
 
@@ -18,7 +19,9 @@ PROMPT_VERSION = "image-review-v1"
 DETECT_TIMEOUT = 180
 
 
-def run_config(settings: Settings, detector=None) -> dict:
+def run_config(
+    settings: Settings, detector=None, *, force_review: bool = False, plan: TaskPlan | None = None
+) -> dict:
     if settings.vlm_base_url:
         try:
             url = httpx.URL(settings.vlm_base_url)
@@ -54,6 +57,8 @@ def run_config(settings: Settings, detector=None) -> dict:
         "detect_call_id": str(uuid4()),
         "verify_call_id": str(uuid4()),
         "gpu_queue": settings.task_queue + "-gpu",
+        "force_review": force_review,
+        "plan": plan.model_dump(mode="json") if plan is not None else None,
     }
 
 
@@ -67,26 +72,40 @@ class InspectionStarter:
     def __init__(self, settings, repository, *, connect=Client.connect):
         self.settings, self.repo, self.connect = settings, repository, connect
 
-    async def start(self, task_id: UUID):
+    async def start(
+        self, task_id: UUID, *, force_review: bool = False, plan: TaskPlan | None = None
+    ):
         record = await asyncio.to_thread(self.repo.get_task, task_id)
         asset = await asyncio.to_thread(self.repo.get_asset, record.input_asset)
         if asset.kind != "image":
             raise InspectionStartError(
                 "image_only", "当前执行器只支持图片；视频执行将在后续阶段接入", 409
             )
-        if record.snapshot.is_terminal:
+        if record.snapshot.is_terminal and plan is None:
             return record
         run = await asyncio.to_thread(self.repo.get_run, task_id)
-        if run is None:
+        if run is None and not record.snapshot.is_terminal:
             try:
                 run = await asyncio.to_thread(
-                    self.repo.ensure_run, task_id, run_config(self.settings)
+                    self.repo.ensure_run,
+                    task_id,
+                    run_config(self.settings, force_review=force_review, plan=plan),
                 )
             except SubmissionConflict:
                 # A concurrent start won admission; UUID call IDs/config are already pinned.
                 run = await asyncio.to_thread(self.repo.get_run, task_id)
                 if run is None:
                     raise
+        if plan is not None and (
+            run is None
+            or run["config"].get("plan") != plan.model_dump(mode="json")
+            or run["config"].get("force_review", False) != force_review
+        ):
+            raise InspectionStartError(
+                "plan_conflict", "任务已按另一执行计划启动，不能改写；请重新发起检查", 409
+            )
+        if record.snapshot.is_terminal:
+            return record
         try:
             async with asyncio.timeout(10):
                 client = await self.connect(

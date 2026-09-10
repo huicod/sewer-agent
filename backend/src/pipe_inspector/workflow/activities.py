@@ -197,7 +197,7 @@ class ImageActivities:
             self.publish_stage,
             {"run": run, "stage": "verifying", "retry_count": activity.info().attempt - 1},
         )
-        if not review_required(observation):
+        if not run["config"].get("force_review", False) and not review_required(observation):
             call = await asyncio.to_thread(
                 self._call,
                 run,

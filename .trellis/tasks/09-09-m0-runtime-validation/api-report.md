@@ -1,5 +1,7 @@
 # T02 structured API adapter evidence
 
+Historical adapter implementation evidence. Actual Qwen text/image integration subsequently passed: [Qwen validation](../09-09-m1-image-workflow/qwen-live-success.md).
+
 ## Scope
 
 - Added `pipe_inspector.agent.OpenAICompatibleClient` and safe `APIClientError` metadata.
