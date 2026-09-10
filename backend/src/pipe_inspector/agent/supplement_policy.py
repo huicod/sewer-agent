@@ -2,11 +2,11 @@
 
 from uuid import uuid4
 
-from pipe_inspector.agent.image_policy import decide_image
+from pipe_inspector.agent.recall_policy import decide_image_recall
 from pipe_inspector.contracts.findings import Finding
 from pipe_inspector.contracts.inspection import InspectionDecision
 
-SUPPLEMENT_POLICY_VERSION = "supplement-policy-v1"
+SUPPLEMENT_POLICY_VERSION = "supplement-policy-v2"
 
 
 def _opinion(candidate, original_label):
@@ -20,7 +20,7 @@ def _opinion(candidate, original_label):
 def decide_supplement(
     task_id, asset, observation, review, *, previous, previous_review, review_error=None
 ):
-    fresh = decide_image(task_id, asset, observation, review, review_error=review_error)
+    fresh = decide_image_recall(task_id, asset, observation, review, review_error=review_error)
     findings = list(fresh.findings)
     reasons = list(fresh.reasons)
     if (

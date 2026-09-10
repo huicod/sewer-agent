@@ -70,7 +70,7 @@ def setup(monkeypatch):
         mean_luminance=100, contrast=50, sharpness=500, adequate=True, reasons=()
     )
     monkeypatch.setattr("pipe_inspector.workflow.activities.analyze_quality", lambda _: quality)
-    settings = Settings(_env_file=None)
+    settings = Settings(_env_file=None, image_review_mode="independent_discovery")
     run = {
         "task_id": str(store.task_id),
         "run_id": str(uuid4()),
@@ -154,7 +154,7 @@ def test_model_version_mismatch_stops_before_inference(setup):
 
 
 @pytest.mark.parametrize("force_review", [False, True])
-async def test_explicit_review_overrides_strong_detection_skip(setup, force_review):
+async def test_all_images_audited_even_with_strong_detection(setup, force_review):
     from pipe_inspector.contracts.detection import Detection
 
     activities, store, run, detector = setup
@@ -174,14 +174,114 @@ async def test_explicit_review_overrides_strong_detection_skip(setup, force_revi
     )
     env = ActivityEnvironment()
     env.run(activities.detect_image, run)
-    if force_review:
-        with pytest.raises(ApplicationError):
-            await env.run(activities.verify_image, run)
-        result = env.run(activities.finish_image, {"run": run, "error": "timeout"})
-        assert result["runtime_status"] == "partial"
-        assert result["inspection_result"] != "normal"
-        activities.reviewer.review.assert_awaited_once()
-    else:
-        result = await env.run(activities.verify_image, run)
-        assert result["skipped"] is True
-        activities.reviewer.review.assert_not_awaited()
+    with pytest.raises(ApplicationError):
+        await env.run(activities.verify_image, run)
+    result = env.run(activities.finish_image, {"run": run, "error": "timeout"})
+    assert result["runtime_status"] == "partial"
+    assert result["inspection_result"] != "normal"
+    activities.reviewer.review.assert_awaited_once()
+
+
+def test_image_pins_match_discovery_and_video_keeps_candidate_review(setup):
+    from pipe_inspector.workflow.start import video_run_config
+
+    activities, _, run, detector = setup
+    assert run["config"]["prompt_version"] == "image-discovery-v2"
+    assert run["config"]["policy_version"] == "image-recall-v1"
+    assert run["config"]["view_policy_version"] == "native-quadrants-v1"
+    video = video_run_config(activities.settings, detector)
+    assert video["prompt_version"] == "image-review-v2"
+    assert video["policy_version"] == "image-policy-v1"
+    activities._check_versions(video)
+    with pytest.raises(ApplicationError):
+        activities._check_versions(run["config"] | dict(view_policy_version="stale-views"))
+
+
+@pytest.mark.asyncio
+async def test_old_image_prompt_pin_rejected_before_api(setup):
+    activities, _, run, _ = setup
+    env = ActivityEnvironment()
+    env.run(activities.detect_image, run)
+    run["config"]["prompt_version"] = "image-review-v2"
+    activities.reviewer = SimpleNamespace(review=AsyncMock())
+    with pytest.raises(ApplicationError) as error:
+        await env.run(activities.verify_image, run)
+    assert error.value.type == "configuration_changed"
+    activities.reviewer.review.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("mode", ["candidate_review", "independent_discovery"])
+async def test_runtime_uses_selected_reviewer_and_replays_saved_answer(
+    setup, tmp_path, monkeypatch, mode
+):
+    import json
+
+    import httpx
+    from PIL import Image
+    from pipe_inspector.agent.api_client import OpenAICompatibleClient
+
+    activities, store, run, detector = setup
+    settings = Settings(
+        _env_file=None,
+        vlm_model="fixture",
+        vlm_base_url="https://vlm.invalid/v1",
+        vlm_api_key="fixture-only",
+        image_review_mode=mode,
+    )
+    activities.settings = settings
+    run["config"] = run_config(settings, detector)
+    path = tmp_path / "source.png"
+    Image.new("RGB", (16, 16)).save(path)
+    activities.media = SimpleNamespace(path_for=lambda _: path)
+    requests = []
+
+    def provider(request):
+        requests.append(json.loads(request.content))
+        payload = dict(
+            coordinate_space="normalized_0_1000",
+            image_assessable=True,
+            full_image_audited=True,
+            anomalies=[],
+            summary="全图无异常",
+        )
+        if mode == "candidate_review":
+            payload.pop("coordinate_space")
+            payload.pop("anomalies")
+            payload.update(candidates=[], additional_anomalies=[])
+        return httpx.Response(
+            200,
+            json=dict(
+                choices=[dict(finish_reason="stop", message=dict(content=json.dumps(payload)))]
+            ),
+        )
+
+    def client_factory(*args, **kwargs):
+        return OpenAICompatibleClient(*args, **kwargs, transport=httpx.MockTransport(provider))
+
+    monkeypatch.setattr("pipe_inspector.workflow.activities.OpenAICompatibleClient", client_factory)
+    env = ActivityEnvironment()
+    env.run(activities.detect_image, run)
+    first = await env.run(activities.verify_image, run)
+    assert await env.run(activities.verify_image, run) == first
+    assert len(requests) == 1
+    metadata = json.loads(requests[0]["messages"][1]["content"][0]["text"])
+    assert metadata["prompt_version"] == run["config"]["prompt_version"]
+    assert ("candidates" in metadata) == (mode == "candidate_review")
+    assert run["config"]["image_review_mode"] == mode
+    assert env.run(activities.finish_image, {"run": run})["inspection_result"] == "normal"
+
+
+def test_default_keeps_candidate_review_and_experimental_mode_is_pinned():
+    settings = Settings(_env_file=None)
+    assert settings.image_review_mode == "candidate_review"
+    detector = SimpleNamespace(
+        detector_id="fixture", model_version="v1", label_space_version="five"
+    )
+    config = run_config(settings, detector)
+    assert config["prompt_version"] == "image-review-v2"
+    assert config["policy_version"] == "image-recall-v1"
+    assert config["view_policy_version"] is None
+    activities = ImageActivities(settings, Store(), None, detector=detector)
+    with pytest.raises(ApplicationError):
+        activities._check_versions(config | dict(image_review_mode="independent_discovery"))

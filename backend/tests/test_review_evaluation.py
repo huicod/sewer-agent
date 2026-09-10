@@ -5,6 +5,7 @@ from types import SimpleNamespace
 import pytest
 from pipe_inspector.contracts.detection import Detection, DetectionBatch
 from pipe_inspector.contracts.inspection import (
+    AdditionalAnomaly,
     CandidateReview,
     ImageReview,
     QualitySummary,
@@ -232,7 +233,9 @@ async def test_evaluation_keeps_pending_queue_separate_from_confirmed(tmp_path) 
                     reason="revise fixture",
                 ),
             ),
-            additional_anomalies=(),
+            additional_anomalies=(
+                AdditionalAnomaly(label="PL", bbox_xyxy=(10, 10, 30, 30), reason="独立发现裂纹"),
+            ),
             summary="fixture review",
         )
     )
@@ -252,13 +255,14 @@ async def test_evaluation_keeps_pending_queue_separate_from_confirmed(tmp_path) 
     assert result["raw_detector"]["micro"]["tp"] == 0
     assert result["retained_queue"]["micro"]["tp"] == 1
     assert result["auto_confirmed"]["micro"]["fn"] == 1
-    assert result["pending_findings"] == 1
+    assert result["pending_findings"] == 2
     assert result["paired_image_label_sets"] == {
-        "improved": 1,
+        "improved": 0,
         "worsened": 0,
-        "unchanged": 0,
+        "unchanged": 1,
     }
-    assert result["paired_deltas"]["retained_queue_minus_raw"]["micro_f1"] == 1.0
+    assert result["paired_deltas"]["retained_queue_minus_raw"]["micro_f1"] == pytest.approx(2 / 3)
+    assert records[0]["decision"]["findings"][0]["canonical_label"] == "FS"
     assert result["claims"]["true_normal_accuracy"] is None
     assert result["operating_point"] == {"conf": 0.25, "imgsz": 960, "iou": 0.5}
 
@@ -406,13 +410,13 @@ async def test_summary_never_matches_boxes_across_different_images(tmp_path) -> 
 
 
 @pytest.mark.asyncio
-async def test_high_confidence_pl_does_not_spend_review_call(tmp_path) -> None:
+async def test_high_confidence_pl_still_receives_independent_audit(tmp_path) -> None:
     detector = FakeDetector(
         detection_batch(
             Detection(label="PL", native_label="PL", score=0.9, bbox_xyxy=(10, 10, 30, 30))
         )
     )
-    reviewer = FakeReviewer(RuntimeError("must not be called"))
+    reviewer = FakeReviewer(RuntimeError("fixture API failure"))
 
     records = await evaluate_manifest(
         manifest(tmp_path),
@@ -423,9 +427,9 @@ async def test_high_confidence_pl_does_not_spend_review_call(tmp_path) -> None:
         quality_analyzer=adequate_quality,
     )
 
-    assert reviewer.calls == 0
+    assert reviewer.calls == 1
     assert records[0]["review"] is None
-    assert records[0]["review_error"] is None
+    assert records[0]["review_error"] is not None
 
 
 def test_state_is_plain_json_without_normal_claim(tmp_path) -> None:
@@ -523,11 +527,12 @@ async def test_local_failure_leaves_incomplete_run_and_resume_skips_cached_sampl
             quality_analyzer=adequate_quality,
         )
     assert detector.calls == ["image-0.jpg", "image-1.jpg", "image-1.jpg"]
-    assert reviewer.calls == 0
+    assert reviewer.calls == 1
 
 
 def test_live_pins_cover_all_response_and_failure_affecting_configuration() -> None:
     settings = SimpleNamespace(
+        image_review_mode="independent_discovery",
         vlm_configured=True,
         vlm_base_url="https://example.invalid/v1",
         vlm_model="fixture-vlm",
@@ -545,9 +550,9 @@ def test_live_pins_cover_all_response_and_failure_affecting_configuration() -> N
     assert pins["vlm"] == {
         "base_url": "https://example.invalid/v1",
         "model": "fixture-vlm",
-        "prompt_version": "image-review-v2",
-        "review_score_threshold": 0.85,
-        "review_always_labels": ["BX", "FS"],
+        "prompt_version": "image-discovery-v2",
+        "review_mode": "independent_all_images",
+        "view_policy_version": "native-quadrants-v1",
         "api_enable_thinking": False,
         "api_max_output_tokens": 321,
         "api_timeout_seconds": 17,
@@ -556,4 +561,111 @@ def test_live_pins_cover_all_response_and_failure_affecting_configuration() -> N
     assert pins["detector"]["detector_id"] == "ultralytics-yolo26"
     assert pins["detector"]["label_space_version"] == "sewer2403-5class-v1"
     assert pins["quality_policy_version"] == "image-quality-v1"
-    assert pins["image_decision_policy"] == {"strong_evidence_score": 0.85}
+    assert pins["image_decision_policy"] == {
+        "policy_version": "image-recall-v1",
+        "strong_evidence_score": 0.85,
+    }
+
+
+@pytest.mark.asyncio
+async def test_recall_attribution_does_not_count_reobserved_target_as_recovered(tmp_path):
+    values = manifest(tmp_path).model_dump(mode="json")
+    values["samples"][0]["ground_truth"].append(dict(label="FS", bbox_xyxy=[50, 10, 70, 30]))
+    fixed = EvaluationManifest.model_validate(values)
+    detector = FakeDetector(
+        detection_batch(
+            Detection(label="PL", native_label="PL", score=0.9, bbox_xyxy=(10, 10, 30, 30))
+        )
+    )
+    reviewer = FakeReviewer(
+        ImageReview(
+            image_assessable=True,
+            full_image_audited=True,
+            candidates=(CandidateReview(index=0, verdict="abstain", reason="fixture"),),
+            additional_anomalies=(
+                AdditionalAnomaly(
+                    label="PL", bbox_xyxy=(11, 11, 30, 30), reason="重复观察，不是补漏"
+                ),
+                AdditionalAnomaly(label="FS", bbox_xyxy=(50, 10, 70, 30), reason="独立补漏"),
+            ),
+            summary="fixture",
+        )
+    )
+    records = await evaluate_manifest(
+        fixed,
+        tmp_path / "attribution",
+        pins={},
+        detector=detector,
+        reviewer=reviewer,
+        quality_analyzer=adequate_quality,
+    )
+    assert summarize(fixed, records)["recall_attribution"] == {
+        "raw_detector_tp": 1,
+        "preserved_detector_tp": 1,
+        "lost_detector_tp": 0,
+        "raw_missed_targets": 1,
+        "vlm_added_tp": 1,
+        "vlm_candidate_fp_after_raw": 1,
+        "zero_detection_gt_count": 0,
+        "vlm_added_tp_on_zero_detection_images": 0,
+    }
+
+
+@pytest.mark.asyncio
+async def test_better_localized_vlm_box_can_recover_target_despite_detector_overlap(tmp_path):
+    detector = FakeDetector(
+        detection_batch(
+            Detection(label="PL", native_label="PL", score=0.9, bbox_xyxy=(10, 10, 20, 28))
+        )
+    )
+    reviewer = FakeReviewer(
+        ImageReview(
+            image_assessable=True,
+            full_image_audited=True,
+            candidates=(CandidateReview(index=0, verdict="accept", reason="同位置佐证"),),
+            additional_anomalies=(
+                AdditionalAnomaly(label="PL", bbox_xyxy=(10, 10, 26, 30), reason="定位更完整"),
+            ),
+            summary="fixture",
+        )
+    )
+    fixed = manifest(tmp_path)
+    records = await evaluate_manifest(
+        fixed,
+        tmp_path / "localization",
+        pins={},
+        detector=detector,
+        reviewer=reviewer,
+        quality_analyzer=adequate_quality,
+    )
+    result = summarize(fixed, records)
+    assert result["raw_detector"]["micro"]["tp"] == 0
+    assert result["retained_queue"]["micro"]["tp"] == 1
+    assert result["recall_attribution"]["vlm_added_tp"] == 1
+
+
+@pytest.mark.asyncio
+async def test_zero_detection_recovery_is_reported_separately(tmp_path):
+    reviewer = FakeReviewer(
+        ImageReview(
+            image_assessable=True,
+            full_image_audited=True,
+            candidates=(),
+            additional_anomalies=(
+                AdditionalAnomaly(label="PL", bbox_xyxy=(10, 10, 30, 30), reason="空检测图补漏"),
+            ),
+            summary="fixture",
+        )
+    )
+    fixed = manifest(tmp_path)
+    records = await evaluate_manifest(
+        fixed,
+        tmp_path / "zero",
+        pins={},
+        detector=FakeDetector(detection_batch()),
+        reviewer=reviewer,
+        quality_analyzer=adequate_quality,
+    )
+    attribution = summarize(fixed, records)["recall_attribution"]
+    assert attribution["zero_detection_gt_count"] == 1
+    assert attribution["vlm_added_tp_on_zero_detection_images"] == 1

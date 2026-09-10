@@ -14,6 +14,29 @@ from test_image_activities import Store
 from test_supplement_policy import observation, previous, review
 
 
+def test_admitted_supplement_policy_matches_starter_and_rejects_old_version():
+    from pipe_inspector.agent.supplement_policy import SUPPLEMENT_POLICY_VERSION
+    from pipe_inspector.storage.repository import SubmissionConflict
+    from pipe_inspector.storage.supplements import SupplementRepository
+
+    observed = observation(False)
+    parent_id = uuid4()
+    config = run_config(Settings(_env_file=None), observed.detection, force_review=True) | dict(
+        operation="supplement_review",
+        parent_task_id=str(parent_id),
+        supplement_policy_version=SUPPLEMENT_POLICY_VERSION,
+    )
+    parent_run = observed.detection.model_dump(mode="json")
+    SupplementRepository._validate_config(config, parent_id, parent_run, observed)
+    with pytest.raises(SubmissionConflict):
+        SupplementRepository._validate_config(
+            config | dict(supplement_policy_version="supplement-policy-v1"),
+            parent_id,
+            parent_run,
+            observed,
+        )
+
+
 @pytest.mark.parametrize("configuration_changed", [False, True])
 async def test_supplement_finalization_preserves_frozen_source_and_replays_without_api(
     configuration_changed,
@@ -47,7 +70,7 @@ async def test_supplement_finalization_preserves_frozen_source_and_replays_witho
         | {
             "operation": "supplement_review",
             "parent_task_id": str(parent.snapshot.task_id),
-            "supplement_policy_version": "supplement-policy-v1",
+            "supplement_policy_version": "supplement-policy-v2",
         },
     }
     reviewer = SimpleNamespace(review=AsyncMock(return_value=review()))

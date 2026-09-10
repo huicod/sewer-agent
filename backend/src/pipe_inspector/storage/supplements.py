@@ -7,6 +7,7 @@ import psycopg
 from psycopg import sql
 from psycopg.types.json import Jsonb
 
+from pipe_inspector.agent.supplement_policy import SUPPLEMENT_POLICY_VERSION
 from pipe_inspector.contracts.assets import AssetKind, AssetRecord
 from pipe_inspector.contracts.inspection import ImageObservation
 from pipe_inspector.contracts.intake import TaskRecord, TaskSubmission
@@ -79,7 +80,7 @@ class SupplementRepository(ConversationRepository):
             "operation": "supplement_review",
             "parent_task_id": str(parent_task_id),
             "force_review": True,
-            "supplement_policy_version": "supplement-policy-v1",
+            "supplement_policy_version": SUPPLEMENT_POLICY_VERSION,
         }
         if any(config.get(key) != value for key, value in required.items()):
             raise SubmissionConflict

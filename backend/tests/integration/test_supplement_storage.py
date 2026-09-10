@@ -143,7 +143,7 @@ def child_config(parent, **changes):
             "operation": "supplement_review",
             "parent_task_id": str(parent.snapshot.task_id),
             "force_review": True,
-            "supplement_policy_version": "supplement-policy-v1",
+            "supplement_policy_version": "supplement-policy-v2",
             "verify_call_id": str(uuid4()),
         }
         | changes

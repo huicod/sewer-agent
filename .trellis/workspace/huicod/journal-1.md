@@ -397,3 +397,39 @@ T08 工程验收完成。两段真实视频4259帧、SIGTERM恢复和有界复�
 
 - 恢复先读 .trellis/tasks/09-11-image-review-v2/report.md 与总体计划；视频、SEDD、T09暂缓，不重做既有阶段。
 - 图片仍需局部证据/重复框处理与FS、BLOCK分歧人工核查；不要将提示词指令当作硬约束，也不能宣称整体已优于YOLO。API配置无需再提供。
+
+
+## Session 13: 图片召回保护与独立扫描受控实验
+
+**Date**: 2026-09-11
+**Task**: 图片召回保护与独立扫描受控实验
+
+### Summary
+
+默认保留候选复核并防止VLM抹掉YOLO；独检36图召回85.3%→88.2%但FP8→82，零检测补回0，未提升为默认。96次实测完成，视频/SEDD/T09暂停，未部署推送。
+
+### Main Changes
+
+- 两种图片模式及关联复检固定模式/Prompt/融合/视图版本；独检明确归一化坐标、本地裁剪映射；原检测全保留、冲突和新发现待审。
+- 新增来源归因，原命中恢复与VLM真新增分列、零检测补回单列；固定36+12两轮完整保留，未重跑GPU、未改样本。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `jj moqulzpv` | (see git log) |
+
+### Testing
+
+- [OK] 后端479 passed/75 skipped；Ruff和diff检查通过；独立审查修复版本准入与视图pin遗漏。
+- [OK] 真实Qwen96次：像素诊断轮17个schema失败、归一化轮0；只恢复1个错类目标（PL→BLOCK），原YOLO命中40个全部保留。
+- [未通过] PG未启动，真实工作流集成准备失败；没有重启服务。错误堆栈意外含本地DB密码，已告知轮换建议，不存凭据。
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- 先读 .trellis/tasks/09-11-image-recall/report.md；当前默认candidate_review，independent_discovery仅显式实验。勿重跑本轮API追分。
+- 优先零检测PL/FS、实例范围/定位、误报与重复候选分析；保留候选复核职责，不推进视频/T09或扩大模型栈。

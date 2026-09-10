@@ -28,7 +28,7 @@ class LinkedStore:
                 "operation": "supplement_review",
                 "parent_task_id": str(self.parent_id),
                 "force_review": True,
-                "supplement_policy_version": "supplement-policy-v1",
+                "supplement_policy_version": "supplement-policy-v2",
             },
         }
 

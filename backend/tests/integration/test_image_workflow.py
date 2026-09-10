@@ -14,7 +14,6 @@ import psycopg
 import pytest
 from PIL import Image
 from pipe_inspector.agent.api_client import OpenAICompatibleClient
-from pipe_inspector.agent.image_review import ImageReviewer
 from pipe_inspector.config import Settings
 from pipe_inspector.contracts.detection import DetectionBatch
 from pipe_inspector.contracts.intake import TaskSubmission
@@ -61,6 +60,7 @@ class EmptyDetector:
 @pytest.fixture
 def case(tmp_path):
     settings = Settings(
+        image_review_mode="independent_discovery",
         task_queue="test-image-" + uuid4().hex,
         vlm_model="fixture-vlm",
         vlm_base_url="https://vlm.invalid/v1",
@@ -98,7 +98,7 @@ def case(tmp_path):
             conn.execute(sql.SQL("DROP SCHEMA {} CASCADE").format(sql.Identifier(schema)))
 
 
-async def test_worker_restart_resumes_after_detection_and_retries_only_vlm(case):
+async def test_worker_restart_resumes_after_detection_and_retries_only_vlm(case, monkeypatch):
     settings, repo, media, task = case
     detector = EmptyDetector()
     attempts = []
@@ -108,10 +108,10 @@ async def test_worker_restart_resumes_after_detection_and_retries_only_vlm(case)
         if len(attempts) == 1:
             return httpx.Response(429)
         review = {
+            "coordinate_space": "normalized_0_1000",
             "image_assessable": True,
             "full_image_audited": True,
-            "candidates": [],
-            "additional_anomalies": [],
+            "anomalies": [],
             "summary": "全图未见缺陷",
         }
         return httpx.Response(
@@ -121,15 +121,16 @@ async def test_worker_restart_resumes_after_detection_and_retries_only_vlm(case)
             },
         )
 
-    reviewer = ImageReviewer(
-        OpenAICompatibleClient(
+    def client_factory(*args, **kwargs):
+        return OpenAICompatibleClient(
             settings.vlm_base_url,
             settings.vlm_model,
             settings.vlm_api_key,
             transport=httpx.MockTransport(provider),
         )
-    )
-    activities = ImageActivities(settings, repo, media, detector=detector, reviewer=reviewer)
+
+    monkeypatch.setattr("pipe_inspector.workflow.activities.OpenAICompatibleClient", client_factory)
+    activities = ImageActivities(settings, repo, media, detector=detector)
     task_id = task.snapshot.task_id
     run = repo.ensure_run(task_id, run_config(settings, detector))
     client = await Client.connect(settings.temporal_address, namespace=settings.temporal_namespace)
@@ -184,6 +185,9 @@ async def test_worker_restart_resumes_after_detection_and_retries_only_vlm(case)
         assert result["inspection_result"] == "normal"
         assert detector.calls == 1
         assert len(attempts) == 2
+        metadata = json.loads(attempts[-1]["messages"][1]["content"][0]["text"])
+        assert metadata["prompt_version"] == "image-discovery-v2"
+        assert "candidates" not in metadata and "detector" not in metadata
         calls = repo.list_calls(task_id)
         assert [(call.step_id, call.attempt, call.status) for call in calls] == [
             ("detect", 1, "succeeded"),

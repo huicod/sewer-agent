@@ -15,6 +15,9 @@ from temporalio.common import WorkflowIDReusePolicy
 from temporalio.exceptions import WorkflowAlreadyStartedError
 from temporalio.service import RPCError
 
+from pipe_inspector.agent.image_discovery import DISCOVERY_PROMPT_VERSION, VIEW_POLICY_VERSION
+from pipe_inspector.agent.image_review import IMAGE_REVIEW_PROMPT_VERSION
+from pipe_inspector.agent.recall_policy import RECALL_POLICY_VERSION
 from pipe_inspector.agent.supplement_policy import SUPPLEMENT_POLICY_VERSION
 from pipe_inspector.config import Settings
 from pipe_inspector.contracts.assets import AssetKind
@@ -27,8 +30,8 @@ from pipe_inspector.storage.repository import SubmissionConflict
 from pipe_inspector.storage.supplements import SupplementNotAllowed
 from pipe_inspector.vision.detector import UltralyticsDetector
 
-POLICY_VERSION = "image-policy-v1"
-PROMPT_VERSION = "image-review-v1"
+POLICY_VERSION = RECALL_POLICY_VERSION
+PROMPT_VERSION = DISCOVERY_PROMPT_VERSION
 DETECT_TIMEOUT = 180
 
 
@@ -55,6 +58,7 @@ def run_config(
     detector = detector or UltralyticsDetector(
         settings.detector_path, device=settings.detector_device
     )
+    independent = settings.image_review_mode == "independent_discovery"
     return {
         "detector_id": detector.detector_id,
         "model_version": detector.model_version,
@@ -62,7 +66,9 @@ def run_config(
         "vlm_model": settings.vlm_model,
         "vlm_base_url": settings.vlm_base_url,
         "policy_version": POLICY_VERSION,
-        "prompt_version": PROMPT_VERSION,
+        "prompt_version": PROMPT_VERSION if independent else IMAGE_REVIEW_PROMPT_VERSION,
+        "view_policy_version": VIEW_POLICY_VERSION if independent else None,
+        "image_review_mode": settings.image_review_mode,
         "api_timeout_seconds": settings.api_timeout_seconds,
         "api_enable_thinking": settings.api_enable_thinking,
         "api_max_output_tokens": settings.api_max_output_tokens,
@@ -84,6 +90,10 @@ def video_run_config(
 ) -> dict:
     return run_config(settings, detector=detector, force_review=force_review, plan=plan) | {
         "operation": "video_inspection",
+        "policy_version": "image-policy-v1",
+        "prompt_version": IMAGE_REVIEW_PROMPT_VERSION,
+        "view_policy_version": None,
+        "image_review_mode": "candidate_review",
         "video_policy_version": "video-review-v1",
         "video_aggregation": VideoAggregationConfig().model_dump(mode="json"),
         "video_chunk_size": 8,

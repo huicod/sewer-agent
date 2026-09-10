@@ -5,7 +5,7 @@ from unittest.mock import Mock
 from uuid import uuid4
 
 import pytest
-from pipe_inspector.agent.image_policy import decide_image
+from pipe_inspector.agent.recall_policy import decide_image_recall
 from pipe_inspector.config import Settings
 from pipe_inspector.contracts.assets import AssetRef
 from pipe_inspector.contracts.detection import Detection, DetectionBatch
@@ -147,8 +147,8 @@ def test_cached_final_checkpoint_repairs_projection_without_redeciding(monkeypat
     env = ActivityEnvironment()
     env.run(activities.detect_image, run)
     store.snapshot_failures = 1
-    policy = Mock(side_effect=decide_image)
-    monkeypatch.setattr("pipe_inspector.workflow.activities.decide_image", policy)
+    policy = Mock(side_effect=decide_image_recall)
+    monkeypatch.setattr("pipe_inspector.workflow.activities.decide_image_recall", policy)
 
     with pytest.raises(RuntimeError, match="projection write failure"):
         env.run(activities.finish_image, {"run": run, "error": "vlm_not_configured"})
@@ -174,7 +174,7 @@ def test_finish_configuration_drift_preserves_candidates_without_running_changed
     env.run(activities.detect_image, run)
     run["config"]["prompt_version"] = "stale-prompt"
     changed_policy = Mock(side_effect=AssertionError("changed policy must not run"))
-    monkeypatch.setattr("pipe_inspector.workflow.activities.decide_image", changed_policy)
+    monkeypatch.setattr("pipe_inspector.workflow.activities.decide_image_recall", changed_policy)
 
     result = env.run(activities.finish_image, {"run": run})
 

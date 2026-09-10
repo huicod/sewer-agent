@@ -8,8 +8,9 @@ from temporalio import activity
 from temporalio.exceptions import ApplicationError
 
 from pipe_inspector.agent.api_client import APIClientError, OpenAICompatibleClient
-from pipe_inspector.agent.image_policy import decide_image, review_required
-from pipe_inspector.agent.image_review import ImageReviewer
+from pipe_inspector.agent.image_discovery import VIEW_POLICY_VERSION, IndependentImageReviewer
+from pipe_inspector.agent.image_review import IMAGE_REVIEW_PROMPT_VERSION, ImageReviewer
+from pipe_inspector.agent.recall_policy import decide_image_recall
 from pipe_inspector.agent.supplement_policy import SUPPLEMENT_POLICY_VERSION
 from pipe_inspector.contracts.common import ImageRegion
 from pipe_inspector.contracts.findings import EvidenceRef, Finding, FindingSource, ReviewStatus
@@ -48,7 +49,18 @@ class ImageActivities:
         )
 
     def _check_versions(self, config, *, detector=False, vlm=False):
-        expected = {"policy_version": POLICY_VERSION, "prompt_version": PROMPT_VERSION}
+        independent = self.settings.image_review_mode == "independent_discovery"
+        expected = {
+            "policy_version": POLICY_VERSION,
+            "prompt_version": PROMPT_VERSION if independent else IMAGE_REVIEW_PROMPT_VERSION,
+            "view_policy_version": VIEW_POLICY_VERSION if independent else None,
+            "image_review_mode": self.settings.image_review_mode,
+        }
+        if config.get("operation") == "video_inspection":
+            expected = {
+                "policy_version": "image-policy-v1",
+                "prompt_version": IMAGE_REVIEW_PROMPT_VERSION,
+            }
         if config.get("operation") == "supplement_review":
             expected["supplement_policy_version"] = SUPPLEMENT_POLICY_VERSION
         if detector:
@@ -200,17 +212,6 @@ class ImageActivities:
             self.publish_stage,
             {"run": run, "stage": "verifying", "retry_count": activity.info().attempt - 1},
         )
-        if not run["config"].get("force_review", False) and not review_required(observation):
-            call = await asyncio.to_thread(
-                self._call,
-                run,
-                "verify",
-                status="skipped",
-                skip_reason="adequate_quality_and_strong_primary_evidence",
-            )
-            return await asyncio.to_thread(
-                self.repo.save_step, task_id, "verify", {"review": None, "skipped": True}, call
-            )
         await asyncio.to_thread(
             self.repo.record_call,
             await asyncio.to_thread(self._call, run, "verify", status="running"),
@@ -221,7 +222,12 @@ class ImageActivities:
             if reviewer is None:
                 if not self.settings.vlm_configured:
                     raise APIClientError("vlm_not_configured", retryable=False)
-                reviewer = ImageReviewer(
+                reviewer_type = (
+                    IndependentImageReviewer
+                    if run["config"]["image_review_mode"] == "independent_discovery"
+                    else ImageReviewer
+                )
+                reviewer = reviewer_type(
                     OpenAICompatibleClient(
                         self.settings.vlm_base_url,
                         self.settings.vlm_model,
@@ -262,7 +268,7 @@ class ImageActivities:
         )
 
     def _decide(self, run, task, observation, review, error):
-        return decide_image(
+        return decide_image_recall(
             task.snapshot.task_id, task.input_asset, observation, review, review_error=error
         )
 

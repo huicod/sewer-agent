@@ -14,8 +14,8 @@ from uuid import NAMESPACE_URL, uuid5
 from pydantic import BaseModel, ConfigDict, Field, FiniteFloat, field_validator, model_validator
 
 from pipe_inspector.agent.api_client import APIClientError
-from pipe_inspector.agent.image_policy import STRONG_EVIDENCE_SCORE, decide_image
-from pipe_inspector.agent.image_review import review_required
+from pipe_inspector.agent.image_policy import STRONG_EVIDENCE_SCORE
+from pipe_inspector.agent.recall_policy import RECALL_POLICY_VERSION, decide_image_recall
 from pipe_inspector.contracts.assets import AssetRef
 from pipe_inspector.contracts.detection import DetectionBatch, DetectionLabel
 from pipe_inspector.contracts.findings import ReviewStatus
@@ -128,17 +128,15 @@ def _rates(tp: int, fp: int, fn: int) -> dict[str, int | float]:
     return {"tp": tp, "fp": fp, "fn": fn, "precision": precision, "recall": recall, "f1": f1}
 
 
-def score_boxes(
+def _matched_pairs(
     ground_truth: Sequence[LabeledBox],
     predictions: Sequence[LabeledBox],
-    *,
     iou_threshold: float = MATCH_IOU,
-) -> dict[str, Any]:
-    """Match predictions greedily by descending score, class, and IoU."""
-    counts = {label: {"tp": 0, "fp": 0, "fn": 0} for label in LABELS}
+) -> list[tuple[int, int]]:
     matched: set[int] = set()
+    pairs = []
     ordered = sorted(enumerate(predictions), key=lambda item: (-item[1].score, item[0]))
-    for _, prediction in ordered:
+    for prediction_index, prediction in ordered:
         best_index = None
         best_iou = -1.0
         for index, target in enumerate(ground_truth):
@@ -147,14 +145,30 @@ def score_boxes(
             overlap = _iou(target.bbox_xyxy, prediction.bbox_xyxy)
             if overlap > best_iou:
                 best_index, best_iou = index, overlap
-        label_counts = counts[prediction.label.value]
         if best_index is not None and best_iou >= iou_threshold:
             matched.add(best_index)
+            pairs.append((prediction_index, best_index))
+    return pairs
+
+
+def score_boxes(
+    ground_truth: Sequence[LabeledBox],
+    predictions: Sequence[LabeledBox],
+    *,
+    iou_threshold: float = MATCH_IOU,
+) -> dict[str, Any]:
+    """Match predictions greedily by descending score, class, and IoU."""
+    counts = {label: {"tp": 0, "fp": 0, "fn": 0} for label in LABELS}
+    pairs = _matched_pairs(ground_truth, predictions, iou_threshold)
+    matched_predictions, matched_targets = {p for p, _ in pairs}, {t for _, t in pairs}
+    for index, prediction in enumerate(predictions):
+        label_counts = counts[prediction.label.value]
+        if index in matched_predictions:
             label_counts["tp"] += 1
         else:
             label_counts["fp"] += 1
     for index, target in enumerate(ground_truth):
-        if index not in matched:
+        if index not in matched_targets:
             counts[target.label.value]["fn"] += 1
 
     per_class = {label: _rates(**counts[label]) for label in LABELS}
@@ -249,14 +263,15 @@ async def evaluate_manifest(
         )
         review: ImageReview | None = None
         review_error: str | None = None
-        if review_required(observation):
-            try:
-                review = await reviewer.review(sample.image_path, observation)
-            except Exception as error:  # provider details must never enter persisted output
-                review_error = _safe_error(error)
+        try:
+            review = await reviewer.review(sample.image_path, observation)
+        except Exception as error:  # provider details must never enter persisted output
+            review_error = _safe_error(error)
         task_id = uuid5(NAMESPACE_URL, f"evaluation-task:{sample.sample_id}")
         asset = AssetRef(asset_id=uuid5(NAMESPACE_URL, f"evaluation-asset:{sample.sample_id}"))
-        decision = decide_image(task_id, asset, observation, review, review_error=review_error)
+        decision = decide_image_recall(
+            task_id, asset, observation, review, review_error=review_error
+        )
         state["records"].append(
             {
                 "sample_id": sample.sample_id,
@@ -314,6 +329,16 @@ def summarize(
     improved = worsened = unchanged = 0
     pending = abstain = failures = nonlocalized = 0
     raw_exact = queue_exact = confirmed_exact = suggested_exact = 0
+    attribution = dict(
+        raw_detector_tp=0,
+        preserved_detector_tp=0,
+        lost_detector_tp=0,
+        raw_missed_targets=0,
+        vlm_added_tp=0,
+        vlm_candidate_fp_after_raw=0,
+        zero_detection_gt_count=0,
+        vlm_added_tp_on_zero_detection_images=0,
+    )
 
     for sample in manifest.samples:
         record = by_id.get(sample.sample_id)
@@ -327,6 +352,34 @@ def summarize(
         raw_items.append((targets, raw))
         queue_items.append((targets, queue))
         confirmed_items.append((targets, confirmed))
+        raw_pairs = _matched_pairs(targets, raw)
+        matched_targets = {t for _, t in raw_pairs}
+        preserved = _finding_boxes(
+            {"findings": [f for f in record["decision"]["findings"] if f["source"] == "detector"]},
+            confirmed_only=False,
+        )
+        preserved_count = sum(
+            any(
+                p.label == raw[index].label and p.bbox_xyxy == raw[index].bbox_xyxy
+                for p in preserved
+            )
+            for index, _ in raw_pairs
+        )
+        new_boxes = _finding_boxes(
+            {"findings": [f for f in record["decision"]["findings"] if f["source"] == "vlm"]},
+            confirmed_only=False,
+        )
+        missed = [target for index, target in enumerate(targets) if index not in matched_targets]
+        added_count = len(_matched_pairs(missed, new_boxes))
+        attribution["raw_detector_tp"] += len(raw_pairs)
+        attribution["preserved_detector_tp"] += preserved_count
+        attribution["lost_detector_tp"] += len(raw_pairs) - preserved_count
+        attribution["raw_missed_targets"] += len(missed)
+        attribution["vlm_added_tp"] += added_count
+        attribution["vlm_candidate_fp_after_raw"] += len(new_boxes) - added_count
+        if not raw:
+            attribution["zero_detection_gt_count"] += len(targets)
+            attribution["vlm_added_tp_on_zero_detection_images"] += added_count
 
         target_labels = {item.label.value for item in targets}
         raw_labels = {item.label.value for item in raw}
@@ -387,6 +440,7 @@ def summarize(
         "raw_detector": raw_score,
         "retained_queue": queue_score,
         "auto_confirmed": confirmed_score,
+        "recall_attribution": attribution,
         "paired_deltas": {
             "retained_queue_minus_raw": delta(queue_score),
             "auto_confirmed_minus_raw": delta(confirmed_score),
@@ -426,12 +480,12 @@ def build_live_components(settings: Any) -> tuple[Any, Any, dict[str, Any]]:
         raise ValueError("VLM configuration contains an unsafe base URL")
 
     from pipe_inspector.agent.api_client import OpenAICompatibleClient
-    from pipe_inspector.agent.image_review import (
-        IMAGE_REVIEW_PROMPT_VERSION,
-        REVIEW_ALWAYS_LABELS,
-        REVIEW_SCORE_THRESHOLD,
-        ImageReviewer,
+    from pipe_inspector.agent.image_discovery import (
+        DISCOVERY_PROMPT_VERSION,
+        VIEW_POLICY_VERSION,
+        IndependentImageReviewer,
     )
+    from pipe_inspector.agent.image_review import IMAGE_REVIEW_PROMPT_VERSION, ImageReviewer
     from pipe_inspector.vision.detector import (
         DETECTOR_ID,
         LABEL_SPACE_VERSION,
@@ -447,7 +501,9 @@ def build_live_components(settings: Any) -> tuple[Any, Any, dict[str, Any]]:
         enable_thinking=settings.api_enable_thinking,
         max_output_tokens=settings.api_max_output_tokens,
     )
-    reviewer = ImageReviewer(client, max_image_bytes=settings.vlm_max_image_bytes)
+    independent = settings.image_review_mode == "independent_discovery"
+    reviewer_type = IndependentImageReviewer if independent else ImageReviewer
+    reviewer = reviewer_type(client, max_image_bytes=settings.vlm_max_image_bytes)
     detector = UltralyticsDetector(
         settings.detector_path,
         device=settings.detector_device,
@@ -468,16 +524,21 @@ def build_live_components(settings: Any) -> tuple[Any, Any, dict[str, Any]]:
         "vlm": {
             "base_url": settings.vlm_base_url,
             "model": settings.vlm_model,
-            "prompt_version": IMAGE_REVIEW_PROMPT_VERSION,
-            "review_score_threshold": REVIEW_SCORE_THRESHOLD,
-            "review_always_labels": sorted(label.value for label in REVIEW_ALWAYS_LABELS),
+            "prompt_version": DISCOVERY_PROMPT_VERSION
+            if independent
+            else IMAGE_REVIEW_PROMPT_VERSION,
+            "review_mode": "independent_all_images" if independent else "candidate_all_images",
+            "view_policy_version": VIEW_POLICY_VERSION if independent else None,
             "api_enable_thinking": settings.api_enable_thinking,
             "api_max_output_tokens": settings.api_max_output_tokens,
             "api_timeout_seconds": settings.api_timeout_seconds,
             "vlm_max_image_bytes": settings.vlm_max_image_bytes,
         },
         "quality_policy_version": QUALITY_POLICY_VERSION,
-        "image_decision_policy": {"strong_evidence_score": STRONG_EVIDENCE_SCORE},
+        "image_decision_policy": {
+            "policy_version": RECALL_POLICY_VERSION,
+            "strong_evidence_score": STRONG_EVIDENCE_SCORE,
+        },
     }
     return detector, reviewer, pins
 
