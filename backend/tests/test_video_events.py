@@ -77,6 +77,7 @@ def test_class_and_spatially_separate_boxes_do_not_merge():
         initial(), (frame(0, labels=("PL", "FS")), frame(1, labels=("PL", "FS"))), final=True
     )
     assert [(e.label, e.observations) for e in final.events] == [("PL", 2), ("FS", 2)]
+    assert [e.evidence[0].detection_index for e in final.events] == [0, 1]
     separate = aggregate_chunk(initial(), (frame(0), frame(1, x=60)), final=True)
     assert len(separate.events) == 2
 

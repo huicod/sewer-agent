@@ -183,6 +183,7 @@ function isTaskSnapshot(value: unknown): value is TaskSnapshot {
     isProgress(value.overall_progress) &&
     isNonNegativeInteger(value.processed_frames) &&
     isNonNegativeInteger(value.processed_chunks) &&
+    (value.can_cancel === undefined || typeof value.can_cancel === "boolean") &&
     isNullableString(value.active_tool) &&
     isNonNegativeInteger(value.retry_count) &&
     isNullableString(value.waiting_reason) &&

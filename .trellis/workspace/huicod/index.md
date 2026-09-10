@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 10
+- **Total Sessions**: 11
 - **Last Active**: 2026-09-10
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~328 | Active |
+| `journal-1.md` | ~364 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 11 | 2026-09-10 | T08 持久视频闭环与真实数据配对验证 | - | `-` |
 | 10 | 2026-09-10 | T07 视频初查完成与复核增益评估待数据 | - | `-` |
 | 9 | 2026-09-10 | T06-B2 关联复检完成与视频阶段交接 | `52b111a3f4e3` | `-` |
 | 8 | 2026-09-10 | Qwen 实测通过与 T06-B1 持久对话闭环 | `56e3298ed279` | `-` |

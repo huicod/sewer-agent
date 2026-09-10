@@ -1,4 +1,4 @@
-"""Constrained conversation actions over existing evidence and image workflows."""
+"""Constrained conversation actions over existing evidence and media workflows."""
 
 import asyncio
 
@@ -59,10 +59,8 @@ class ConversationDispatcher:
                 )
             asset_ref = turn.input_asset or (task.input_asset if task else None)
             if asset_ref is None:
-                return self._reply("请上传 CCTV 图片，或选择一个已有图片任务。")
+                return self._reply("请上传 CCTV 图片或视频，或选择一个已有任务。")
             asset = await asyncio.to_thread(self.repo.get_asset, asset_ref)
-            if asset.kind != "image":
-                return self._reply("视频可以上传保存，但视频检查执行器尚未接入，本次未启动检测。")
             await asyncio.to_thread(
                 self.repo.save_turn_step, turn.request_id, "plan", plan.model_dump(mode="json")
             )
@@ -83,12 +81,16 @@ class ConversationDispatcher:
                 force_review=ActionKind.VERIFY in intent.actions,
                 plan=plan,
             )
+            media_name = "视频" if asset.kind == "video" else "图片"
             return self._reply(
-                "图片任务已启动，检查结果尚未完成。可在关联任务中查看阶段，稍后继续询问结果或获取报告。",
+                f"{media_name}任务已启动，检查结果尚未完成。"
+                "可在关联任务中查看阶段，稍后继续询问结果或获取报告。",
                 created.snapshot.task_id,
             )
         if task is None:
-            return self._reply("请先选择已有任务，或上传图片并发起检查；目前没有可引用的检查证据。")
+            return self._reply(
+                "请先选择已有任务，或上传图片/视频并发起检查；目前没有可引用的检查证据。"
+            )
         snapshot = task.snapshot
         if intent.kind == "report":
             message = (

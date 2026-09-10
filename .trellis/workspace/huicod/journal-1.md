@@ -326,3 +326,39 @@ T06-A/B1/B2 工程验证完成；对话支持一次关联 VLM 复检，冻结原
 
 - 恢复先读 .trellis/tasks/09-10-m2-video-core/runtime-report.md 和总体计划；T01–T07不重做，下一步T08长视频工作流、进度、取消和断点恢复。
 - 真实增益试验仍待用户原split_manifest.csv或明确未参与训练的标注图片；无真实正常集/真实CCTV视频，不重分割冒充test，不宣称VLM已提高准确率。
+
+
+## Session 11: T08 持久视频闭环与真实数据配对验证
+
+**Date**: 2026-09-10
+**Task**: T08 持久视频闭环与真实数据配对验证
+
+### Summary
+
+T08 工程验收完成。两段真实视频4259帧、SIGTERM恢复和有界复检已验证；42图配对评估未证明整体准确率提升。代码与证据采用 jj change nxyslwxv，未推送。
+
+### Main Changes
+
+- 接通视频对话/启动、原子分块检查点、精确PTS恢复、事件证据、有界VLM、明确取消接受边界和前端进度；复用既有Temporal/PG/检测器，无新训练或框架。
+- 用户提供的数据已按固定seed选择；SEDD仅PL/BLOCK评分，Sewer2403可能训练重叠。原始观测和结果在var/evaluations/2026-09-10，来源与数值见T08 data-report.md。
+- 独立审查三项问题已回归修复：事件审计不完整误报正常、终态后scan写入、最终提交阶段取消竞态。
+
+### Git Commits
+
+(No commits - planning session)
+
+### Testing
+
+- [OK] 后端513 passed / 7 skipped；前端32 passed，TypeScript/Vite build通过；Ruff、相关格式和diff检查通过。
+- [OK] 真实561帧视频在cursor248处SIGTERM，原workflow从248恢复至560；71不重复块，2候选事件，4API调用，partial/inconclusive。
+- [OK] 真实3698帧视频完整执行：463块，397观测聚合77候选片段，83证据帧，4API调用；1397.01秒，partial/defects_found，保留画质与复检缺口。
+- [OK] 42图共39次真实Qwen复检且0失败。源域12图原检测F1 0.846，复检自动确认0.667；SEDD外部30图PL/BLOCK自动确认无增益，新增命中仅在pending队列。
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- 开始T09：人工审核API/页面、持久等待恢复与事件时间轴；不将本阶段partial临时包装成人工审核已完成。
+- 完整首版其余YOLOE、增强、分割/相对深度等按T10–T16顺序继续；准确率校准需人工分歧审查与独立五类集，不重跑本次小样本追分。

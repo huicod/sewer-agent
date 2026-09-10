@@ -14,7 +14,7 @@ from pipe_inspector.workflow.start import InspectionStartError
 
 
 class Store:
-    def __init__(self):
+    def __init__(self, *, kind="image"):
         now = datetime.now(timezone.utc)
         self.asset = AssetRef(asset_id=uuid4())
         self.turn = TurnRecord(
@@ -40,12 +40,13 @@ class Store:
         )
         self.created = []
         self.steps = {}
+        self.kind = kind
 
     def get_task(self, task_id):
         return self.task
 
     def get_asset(self, ref):
-        return SimpleNamespace(kind="image")
+        return SimpleNamespace(kind=self.kind)
 
     def list_turns(self, session_id, limit=50):
         return ()
@@ -94,6 +95,23 @@ async def test_inspection_uses_turn_identity_and_can_force_requested_vlm():
     assert starter.start.call_args.kwargs["force_review"] is True
     assert len(starter.start.call_args.kwargs["plan"].target_labels) == 5
     assert "已启动" in result["reply"] and "检查结果" in result["reply"]
+
+
+async def test_video_inspection_creates_and_starts_a_linked_task():
+    store = Store(kind="video")
+    turn = TurnRecord.model_validate(
+        store.turn.model_dump() | {"input_asset": store.asset, "text": "逐帧检查视频"}
+    )
+    starter = SimpleNamespace(start=AsyncMock())
+
+    result = await ConversationDispatcher(store, starter).handle(
+        turn, ConversationIntent(kind="inspect", message="逐帧检查视频")
+    )
+
+    assert store.created[0].input_asset == store.asset
+    starter.start.assert_awaited_once()
+    assert result["linked_task_id"] == str(store.task.snapshot.task_id)
+    assert "视频任务已启动" in result["reply"]
 
 
 async def test_unavailable_tool_is_rejected_before_any_task_is_created():

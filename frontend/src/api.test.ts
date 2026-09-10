@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { ApiError, createTask, createTurn, getTurn, listTurns, uploadAsset } from "./api";
+import { ApiError, cancelTask, createTask, createTurn, getTurn, listTurns, uploadAsset } from "./api";
 
 const asset = {
   ref: { asset_id: "11111111-1111-4111-8111-111111111111", version: 1 },
@@ -109,6 +109,54 @@ describe("intake API boundary", () => {
         status: 415,
         message: "文件格式不受支持",
       }),
+    );
+  });
+
+  it("posts cancellation and validates the returned task record", async () => {
+    const cancelled = {
+      request_id: "22222222-2222-4222-8222-222222222222",
+      session_id: "33333333-3333-4333-8333-333333333333",
+      input_asset: asset.ref,
+      instruction: "检查破损",
+      created_at: "2026-09-09T09:00:00Z",
+      snapshot: {
+        schema_version: "1",
+        task_id: "44444444-4444-4444-8444-444444444444",
+        runtime_status: "cancelled",
+        inspection_result: "pending",
+        stage: "cancelled",
+        stage_progress: 0.5,
+        overall_progress: 0.4,
+        processed_frames: 24,
+        processed_chunks: 3,
+        active_tool: null,
+        retry_count: 0,
+        waiting_reason: null,
+        updated_at: "2026-09-09T09:00:00Z",
+        can_cancel: false,
+        findings: [],
+        coverage: { sufficient_coverage: false, sufficient_quality: false, negative_audit_complete: false },
+      },
+    };
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify(cancelled), { status: 200, headers: { "content-type": "application/json" } }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(cancelTask(cancelled.snapshot.task_id)).resolves.toEqual(cancelled);
+    expect(fetchMock).toHaveBeenCalledWith(`/api/tasks/${cancelled.snapshot.task_id}/cancel`, { method: "POST" });
+  });
+
+  it("rejects a malformed cancellation response", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ snapshot: { can_cancel: "yes" } }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    ));
+
+    await expect(cancelTask("44444444-4444-4444-8444-444444444444")).rejects.toEqual(
+      expect.objectContaining<ApiError>({ name: "ApiError", status: 200, message: "服务返回的数据格式无效" }),
     );
   });
 });

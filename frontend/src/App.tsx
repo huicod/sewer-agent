@@ -2,6 +2,7 @@ import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
 
 import {
   ApiError,
+  cancelTask,
   createSession,
   createTask,
   createTurn,
@@ -112,10 +113,12 @@ function linkedTaskStatus(task: TaskRecord | undefined): string {
 type TaskCardProps = {
   task: TaskRecord;
   starting: boolean;
+  cancelling: boolean;
   onStart: (taskId: string) => void;
+  onCancel: (taskId: string) => void;
 };
 
-function TaskCard({ task, starting, onStart }: TaskCardProps) {
+function TaskCard({ task, starting, cancelling, onStart, onCancel }: TaskCardProps) {
   const progress = Math.round(
     Math.min(1, Math.max(0, task.snapshot.overall_progress)) * 100,
   );
@@ -140,19 +143,28 @@ function TaskCard({ task, starting, onStart }: TaskCardProps) {
       ) : null}
       {queued ? (
         <>
-          <p className="truth-note">{task.parent_task_id ? "复检已入队，等待执行；重复启动沿用同一任务" : "已上传并入队，等待启动图片检查"}</p>
-          <p className="task-hint">当前仅图片可执行；视频执行尚未接入。</p>
+          <p className="truth-note">{task.parent_task_id ? "复检已入队，等待执行；重复启动沿用同一任务" : "已上传并入队，等待启动检查"}</p>
           <button
             type="button"
             disabled={starting}
             onClick={() => onStart(task.snapshot.task_id)}
           >
-            {starting ? "正在启动…" : task.parent_task_id ? "启动关联复检" : "启动图片检查"}
+            {starting ? "正在启动…" : task.parent_task_id ? "启动关联复检" : "启动检查"}
           </button>
         </>
       ) : null}
       {task.snapshot.runtime_status === "running" ? (
-        <p className="truth-note">{task.parent_task_id ? "关联复检正在执行（不重新检测）" : "图片检查正在执行"}</p>
+        <p className="truth-note">{task.parent_task_id ? "关联复检正在执行（不重新检测）" : "检查正在执行"}</p>
+      ) : null}
+      {task.snapshot.can_cancel === true && !isTerminalTask(task) ? (
+        <button
+          type="button"
+          className="secondary-button"
+          disabled={cancelling}
+          onClick={() => onCancel(task.snapshot.task_id)}
+        >
+          {cancelling ? "正在取消…" : "取消检查"}
+        </button>
       ) : null}
       {task.snapshot.runtime_status === "partial" ? (
         <p className="truth-note">检查部分完成；未解决项尚无人工处理入口</p>
@@ -194,6 +206,14 @@ function TaskCard({ task, starting, onStart }: TaskCardProps) {
           <dd>{task.snapshot.retry_count}</dd>
         </div>
         <div>
+          <dt>已处理帧</dt>
+          <dd>{task.snapshot.processed_frames}</dd>
+        </div>
+        <div>
+          <dt>已处理块</dt>
+          <dd>{task.snapshot.processed_chunks}</dd>
+        </div>
+        <div>
           <dt>任务编号</dt>
           <dd title={task.snapshot.task_id}>{task.snapshot.task_id.slice(0, 8)}</dd>
         </div>
@@ -218,6 +238,7 @@ function TaskCard({ task, starting, onStart }: TaskCardProps) {
                       rel="noreferrer"
                     >
                       原始证据 {index + 1}
+                      {evidence.timestamp_seconds === null ? "" : ` · ${evidence.timestamp_seconds} 秒`}
                     </a>
                   ))}
                 </span>
@@ -283,6 +304,7 @@ export default function App({ pollIntervalMs = 2_000 }: AppProps) {
   const [error, setError] = useState<string | null>(null);
   const [conversationError, setConversationError] = useState<string | null>(null);
   const [startingTaskIds, setStartingTaskIds] = useState<Set<string>>(() => new Set());
+  const [cancellingTaskIds, setCancellingTaskIds] = useState<Set<string>>(() => new Set());
   const fileInput = useRef<HTMLInputElement>(null);
   const form = useRef<HTMLFormElement>(null);
   const conversationForm = useRef<HTMLFormElement>(null);
@@ -438,6 +460,23 @@ export default function App({ pollIntervalMs = 2_000 }: AppProps) {
       setError(formatError(nextError));
     } finally {
       setStartingTaskIds((current) => {
+        const next = new Set(current);
+        next.delete(taskId);
+        return next;
+      });
+    }
+  }
+
+  async function cancelInspection(taskId: string) {
+    setCancellingTaskIds((current) => new Set(current).add(taskId));
+    setError(null);
+    try {
+      const cancelled = await cancelTask(taskId);
+      setTasks((current) => upsertTask(current, cancelled));
+    } catch (nextError) {
+      setError(formatError(nextError));
+    } finally {
+      setCancellingTaskIds((current) => {
         const next = new Set(current);
         next.delete(taskId);
         return next;
@@ -608,7 +647,7 @@ export default function App({ pollIntervalMs = 2_000 }: AppProps) {
           <span>{turns.length} 条</span>
         </div>
         <p className="conversation-note">
-          可询问已存证据、请求报告或上传新资料。每个已完成或部分完成的原图片任务可追加一次 VLM 复检；视频执行及其他工具尚未接入。
+          可询问已存证据、请求报告，或上传图片/视频启动检查。每个已完成或部分完成的原图片任务可追加一次 VLM 复检；其他工具尚未接入。
           附件与已有任务二选一，选择一项会清除另一项。
         </p>
         <div className="transcript" aria-live="polite">
@@ -632,7 +671,7 @@ export default function App({ pollIntervalMs = 2_000 }: AppProps) {
               onChange={(event) => setConversationText(event.target.value)}
               maxLength={4_000}
               rows={3}
-              placeholder="例如：请检查这张图片，或解释上一项检查结果"
+              placeholder="例如：请检查这份影像，或解释上一项检查结果"
               disabled={!session || turnSubmitting || hasActiveTurn}
             />
           </label>
@@ -737,7 +776,9 @@ export default function App({ pollIntervalMs = 2_000 }: AppProps) {
               key={task.snapshot.task_id}
               task={task}
               starting={startingTaskIds.has(task.snapshot.task_id)}
+              cancelling={cancellingTaskIds.has(task.snapshot.task_id)}
               onStart={(taskId) => void startInspection(taskId)}
+              onCancel={(taskId) => void cancelInspection(taskId)}
             />
           ))}
         </div>

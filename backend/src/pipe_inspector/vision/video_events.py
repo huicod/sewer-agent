@@ -112,7 +112,7 @@ def aggregate_chunk(
         )
         for j, detection in enumerate(batch.detections):
             evidence = EventEvidence(
-                **locator.model_dump(), region=regions[j], score=detection.score
+                **locator.model_dump(), region=regions[j], score=detection.score, detection_index=j
             )
             if j in assigned:
                 i = assigned[j]

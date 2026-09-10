@@ -1,17 +1,25 @@
+from datetime import datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import pytest
 from pipe_inspector.config import Settings
-from pipe_inspector.workflow.start import InspectionStarter, InspectionStartError, run_config
+from pipe_inspector.contracts.tasks import TaskSnapshot
+from pipe_inspector.workflow.start import (
+    InspectionStarter,
+    InspectionStartError,
+    run_config,
+    video_run_config,
+)
 from temporalio.common import WorkflowIDReusePolicy
 
 
 class MemoryStore:
     def __init__(self, kind="image"):
         self.task = SimpleNamespace(
-            input_asset=object(), snapshot=SimpleNamespace(task_id=uuid4(), is_terminal=False)
+            input_asset=object(),
+            snapshot=TaskSnapshot(task_id=uuid4(), updated_at=datetime.now(timezone.utc)),
         )
         self.kind = kind
         self.run = None
@@ -29,6 +37,10 @@ class MemoryStore:
         if self.run is None:
             self.run = {"task_id": str(task_id), "run_id": str(uuid4()), "config": config}
         return self.run
+
+    def update_snapshot(self, snapshot):
+        self.task.snapshot = snapshot
+        return self.task
 
 
 @pytest.mark.asyncio
@@ -53,14 +65,41 @@ async def test_start_pins_config_and_reuses_workflow_identity_after_ambiguous_fa
 
 
 @pytest.mark.asyncio
-async def test_video_does_not_create_run_or_connect():
-    connect = AsyncMock()
+async def test_video_pins_video_policy_and_starts_video_workflow():
+    client = SimpleNamespace(start_workflow=AsyncMock())
+    connect = AsyncMock(return_value=client)
     store = MemoryStore("video")
-    with pytest.raises(InspectionStartError) as error:
-        await InspectionStarter(Settings(_env_file=None), store, connect=connect).start(uuid4())
-    assert error.value.code == "image_only"
-    assert store.run is None
-    connect.assert_not_called()
+    task_id = store.task.snapshot.task_id
+
+    assert (
+        await InspectionStarter(Settings(_env_file=None), store, connect=connect).start(task_id)
+        == store.task
+    )
+
+    config = store.run["config"]
+    assert config["operation"] == "video_inspection"
+    assert config["video_policy_version"] == "video-review-v1"
+    assert config["video_aggregation"]["policy_version"] == "video-events-v1"
+    assert config["video_chunk_size"] == 8
+    assert config["video_review_budget"] == 32
+    assert store.task.snapshot.can_cancel is True
+    assert client.start_workflow.call_args.args == ("VideoInspectionWorkflow", store.run)
+
+
+def test_video_configuration_extends_existing_safe_run_pins():
+    detector = SimpleNamespace(
+        detector_id="fixture-detector",
+        model_version="fixture-v1",
+        label_space_version="five-v1",
+    )
+    settings = Settings(_env_file=None, vlm_api_key="private-key", vlm_model="fixture")
+
+    config = video_run_config(settings, detector=detector, force_review=True)
+
+    assert config["detector_id"] == "fixture-detector"
+    assert config["force_review"] is True
+    assert config["operation"] == "video_inspection"
+    assert "private-key" not in str(config)
 
 
 def test_configuration_contains_versions_but_never_credentials():
@@ -113,7 +152,77 @@ async def test_conversation_plan_and_explicit_review_are_pinned_across_retry():
     assert error.value.code == "plan_conflict"
     # A manual run may finish before a delayed conversation start is reconciled.
     # Terminal state must not hide a mismatch in required semantic operations.
-    store.task.snapshot.is_terminal = True
+    store.task.snapshot = TaskSnapshot.model_validate(
+        store.task.snapshot.model_dump() | {"runtime_status": "cancelled", "can_cancel": False}
+    )
     with pytest.raises(InspectionStartError) as terminal_error:
         await starter.start(task_id, force_review=False, plan=plan)
     assert terminal_error.value.code == "plan_conflict"
+
+
+@pytest.mark.asyncio
+async def test_cancel_updates_only_started_nonterminal_video_tasks():
+    store = MemoryStore("video")
+    task_id = store.task.snapshot.task_id
+    store.run = {"task_id": str(task_id), "run_id": str(uuid4()), "config": {}}
+    handle = SimpleNamespace(execute_update=AsyncMock(return_value=True))
+    client = SimpleNamespace(get_workflow_handle=lambda workflow_id: handle)
+    connect = AsyncMock(return_value=client)
+    starter = InspectionStarter(Settings(_env_file=None), store, connect=connect)
+
+    assert await starter.cancel(task_id) == store.task
+    handle.execute_update.assert_awaited_once_with("request_cancel")
+
+    handle.execute_update.return_value = False
+    with pytest.raises(InspectionStartError) as error:
+        await starter.cancel(task_id)
+    assert error.value.code == "finalizing"
+
+    store.task.snapshot = TaskSnapshot.model_validate(
+        store.task.snapshot.model_dump() | {"runtime_status": "cancelled", "can_cancel": False}
+    )
+    handle.execute_update.reset_mock()
+    connect.reset_mock()
+    assert await starter.cancel(task_id) == store.task
+    handle.execute_update.assert_not_awaited()
+    connect.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_cancel_update_timeout_is_safe_and_retryable():
+    from temporalio.client import WorkflowUpdateRPCTimeoutOrCancelledError
+
+    store = MemoryStore("video")
+    task_id = store.task.snapshot.task_id
+    store.run = {"task_id": str(task_id), "run_id": str(uuid4()), "config": {}}
+    handle = SimpleNamespace(
+        execute_update=AsyncMock(side_effect=WorkflowUpdateRPCTimeoutOrCancelledError())
+    )
+    client = SimpleNamespace(get_workflow_handle=lambda _: handle)
+    with pytest.raises(InspectionStartError) as error:
+        await InspectionStarter(
+            Settings(_env_file=None), store, connect=AsyncMock(return_value=client)
+        ).cancel(task_id)
+    assert error.value.code == "workflow_unavailable"
+    assert store.task.snapshot.runtime_status == "queued"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("kind", "has_run", "code"),
+    [("image", True, "video_only"), ("video", False, "not_started")],
+)
+async def test_cancel_refuses_images_and_videos_without_a_run(kind, has_run, code):
+    store = MemoryStore(kind)
+    if has_run:
+        store.run = {"task_id": str(uuid4()), "run_id": str(uuid4()), "config": {}}
+    connect = AsyncMock()
+
+    with pytest.raises(InspectionStartError) as error:
+        await InspectionStarter(Settings(_env_file=None), store, connect=connect).cancel(
+            store.task.snapshot.task_id
+        )
+
+    assert error.value.code == code
+    assert error.value.status_code == 409
+    connect.assert_not_awaited()

@@ -27,14 +27,36 @@ def scan_video(
     scratch_root=None,
     config=None,
     on_chunk=None,
+    initial_state=None,
+    on_progress=None,
 ) -> VideoScanResult:
     metadata = {
         key: getattr(detector, key)
         for key in ("detector_id", "model_version", "label_space_version")
     }
-    state = VideoAggregationState(
+    state = initial_state or VideoAggregationState(
         source=source_ref, config=config or VideoAggregationConfig(), **metadata
     )
+    if state.source != source_ref:
+        raise ValueError("resume source changed")
+    if any(getattr(state, key) != value for key, value in metadata.items()):
+        raise ValueError("resume detector metadata changed")
+    if config is not None and state.config != config:
+        raise ValueError("resume aggregation config changed")
+    if state.finalized:
+        raise ValueError("cannot resume finalized scan")
+    initial_cursor = state.next_frame
+    observed_count = 0
+
+    def progress(index, timestamp):
+        nonlocal observed_count
+        observed_count = index + 1
+        if initial_cursor and index == initial_cursor - 1:
+            if timestamp != initial_state.last_timestamp_seconds:
+                raise VideoDecodeError("evidence_source_changed")
+        if on_progress:
+            on_progress(index, timestamp)
+
     error = None
     try:
         with closing(
@@ -44,9 +66,15 @@ def scan_video(
                 timeout_seconds=timeout_seconds,
                 max_pixels=max_pixels,
                 scratch_root=scratch_root,
+                start_frame=state.next_frame,
+                on_progress=progress,
             )
         ) as chunks:
             for frames in chunks:
+                # A competing/retried commit may have already advanced the durable head.
+                frames = tuple(frame for frame in frames if frame.index >= state.next_frame)
+                if not frames:
+                    continue
                 try:
                     paths = tuple(frame.path for frame in frames)
                     if detector.capabilities.supports_batch:
@@ -74,10 +102,24 @@ def scan_video(
                 )
                 next_state = aggregate_chunk(state, observations)
                 if on_chunk:
-                    on_chunk(observations, next_state)
+                    committed = on_chunk(observations, next_state)
+                    if committed is not None:
+                        if (
+                            committed.source != state.source
+                            or committed.config != state.config
+                            or committed.finalized
+                            or committed.next_frame < next_state.next_frame
+                            or any(
+                                getattr(committed, key) != value for key, value in metadata.items()
+                            )
+                        ):
+                            raise ValueError("invalid durable scan cursor")
+                        next_state = committed
                 state = next_state
     except VideoDecodeError as exc:
         error = exc.code
+    if error is None and observed_count < state.next_frame:
+        error = "evidence_source_changed"
     if state.next_frame == 0 and error is None:
         error = "empty_video"
     return VideoScanResult(
@@ -112,6 +154,7 @@ def extract_scan_evidence(
             timeout_seconds=timeout_seconds,
             max_pixels=max_pixels,
             scratch_root=scratch_root,
+            selected_frames=frozenset(selected),
         )
     ) as chunks:
         for frames in chunks:

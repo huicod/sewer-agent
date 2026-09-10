@@ -9,20 +9,22 @@ from datetime import timedelta
 
 from pipe_inspector.config import Settings
 from pipe_inspector.media import MediaStore
-from pipe_inspector.storage.supplements import SupplementRepository
+from pipe_inspector.storage.video import VideoRepository
 from pipe_inspector.workflow.activities import ImageActivities
 from pipe_inspector.workflow.conversation import ConversationWorkflow
 from pipe_inspector.workflow.conversation_activities import TurnActivities
 from pipe_inspector.workflow.image import ImageInspectionWorkflow
 from pipe_inspector.workflow.supplement import ImageSupplementWorkflow
 from pipe_inspector.workflow.supplement_activities import SupplementActivities
+from pipe_inspector.workflow.video import VideoInspectionWorkflow
+from pipe_inspector.workflow.video_activities import VideoActivities
 from temporalio.client import Client
 from temporalio.worker import Worker
 
 
 async def serve(kind: str) -> None:
     settings = Settings()
-    repo = SupplementRepository(settings.database_dsn)
+    repo = VideoRepository(settings.database_dsn)
     media = MediaStore(
         settings.asset_root,
         max_upload_bytes=settings.max_upload_bytes,
@@ -30,6 +32,7 @@ async def serve(kind: str) -> None:
         probe_timeout_seconds=settings.media_probe_timeout_seconds,
     )
     activities = ImageActivities(settings, repo, media)
+    videos = VideoActivities(settings, repo, media, detector=activities.detector)
     supplements = SupplementActivities(settings, repo, media)
     turns = TurnActivities(settings, repo)
     client = await Client.connect(settings.temporal_address, namespace=settings.temporal_namespace)
@@ -43,13 +46,21 @@ async def serve(kind: str) -> None:
             task_queue=settings.task_queue + ("-gpu" if gpu else ""),
             workflows=[]
             if gpu
-            else [ImageInspectionWorkflow, ConversationWorkflow, ImageSupplementWorkflow],
-            activities=[activities.detect_image]
+            else [
+                ImageInspectionWorkflow,
+                VideoInspectionWorkflow,
+                ConversationWorkflow,
+                ImageSupplementWorkflow,
+            ],
+            activities=[activities.detect_image, videos.scan_video]
             if gpu
             else [
                 activities.publish_stage,
                 activities.verify_image,
                 activities.finish_image,
+                videos.prepare_video,
+                videos.verify_video_frame,
+                videos.finish_video,
                 supplements.finish_supplement,
                 turns.parse_turn,
                 turns.dispatch_turn,

@@ -13,7 +13,7 @@ import time
 from collections import deque
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterator
+from typing import Callable, Iterator
 
 from PIL import Image
 
@@ -212,6 +212,9 @@ def decode_video_chunks(
     timeout_seconds: float = 30,
     max_pixels: int = 40_000_000,
     scratch_root: Path | None = None,
+    start_frame: int = 0,
+    on_progress: Callable[[int, float], None] | None = None,
+    selected_frames: frozenset[int] | None = None,
 ) -> Iterator[tuple[DecodedFrame, ...]]:
     """Decode all video frames once, yielding temporary PNG paths in bounded chunks."""
     if (
@@ -219,6 +222,14 @@ def decode_video_chunks(
         or max_pixels <= 0
         or not math.isfinite(timeout_seconds)
         or timeout_seconds <= 0
+        or not isinstance(start_frame, int)
+        or isinstance(start_frame, bool)
+        or start_frame < 0
+    ):
+        raise VideoDecodeError("invalid_options")
+    if selected_frames is not None and any(
+        not isinstance(index, int) or isinstance(index, bool) or index < 0
+        for index in selected_frames
     ):
         raise VideoDecodeError("invalid_options")
     source = Path(source)
@@ -276,17 +287,29 @@ def decode_video_chunks(
         chunk: list[DecodedFrame] = []
         chunk_number = 0
         decode_error: VideoDecodeError | None = None
+        raw_frames = _raw_frames(process, timeout_seconds=timeout_seconds, max_pixels=max_pixels)
         try:
-            for info, pixels in _raw_frames(
-                process, timeout_seconds=timeout_seconds, max_pixels=max_pixels
-            ):
+            while True:
+                try:
+                    info, pixels = next(raw_frames)
+                except StopIteration:
+                    break
+                except VideoDecodeError as exc:
+                    decode_error = exc
+                    break
+                if on_progress is not None:
+                    on_progress(info.index, info.timestamp_seconds)
+                if info.index < start_frame or (
+                    selected_frames is not None and info.index not in selected_frames
+                ):
+                    continue
                 if chunk_directory is None:
                     chunk_directory = owned_root / f"chunk-{chunk_number:08d}"
                     chunk_directory.mkdir()
                 path = chunk_directory / f"frame-{info.index:012d}.png"
                 try:
                     Image.frombytes("RGB", (info.width, info.height), pixels).save(
-                        path, format="PNG"
+                        path, format="PNG", compress_level=1
                     )
                 except (OSError, ValueError) as exc:
                     raise VideoDecodeError("frame_write_failed") from exc
@@ -305,8 +328,8 @@ def decode_video_chunks(
                     chunk_directory = None
                     chunk = []
                     chunk_number += 1
-        except VideoDecodeError as exc:
-            decode_error = exc
+        finally:
+            raw_frames.close()
         if chunk:
             yield tuple(chunk)
             if chunk_directory is not None:

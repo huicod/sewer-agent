@@ -2,9 +2,11 @@
 
 ## Current evidence boundary
 
-The repository still has no verifiable held-out manifest or extracted independent test images.
-The historical Sewer2403 metrics are validation-only. No detector/VLM paired pilot was selected
-or run by this task, so the available evidence cannot answer whether VLM review improves accuracy.
+Superseded by the user-authorized 2026-09-10 exploratory run: 30 external SEDD images
+and 12 possibly training-overlapping Sewer2403 examples, 39 actual conditional Qwen calls.
+No overall accuracy gain was established. See [data and result report](../09-10-m2-video-workflow/data-report.md)
+for fixed manifests, SEDD's limited PL/BLOCK annotation scope and paired metrics.
+The original independent full-five-class split remains unrecoverable; this pilot does not replace it.
 
 Sewer2403 labels made empty by the five-class mapping mean only “none of PL/BX/FS/BLOCK/AJ.”
 They can contain other annotated defects and are not a true-normal set. The evaluator therefore

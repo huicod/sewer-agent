@@ -155,3 +155,70 @@ def test_checkpoint_write_error_is_not_hidden_as_success(clip, tmp_path):
 
     with pytest.raises(OSError):
         scan_video(clip, source_ref(), PixelDetector(), scratch_root=tmp_path, on_chunk=fail_write)
+
+
+def test_resume_does_not_infer_committed_prefix_and_keeps_original_event(clip, tmp_path):
+    saved = []
+    original = scan_video(
+        clip,
+        source_ref(),
+        PixelDetector(),
+        chunk_size=2,
+        on_chunk=lambda observations, state: saved.append(state),
+    )
+    detector = PixelDetector()
+    decoded = []
+    resumed = scan_video(
+        clip,
+        source_ref(),
+        detector,
+        chunk_size=2,
+        initial_state=saved[0],
+        on_progress=lambda index, timestamp: decoded.append(index),
+    )
+    assert detector.calls == 4
+    assert decoded == [0, 1, 2, 3, 4, 5]
+    assert resumed == original
+
+
+def test_scan_uses_durable_winning_cursor_returned_by_commit(clip):
+    saved = []
+    scan_video(
+        clip,
+        source_ref(),
+        PixelDetector(),
+        chunk_size=2,
+        on_chunk=lambda observations, state: saved.append(state),
+    )
+    detector = PixelDetector()
+
+    def concurrent_commit(observations, state):
+        return saved[1] if observations[0].frame_index == 0 else state
+
+    result = scan_video(clip, source_ref(), detector, chunk_size=2, on_chunk=concurrent_commit)
+    assert result.decode_complete and result.state.next_frame == 6
+    assert detector.calls == 4  # 0,1 inferred here; 2,3 already committed by the winning attempt
+    assert result.state.events[0].start_frame == 2
+
+
+def test_resume_rejects_changed_source_and_model_before_inference(clip):
+    saved = []
+    scan_video(
+        clip,
+        source_ref(),
+        PixelDetector(),
+        chunk_size=2,
+        on_chunk=lambda observations, state: saved.append(state),
+    )
+    detector = PixelDetector()
+    with pytest.raises(ValueError, match="source"):
+        scan_video(
+            clip,
+            AssetRef(asset_id="33333333-3333-4333-8333-333333333333"),
+            detector,
+            initial_state=saved[0],
+        )
+    detector.model_version = "changed-model"
+    with pytest.raises(ValueError, match="metadata"):
+        scan_video(clip, source_ref(), detector, initial_state=saved[0])
+    assert detector.calls == 0

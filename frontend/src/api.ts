@@ -98,6 +98,10 @@ export function startTask(taskId: string): Promise<TaskRecord> {
   return requestJson<TaskRecord>(`/api/tasks/${encodeURIComponent(taskId)}/start`, isTaskRecord, { method: "POST" });
 }
 
+export function cancelTask(taskId: string): Promise<TaskRecord> {
+  return requestJson<TaskRecord>(`/api/tasks/${encodeURIComponent(taskId)}/cancel`, isTaskRecord, { method: "POST" });
+}
+
 export function getTask(taskId: string): Promise<TaskRecord> {
   return requestJson<TaskRecord>(`/api/tasks/${encodeURIComponent(taskId)}`, isTaskRecord);
 }

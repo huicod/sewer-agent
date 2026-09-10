@@ -62,6 +62,7 @@ export type TaskSnapshot = {
   overall_progress: number;
   processed_frames: number;
   processed_chunks: number;
+  can_cancel?: boolean;
   active_tool: string | null;
   retry_count: number;
   waiting_reason: string | null;

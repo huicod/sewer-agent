@@ -24,6 +24,7 @@ class FrameLocator(ContractModel):
 
 
 class EventEvidence(FrameLocator):
+    detection_index: int | None = Field(default=None, ge=0)
     region: ImageRegion
     score: float = Field(ge=0, le=1)
 

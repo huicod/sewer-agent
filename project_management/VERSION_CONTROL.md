@@ -22,7 +22,7 @@ Commit authorship and GitHub authentication are separate. The owner has now comp
 
 At the owner's request, the private repository [huicod/sewer-agent](https://github.com/huicod/sewer-agent) was created and connected as `origin` using `https://github.com/huicod/sewer-agent.git`. The owner subsequently authorized the initial upload to `main`: existing code, planning documents, and selected experiment evidence; no datasets, model checkpoints, training logs, or credentials.
 
-The imported file contents are preserved. Before the first upload, the unpublished import snapshot's missing author and description were set to `huicod` and `chore: import sewer inspection baseline`. Planning edits remain in a separate child change (`docs: plan inspection agent prototype`). Formal implementation remains pending approval of the development plan.
+The imported file contents are preserved. Before the first upload, the unpublished import snapshot's missing author and description were set to `huicod` and `chore: import sewer inspection baseline`. The owner subsequently approved formal implementation; current stage/checkpoint evidence is in `DEVELOPMENT_PLAN.md` and Trellis. Later local development checkpoints are not automatically pushed.
 
 ## Tracked-content boundary
 

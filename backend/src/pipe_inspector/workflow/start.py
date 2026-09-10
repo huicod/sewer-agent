@@ -1,20 +1,28 @@
-"""Explicit, repeat-safe start of an admitted image task."""
+"""Explicit, repeat-safe start and cancellation of admitted media tasks."""
 
 import asyncio
+from datetime import datetime, timezone
 from uuid import UUID, uuid4
 
 import httpx
 from pydantic import ValidationError
-from temporalio.client import Client
+from temporalio.client import (
+    Client,
+    WorkflowUpdateFailedError,
+    WorkflowUpdateRPCTimeoutOrCancelledError,
+)
 from temporalio.common import WorkflowIDReusePolicy
 from temporalio.exceptions import WorkflowAlreadyStartedError
 from temporalio.service import RPCError
 
 from pipe_inspector.agent.supplement_policy import SUPPLEMENT_POLICY_VERSION
 from pipe_inspector.config import Settings
+from pipe_inspector.contracts.assets import AssetKind
 from pipe_inspector.contracts.inspection import ImageObservation
 from pipe_inspector.contracts.intake import TaskSubmission
 from pipe_inspector.contracts.planning import TaskPlan
+from pipe_inspector.contracts.tasks import TaskSnapshot
+from pipe_inspector.contracts.video import VideoAggregationConfig
 from pipe_inspector.storage.repository import SubmissionConflict
 from pipe_inspector.storage.supplements import SupplementNotAllowed
 from pipe_inspector.vision.detector import UltralyticsDetector
@@ -67,6 +75,22 @@ def run_config(
     }
 
 
+def video_run_config(
+    settings: Settings,
+    detector=None,
+    *,
+    force_review: bool = False,
+    plan: TaskPlan | None = None,
+) -> dict:
+    return run_config(settings, detector=detector, force_review=force_review, plan=plan) | {
+        "operation": "video_inspection",
+        "video_policy_version": "video-review-v1",
+        "video_aggregation": VideoAggregationConfig().model_dump(mode="json"),
+        "video_chunk_size": 8,
+        "video_review_budget": 32,
+    }
+
+
 class InspectionStartError(Exception):
     def __init__(self, code: str, message: str, status_code: int = 503):
         self.code, self.status_code = code, status_code
@@ -98,10 +122,11 @@ class InspectionStarter:
     ):
         record = await asyncio.to_thread(self.repo.get_task, task_id)
         asset = await asyncio.to_thread(self.repo.get_asset, record.input_asset)
-        if asset.kind != "image":
+        if asset.kind not in {AssetKind.IMAGE, AssetKind.VIDEO}:
             raise InspectionStartError(
-                "image_only", "当前执行器只支持图片；视频执行将在后续阶段接入", 409
+                "unsupported_media", "当前执行器只支持已接纳的图片或视频", 409
             )
+        is_video = asset.kind == AssetKind.VIDEO
         if record.snapshot.is_terminal and plan is None:
             return record
         run = await asyncio.to_thread(self.repo.get_run, task_id)
@@ -120,13 +145,28 @@ class InspectionStarter:
                 run = await asyncio.to_thread(
                     self.repo.ensure_run,
                     task_id,
-                    run_config(self.settings, force_review=force_review, plan=plan),
+                    (
+                        video_run_config(self.settings, force_review=force_review, plan=plan)
+                        if is_video
+                        else run_config(self.settings, force_review=force_review, plan=plan)
+                    ),
                 )
             except SubmissionConflict:
                 # A concurrent start won admission; UUID call IDs/config are already pinned.
                 run = await asyncio.to_thread(self.repo.get_run, task_id)
                 if run is None:
                     raise
+        if run is not None and (
+            (is_video and run["config"].get("operation") != "video_inspection")
+            or (
+                not is_video
+                and parent_task_id is None
+                and run["config"].get("operation") == "video_inspection"
+            )
+        ):
+            raise InspectionStartError(
+                "configuration_changed", "已固定的运行类型与任务媒体不一致", 409
+            )
         if plan is not None and (
             run is None
             or run["config"].get("plan") != plan.model_dump(mode="json")
@@ -137,13 +177,31 @@ class InspectionStarter:
             )
         if record.snapshot.is_terminal:
             return record
+        if is_video and record.snapshot.stage == "queued" and not record.snapshot.can_cancel:
+            cancellable = TaskSnapshot.model_validate(
+                record.snapshot.model_dump()
+                | {"can_cancel": True, "updated_at": datetime.now(timezone.utc)}
+            )
+            try:
+                record = await asyncio.to_thread(self.repo.update_snapshot, cancellable)
+            except SubmissionConflict:
+                current = await asyncio.to_thread(self.repo.get_task, task_id)
+                if current.snapshot.is_terminal:
+                    return current
+                raise
         try:
             async with asyncio.timeout(10):
                 client = await self.connect(
                     self.settings.temporal_address, namespace=self.settings.temporal_namespace
                 )
                 await client.start_workflow(
-                    "ImageSupplementWorkflow" if parent_task_id else "ImageInspectionWorkflow",
+                    (
+                        "ImageSupplementWorkflow"
+                        if parent_task_id
+                        else "VideoInspectionWorkflow"
+                        if is_video
+                        else "ImageInspectionWorkflow"
+                    ),
                     run,
                     id=f"inspection:{task_id}",
                     task_queue=self.settings.task_queue,
@@ -155,4 +213,36 @@ class InspectionStarter:
             raise InspectionStartError(
                 "workflow_unavailable", "工作流启动暂未确认，请重试；重试不会创建第二个任务"
             ) from None
+        return await asyncio.to_thread(self.repo.get_task, task_id)
+
+    async def cancel(self, task_id: UUID):
+        record = await asyncio.to_thread(self.repo.get_task, task_id)
+        asset = await asyncio.to_thread(self.repo.get_asset, record.input_asset)
+        if asset.kind != AssetKind.VIDEO:
+            raise InspectionStartError("video_only", "只有视频任务支持取消", 409)
+        if record.snapshot.is_terminal:
+            return record
+        run = await asyncio.to_thread(self.repo.get_run, task_id)
+        if run is None:
+            raise InspectionStartError("not_started", "视频任务尚未启动，无法取消", 409)
+        try:
+            async with asyncio.timeout(10):
+                client = await self.connect(
+                    self.settings.temporal_address, namespace=self.settings.temporal_namespace
+                )
+                handle = client.get_workflow_handle(f"inspection:{task_id}")
+                accepted = await handle.execute_update("request_cancel")
+        except (
+            RPCError,
+            OSError,
+            TimeoutError,
+            RuntimeError,
+            WorkflowUpdateFailedError,
+            WorkflowUpdateRPCTimeoutOrCancelledError,
+        ):
+            raise InspectionStartError(
+                "workflow_unavailable", "取消请求暂未确认，请重试；任务不会被重新启动"
+            ) from None
+        if not accepted:
+            raise InspectionStartError("finalizing", "任务正在提交最终结果，已不能取消", 409)
         return await asyncio.to_thread(self.repo.get_task, task_id)

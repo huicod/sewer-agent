@@ -32,6 +32,13 @@ def snapshot_data(**changes):
     } | changes
 
 
+def test_cancel_capability_is_false_by_default_and_forbidden_on_terminal_tasks():
+    assert not TaskSnapshot.model_validate(snapshot_data()).can_cancel
+    assert TaskSnapshot.model_validate(snapshot_data(can_cancel=True)).can_cancel
+    with pytest.raises(ValidationError, match="terminal tasks cannot be cancelled"):
+        TaskSnapshot.model_validate(snapshot_data(runtime_status="cancelled", can_cancel=True))
+
+
 @pytest.mark.parametrize(
     "data",
     [

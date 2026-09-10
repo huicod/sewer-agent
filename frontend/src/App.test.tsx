@@ -91,6 +91,18 @@ describe("conversation-ready intake shell", () => {
     expect(fetchMock.mock.calls[2]?.[0]).toBe(`/api/tasks/${taskId}/start`);
   });
 
+  it("accepts only boolean can_cancel values when the optional field is present", () => {
+    expect(isTaskRecord(task())).toBe(true);
+    expect(isTaskRecord({
+      ...task("running"),
+      snapshot: { ...task("running").snapshot, can_cancel: true },
+    })).toBe(true);
+    expect(isTaskRecord({
+      ...task("running"),
+      snapshot: { ...task("running").snapshot, can_cancel: "yes" },
+    })).toBe(false);
+  });
+
   it("creates a session, uploads evidence and displays a truthful queued task", async () => {
     const fetchMock = vi
       .fn()
@@ -111,8 +123,9 @@ describe("conversation-ready intake shell", () => {
     await user.type(screen.getByLabelText("检查要求"), "检查破损");
     await user.click(screen.getByRole("button", { name: "提交检查" }));
 
-    expect(await screen.findByText("已上传并入队，等待启动图片检查")).toBeTruthy();
+    expect(await screen.findByText("已上传并入队，等待启动检查")).toBeTruthy();
     expect(screen.getByText("0%")) .toBeTruthy();
+    expect(screen.queryByRole("button", { name: "取消检查" })).toBeNull();
     expect(localStorage.getItem("pipe-inspector.session-id")).toBe(sessionId);
     expect(fetchMock).toHaveBeenCalledTimes(3);
   });
@@ -143,7 +156,7 @@ describe("conversation-ready intake shell", () => {
     const user = userEvent.setup();
 
     render(<App pollIntervalMs={60_000} />);
-    await user.click(await screen.findByRole("button", { name: "启动图片检查" }));
+    await user.click(await screen.findByRole("button", { name: "启动检查" }));
 
     expect(await screen.findByText("detecting")).toBeTruthy();
     expect(screen.getByText("yolo-primary")).toBeTruthy();
@@ -172,11 +185,105 @@ describe("conversation-ready intake shell", () => {
     const user = userEvent.setup();
 
     render(<App pollIntervalMs={60_000} />);
-    await user.click(await screen.findByRole("button", { name: "启动图片检查" }));
+    await user.click(await screen.findByRole("button", { name: "启动检查" }));
 
     expect((await screen.findByRole("alert")).textContent).toContain("图片检查服务暂不可用");
     expect(screen.queryByText("正常")).toBeNull();
-    expect(screen.getByRole("button", { name: "启动图片检查" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "启动检查" })).toBeTruthy();
+  });
+
+  it("shows video progress and timestamped evidence, then stores the cancellation result", async () => {
+    localStorage.setItem("pipe-inspector.session-id", sessionId);
+    const videoTask = {
+      ...task("running"),
+      snapshot: {
+        ...task("running").snapshot,
+        can_cancel: true,
+        stage: "video_scan",
+        stage_progress: 0.5,
+        overall_progress: 0.4,
+        processed_frames: 24,
+        processed_chunks: 3,
+        findings: [{
+          finding_id: "55555555-5555-4555-8555-555555555555",
+          task_id: taskId,
+          canonical_label: "AJ",
+          open_label: null,
+          review_status: "tentative",
+          source: "detector",
+          score: 0.8,
+          evidence: [{
+            asset: asset.ref,
+            region: null,
+            frame_index: 12,
+            timestamp_seconds: 1.25,
+          }],
+          confirmed_by: null,
+        }],
+      },
+    };
+    const cancelled = {
+      ...videoTask,
+      snapshot: {
+        ...videoTask.snapshot,
+        runtime_status: "cancelled",
+        can_cancel: false,
+      },
+    };
+    let resolveCancel!: (response: Response) => void;
+    const cancelResponse = new Promise<Response>((resolve) => {
+      resolveCancel = resolve;
+    });
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({
+        session: { session_id: sessionId, created_at: createdAt },
+        tasks: [videoTask],
+      }))
+      .mockResolvedValueOnce(jsonResponse([]))
+      .mockReturnValueOnce(cancelResponse);
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+
+    render(<App pollIntervalMs={60_000} />);
+
+    expect(await screen.findByText("24")).toBeTruthy();
+    expect(screen.getByText("3")).toBeTruthy();
+    expect(screen.getByRole("link", { name: "原始证据 1 · 1.25 秒" })).toBeTruthy();
+    const cancelButton = screen.getByRole("button", { name: "取消检查" });
+    await user.click(cancelButton);
+    expect((cancelButton as HTMLButtonElement).disabled).toBe(true);
+    expect(fetchMock.mock.calls[2]).toEqual([
+      `/api/tasks/${taskId}/cancel`,
+      { method: "POST" },
+    ]);
+
+    resolveCancel(jsonResponse(cancelled));
+    expect(await screen.findByText("已取消")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "取消检查" })).toBeNull();
+  });
+
+  it("keeps cancellation available after a request failure", async () => {
+    localStorage.setItem("pipe-inspector.session-id", sessionId);
+    const videoTask = {
+      ...task("running"),
+      snapshot: { ...task("running").snapshot, can_cancel: true },
+    };
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({
+        session: { session_id: sessionId, created_at: createdAt },
+        tasks: [videoTask],
+      }))
+      .mockResolvedValueOnce(jsonResponse([]))
+      .mockResolvedValueOnce(jsonResponse({ detail: { message: "取消服务暂不可用" } }, 503));
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+
+    render(<App pollIntervalMs={60_000} />);
+    await user.click(await screen.findByRole("button", { name: "取消检查" }));
+
+    expect((await screen.findByRole("alert")).textContent).toContain("取消服务暂不可用");
+    expect((screen.getByRole("button", { name: "取消检查" }) as HTMLButtonElement).disabled).toBe(false);
+    expect(screen.queryByText("已取消")).toBeNull();
   });
 
   it("recovers the saved session and its tasks after reload", async () => {

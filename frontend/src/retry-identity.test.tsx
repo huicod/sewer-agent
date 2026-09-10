@@ -107,7 +107,7 @@ describe("task submission retry identity", () => {
 
     await user.upload(screen.getByLabelText("现场文件"), secondFile);
     await user.click(screen.getByRole("button", { name: "提交检查" }));
-    await screen.findByText("已上传并入队，等待启动图片检查");
+    await screen.findByText("已上传并入队，等待启动检查");
 
     const uploadCalls = fetchMock.mock.calls.filter(([url]) => url === "/api/assets");
     expect(uploadCalls).toHaveLength(2);

@@ -57,6 +57,45 @@ def _make_vfr_video(path: Path) -> None:
     )
 
 
+def test_temporary_png_uses_fast_lossless_encoding(tmp_path, monkeypatch):
+    source = tmp_path / "fast.mkv"
+    _make_cfr_video(source, frames=1)
+    original_save = Image.Image.save
+    options = []
+
+    def save(image, *args, **kwargs):
+        options.append(kwargs)
+        return original_save(image, *args, **kwargs)
+
+    monkeypatch.setattr(Image.Image, "save", save)
+    for chunk in decode_video_chunks(source):
+        with Image.open(chunk[0].path) as image:
+            assert image.size == (18, 12) and image.mode == "RGB"
+    assert options == [{"format": "PNG", "compress_level": 1}]
+
+
+def test_sparse_evidence_only_materializes_selected_originals(tmp_path, monkeypatch):
+    source = tmp_path / "sparse.mkv"
+    _make_cfr_video(source, frames=6)
+    original_save = Image.Image.save
+    saved, progress, emitted = [], [], []
+
+    def save(image, path, **kwargs):
+        saved.append(path.name)
+        return original_save(image, path, **kwargs)
+
+    monkeypatch.setattr(Image.Image, "save", save)
+    for chunk in decode_video_chunks(
+        source,
+        selected_frames=frozenset({1, 4}),
+        on_progress=lambda index, _: progress.append(index),
+    ):
+        emitted.extend((frame.index, frame.timestamp_seconds) for frame in chunk)
+    assert emitted == [(1, 3.2), (4, 3.8)]
+    assert progress == list(range(6))
+    assert len(saved) == 2
+
+
 def _fake_ffmpeg(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, shell_body: str) -> Path:
     executable_directory = tmp_path / "bin"
     executable_directory.mkdir()
@@ -141,6 +180,100 @@ def test_integer_pts_and_time_base_preserve_adjacent_large_offset_frames(tmp_pat
         [100000.0, 100000.001], abs=1e-9
     )
     assert frames[1].timestamp_seconds > frames[0].timestamp_seconds
+
+
+def test_resume_decodes_and_reports_all_frames_but_materializes_only_suffix(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = tmp_path / "resume.mkv"
+    _make_cfr_video(source, frames=6, start_seconds=2)
+    progress: list[tuple[int, float]] = []
+    saved_paths: list[Path] = []
+    original_save = Image.Image.save
+
+    def tracking_save(image: Image.Image, path: Path, *args: object, **kwargs: object) -> None:
+        saved_paths.append(Path(path))
+        original_save(image, path, *args, **kwargs)
+
+    monkeypatch.setattr(Image.Image, "save", tracking_save)
+
+    frames = [
+        frame
+        for chunk in decode_video_chunks(
+            source,
+            start_frame=3,
+            on_progress=lambda index, timestamp: progress.append((index, timestamp)),
+        )
+        for frame in chunk
+    ]
+
+    assert [frame.index for frame in frames] == [3, 4, 5]
+    assert [frame.timestamp_seconds for frame in frames] == pytest.approx([2.6, 2.8, 3.0])
+    assert [item[0] for item in progress] == [0, 1, 2, 3, 4, 5]
+    assert [item[1] for item in progress] == pytest.approx([2.0, 2.2, 2.4, 2.6, 2.8, 3.0])
+    assert [path.name for path in saved_paths] == [
+        "frame-000000000003.png",
+        "frame-000000000004.png",
+        "frame-000000000005.png",
+    ]
+
+
+def test_start_past_eof_yields_nothing_but_reports_complete_replay(tmp_path: Path) -> None:
+    source = tmp_path / "past-eof.mkv"
+    scratch = tmp_path / "scratch"
+    scratch.mkdir()
+    _make_cfr_video(source, frames=2, start_seconds=0)
+    progress: list[int] = []
+
+    chunks = list(
+        decode_video_chunks(
+            source,
+            start_frame=20,
+            on_progress=lambda index, _timestamp: progress.append(index),
+            scratch_root=scratch,
+        )
+    )
+
+    assert chunks == []
+    assert progress == [0, 1]
+    assert not list(scratch.iterdir())
+
+
+def test_progress_callback_exception_propagates_and_cleans_decoder_files(tmp_path: Path) -> None:
+    source = tmp_path / "cancel.mkv"
+    scratch = tmp_path / "scratch"
+    scratch.mkdir()
+    _make_cfr_video(source, frames=6, start_seconds=0)
+    progress: list[int] = []
+
+    def cancel_at_frame_four(index: int, _timestamp: float) -> None:
+        progress.append(index)
+        if index == 4:
+            raise RuntimeError("cancelled")
+
+    with pytest.raises(RuntimeError, match="cancelled"):
+        list(
+            decode_video_chunks(
+                source,
+                start_frame=3,
+                on_progress=cancel_at_frame_four,
+                scratch_root=scratch,
+            )
+        )
+
+    assert progress == [0, 1, 2, 3, 4]
+    assert not list(scratch.iterdir())
+
+
+@pytest.mark.parametrize("start_frame", [-1, 1.5, "1", True, None])
+def test_rejects_invalid_start_frame(tmp_path: Path, start_frame: object) -> None:
+    source = tmp_path / "source.mkv"
+    source.touch()
+
+    with pytest.raises(VideoDecodeError) as caught:
+        list(decode_video_chunks(source, start_frame=start_frame))  # type: ignore[arg-type]
+
+    assert caught.value.code == "invalid_options"
 
 
 def test_close_removes_the_current_chunk_and_owned_scratch_directory(tmp_path: Path) -> None:

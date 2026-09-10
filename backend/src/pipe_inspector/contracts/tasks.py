@@ -58,6 +58,7 @@ class TaskSnapshot(ContractModel):
     processed_frames: int = Field(default=0, ge=0)
     processed_chunks: int = Field(default=0, ge=0)
     active_tool: NonEmptyStr | None = None
+    can_cancel: bool = False
     retry_count: int = Field(default=0, ge=0)
     waiting_reason: NonEmptyStr | None = None
     updated_at: AwareDatetime
@@ -75,6 +76,8 @@ class TaskSnapshot(ContractModel):
 
     @model_validator(mode="after")
     def validate_projection(self) -> "TaskSnapshot":
+        if self.is_terminal and self.can_cancel:
+            raise ValueError("terminal tasks cannot be cancelled")
         if any(finding.task_id != self.task_id for finding in self.findings):
             raise ValueError("findings must belong to this task")
         if len({finding.finding_id for finding in self.findings}) != len(self.findings):

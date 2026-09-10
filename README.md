@@ -32,7 +32,8 @@ scp -P <端口> -r .\server root@<服务器IP>:/root/autodl-tmp/
 
 ## 3. 使用入口
 
-- 总体开发计划与阶段验收：[DEVELOPMENT_PLAN.md](project_management/DEVELOPMENT_PLAN.md)（待确认，未开始正式开发）
+- 总体开发计划与阶段验收：[DEVELOPMENT_PLAN.md](project_management/DEVELOPMENT_PLAN.md)（T01–T08 工程验收已通过；下一步 T09 人工审核与事件时间轴，整体首版仍在开发）
+- 当前视频运行与恢复证据：[T08 runtime report](.trellis/tasks/09-10-m2-video-workflow/runtime-report.md)；复检实测结果：[paired pilot](.trellis/tasks/09-10-m2-video-workflow/data-report.md)。工程闭环可用不代表准确率已提升。
 - 开发规则：[AGENTS.md](AGENTS.md)
 
 - YOLO26 数据准备、训练和评估：`yolov26/README.md`
