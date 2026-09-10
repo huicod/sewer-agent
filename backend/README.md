@@ -159,3 +159,24 @@ SEWER_RUN_STORAGE_TEST=1 .venv/bin/python -m pytest backend/tests/integration/te
 本地对话恢复测试：`SEWER_RUN_CONVERSATION_TEST=1 .venv/bin/pytest -q backend/tests/integration/test_conversation_workflow.py -m 'not live_api'`。只使用隔离测试 schema/队列，不重启共享服务；另加 `SEWER_RUN_LIVE_API=1` 并选择 `-k real_qwen` 才会付费调用文本 API。真实测试使用合成已存证据验证查询分派，不代表正常样本验收。远端成功但尚未保存本地检查点的崩溃窗口仍可能重复付费，不能承诺 exactly-once。
 
 关联复检的本地 PG/Temporal 验证：`SEWER_RUN_CONVERSATION_TEST=1 .venv/bin/pytest -q backend/tests/integration/test_image_supplement_integration.py`；无需 GPU 或付费 API，覆盖限流重试、重复分派、保留 OTHER、Worker 替换及最终写库失败恢复。
+
+## 视频初查核心（T07）
+
+已提供独立的本地初查入口：逐帧解码并保留原始 PTS，调用可替换检测器，跨块聚合同类候选事件，选择少量原帧证据。当前网页/对话仍不执行视频；T08 才接入 Temporal 长视频进度、检查点、取消与恢复，本 CLI 不支持断点续跑。
+
+```bash
+.venv/bin/python scripts/video_scan.py \
+  --source /absolute/path/to/cctv.mp4 \
+  --checkpoint yolov26/experiments/sewer2403_5class_yolo26s_img960_e100/weights/best.pt \
+  --output var/video-scans/example-001
+```
+
+输出目录必须不存在。`observations.jsonl` 记录已处理原帧，`manifest.json` 保存事件、模型/规则版本、实际覆盖与错误，`frames/` 保存选中的原帧 PNG。每批默认 8 帧，临时图片随批次清理；证据通过第二次仅解码扫描提取，不再次推理。超时是“没有完整新帧”的等待上限，不是整段视频的时长上限。
+
+这是初查候选，不是最终复核结论：包括零候选在内均为 `pending`；解码或检测中断保留已处理结果并标记不完整。事件只表示连续可见片段，不保证重复路过同一缺陷仍是同一事件。真实 FFmpeg 时间戳/短暂单帧/跨块测试及现有权重 GPU 冒烟通过；合成视频不代替真实 CCTV 效果验收。
+
+## 复核增益先导评估
+
+`scripts/review_eval.py` 对固定标注图片使用与线上相同的条件复核规则，分开比较原始检测、复核后保留候选、自动确认结果的 P/R/F1、误报/漏报，以及待审/失败数量。默认只汇总已保存结果，显式 `--live` 才调用本地模型和 API，默认最多 48 张；已记录图片不重复调用。
+
+目前缺失原训练划分清单和可核验的独立测试图，尚未运行真实配对试验，不能宣称复核提高准确率。五类空标签也不等于管道正常。数据要求、最小 manifest 与运行命令见[评估说明](../.trellis/tasks/09-10-m2-video-core/evaluation-report.md)。

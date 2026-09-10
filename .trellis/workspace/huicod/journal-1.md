@@ -292,3 +292,37 @@ T06-A/B1/B2 工程验证完成；对话支持一次关联 VLM 复检，冻结原
 
 - 恢复先读 .trellis/tasks/09-10-m1-conversation/supplement-report.md 和总体开发计划；T06已完成，不重做。开始T07视频解码、事件聚合、证据选帧，再T08长任务恢复/T09人工审核。
 - PostgreSQL/Temporal运行；关联表已初始化；smoke CPU worker已停，API/GPU/Web按README启动。现有Qwen配置可用，真实CCTV视频效果验收仍需用户样例。
+
+
+## Session 10: T07 视频初查完成与复核增益评估待数据
+
+**Date**: 2026-09-10
+**Task**: T07 视频初查完成与复核增益评估待数据
+
+### Summary
+
+视频逐帧初查、事件/证据核心与配对评估工具通过验证；真实准确率增益尚未验证，等待留出划分或独立标注图；下一开发 T08。
+
+### Main Changes
+
+- 稳定 jj change mzwqotpq，父检查点63e00934；原检测模型与 Qwen 配置沿用，无新依赖或付费请求，未推送 GitHub。
+- 真实PTS流式解码、检测器解耦、跨块聚合/重放、短暂事件保留和原帧证据；视频仍为pending，网页/Temporal视频执行留在T08。
+- 评估分开原始框、保留候选和自动确认；失败与待审显式计数，不完整固定集禁止输出比较，恢复冻结非敏感配置。
+
+### Version Control
+
+本地 jj change `mzwqotpq` 保存实现与交接；未推送 GitHub。
+
+### Testing
+
+- [OK] 最终全后端460 passed/6 skipped，62.75s，含真实PG/Temporal和视频GPU；Ruff、相关格式与diff检查通过。
+- [OK] 独立审查问题全部修复并主Agent复验：未满尾批丢帧、子集指标误报、续跑配置缺项；合成视频只证明集成，不是准确率验收。
+
+### Status
+
+[OK] 工程阶段完成；真实复核增益评估等待数据。
+
+### Next Steps
+
+- 恢复先读 .trellis/tasks/09-10-m2-video-core/runtime-report.md 和总体计划；T01–T07不重做，下一步T08长视频工作流、进度、取消和断点恢复。
+- 真实增益试验仍待用户原split_manifest.csv或明确未参与训练的标注图片；无真实正常集/真实CCTV视频，不重分割冒充test，不宣称VLM已提高准确率。
