@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 13
+- **Total Sessions**: 14
 - **Last Active**: 2026-09-11
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~435 | Active |
+| `journal-1.md` | ~467 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 14 | 2026-09-11 | YOLO 引导复核负结果与48图全量实物证据 | - | `-` |
 | 13 | 2026-09-11 | 图片召回保护与独立扫描受控实验 | jj moqulzpv | `-` |
 | 12 | 2026-09-11 | Sewer2403 图片复检 v2 与扩展配对验证 | jj vktuuypp | `-` |
 | 11 | 2026-09-10 | T08 持久视频闭环与真实数据配对验证 | - | `-` |
@@ -48,7 +49,7 @@
 
 ## Notes
 
-- 恢复先读 journal-1.md 的 Session 12 与 `.trellis/tasks/09-11-image-review-v2/report.md`。T01–T08 已完成；当前优先 Sewer2403 图片，视频/SEDD/T09 暂缓。v2 优于旧复检但仍低于原 YOLO 的综合指标，历史待办以此交接为准。
+- 恢复先读 journal-1.md 的 Session 14 与 `.trellis/tasks/09-11-guided-review/report.md`。T01–T08 已完成；优先 Sewer2403 图片，视频/SEDD/T09 暂缓。最新引导复核实验未提高 P/R，不替换默认；48 图全量证据在 `var/evaluations/2026-09-11-guided/index.html`，下一步先人工核验字幕重叠等标注分歧。
 
 - Sessions are appended to journal files
 - New journal file created when current exceeds 2000 lines

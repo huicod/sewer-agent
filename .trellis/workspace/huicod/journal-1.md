@@ -433,3 +433,35 @@ T08 工程验收完成。两段真实视频4259帧、SIGTERM恢复和有界复�
 
 - 先读 .trellis/tasks/09-11-image-recall/report.md；当前默认candidate_review，independent_discovery仅显式实验。勿重跑本轮API追分。
 - 优先零检测PL/FS、实例范围/定位、误报与重复候选分析；保留候选复核职责，不推进视频/T09或扩大模型栈。
+
+
+## Session 14: YOLO 引导复核负结果与48图全量实物证据
+
+**Date**: 2026-09-11
+**Task**: YOLO 引导复核负结果与48图全量实物证据
+
+### Summary
+
+完成候选局部图引导复核、保守实验融合与固定36+12图测试；P/R未共同提高，不替换默认。全部原图、阶段PNG/SVG及真实API输入响应留档。
+
+### Main Changes
+
+- jj ruxvkskl：新增实验复核/缓存评估/全量图库；默认worker、环境和模型权重不变。
+- 主集YOLO29/8/5→融合18/29/16；回归11/3/1→9/12/3。48请求记录、47有效响应、1网络失败无重试。
+- 主集17/18源FS框与字幕区域重叠，已核对XML非绘图坐标错误；原标注不改，需人工核验。详细交接 .trellis/tasks/09-11-guided-review/report.md；实际证据 var/evaluations/2026-09-11-guided/index.html。
+
+### Git Commits
+
+(No commits - planning session)
+
+### Testing
+
+- [OK] 后端511 passed / 75 skipped；Ruff/格式/diff通过；全部48图原始字节、192张PNG尺寸及离线评分一致。
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- 先人工核验少量类别/字幕重叠/框范围分歧，再建立人工核验固定集；无已证实的联合精度增益，视频/SEDD/T09仍暂停。

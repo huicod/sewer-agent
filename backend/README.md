@@ -181,4 +181,8 @@ SEWER_RUN_STORAGE_TEST=1 .venv/bin/python -m pytest backend/tests/integration/te
 
 `scripts/review_eval.py` 对固定标注图片使用与图片 worker 相同的模式配置/保留融合规则，分开比较原始检测、保留候选、自动确认的 P/R/F1。`recall_attribution` 冻结原始命中后，另计原命中保留/丢失、VLM 补回目标及新增未匹配框；零检测图片的补回单列，重复观察不算补漏。默认只汇总已存结果，显式 `--live` 才调用本地模型和 API，默认最多 48 张；已落盘图片（包括失败）不重试。API 发出后、落盘前若进程崩溃，计费/结果可能未知，不能承诺跨故障零重复调用，恢复前须核对记录。
 
-目前缺失原训练划分清单和可核验的独立测试图，尚未运行真实配对试验，不能宣称复核提高准确率。五类空标签也不等于管道正常。数据要求、最小 manifest 与运行命令见[评估说明](../.trellis/tasks/09-10-m2-video-core/evaluation-report.md)。
+已完成真实 Sewer2403 配对试验，但原训练划分清单缺失，不能称为独立泛化测试；五类空标签也不等于管道正常。历史数据要求见[评估说明](../.trellis/tasks/09-10-m2-video-core/evaluation-report.md)。
+
+新的 YOLO 引导复核仅用于离线实验，不替换 worker 默认策略：`scripts/guided_review_eval.py --baseline <已有 state.json> --output <新实验目录> --live` 复用完全相同的检测/画质缓存，每张一次 VLM 请求，保存输入视图、逐框回答和融合预测。去掉 `--live` 只复算已存结果。明确证据可删除/原框改类；不确定保留原框；新增须可定位且无重复/类别冲突。P/R 必须同集比较，不能把待审队列或自动确认子集混成整体效果。
+
+`evaluation.gallery.export_gallery(manifest, records, output_dir)` 导出全部图片的原图、YOLO、VLM 新增建议（融合前）、实际融合预测、标注及逐框理由。SVG 嵌入未经改写的原始图片；GT 只参与评分和展示，不进入模型。实验详情及证据入口见[本轮记录](../.trellis/tasks/09-11-guided-review/report.md)。
