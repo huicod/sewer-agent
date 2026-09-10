@@ -104,6 +104,31 @@ async def test_reviewer_sends_original_image_and_indexed_metadata(tmp_path) -> N
 
 
 @pytest.mark.asyncio
+async def test_review_request_delivers_guidance_for_candidates_and_missed_classes(tmp_path):
+    """Dropping domain context from the wire loses both reclassification and empty-image audit."""
+    path = tmp_path / "source"
+    save_jpeg(path)
+    empty = ImageObservation(
+        detection=DetectionBatch(
+            **(observation().detection.model_dump() | {"detections": ()})
+        ),
+        quality=observation().quality,
+    )
+    client = FakeClient(valid_review(candidates=()))
+    await ImageReviewer(client).review(path, empty)
+    metadata = json.loads(client.calls[0][0][1]["content"][0]["text"])
+
+    assert metadata["candidates"] == []
+    assert set(metadata["label_guidance"]) == {"AJ", "BLOCK", "PL", "FS", "BX"}
+    for guidance in metadata["label_guidance"].values():
+        assert guidance["visual_features"]
+        assert guidance["lookalikes"]
+    assert metadata["label_guidance"]["BLOCK"]["source_classes"] == {
+        "CJ": "沉积", "JG": "结垢", "ZW": "障碍物"
+    }
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     "candidates",
     [

@@ -545,7 +545,7 @@ def test_live_pins_cover_all_response_and_failure_affecting_configuration() -> N
     assert pins["vlm"] == {
         "base_url": "https://example.invalid/v1",
         "model": "fixture-vlm",
-        "prompt_version": "image-review-v1",
+        "prompt_version": "image-review-v2",
         "review_score_threshold": 0.85,
         "review_always_labels": ["BX", "FS"],
         "api_enable_thinking": False,

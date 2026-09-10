@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 11
-- **Last Active**: 2026-09-10
+- **Total Sessions**: 12
+- **Last Active**: 2026-09-11
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~364 | Active |
+| `journal-1.md` | ~399 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 12 | 2026-09-11 | Sewer2403 图片复检 v2 与扩展配对验证 | jj vktuuypp | `-` |
 | 11 | 2026-09-10 | T08 持久视频闭环与真实数据配对验证 | - | `-` |
 | 10 | 2026-09-10 | T07 视频初查完成与复核增益评估待数据 | - | `-` |
 | 9 | 2026-09-10 | T06-B2 关联复检完成与视频阶段交接 | `52b111a3f4e3` | `-` |
@@ -46,7 +47,7 @@
 
 ## Notes
 
-- 恢复开发先读 journal-1.md 的 Session 10 与 T07 runtime-report.md；T01–T07 工程验证已完成，下一开发 T08 持久视频工作流。复核真实增益仍待可核验留出数据，不把工程测试当准确率提升。历史待办以最新交接为准。
+- 恢复先读 journal-1.md 的 Session 12 与 `.trellis/tasks/09-11-image-review-v2/report.md`。T01–T08 已完成；当前优先 Sewer2403 图片，视频/SEDD/T09 暂缓。v2 优于旧复检但仍低于原 YOLO 的综合指标，历史待办以此交接为准。
 
 - Sessions are appended to journal files
 - New journal file created when current exceeds 2000 lines
