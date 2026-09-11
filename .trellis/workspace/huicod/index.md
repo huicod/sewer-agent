@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 15
+- **Total Sessions**: 16
 - **Last Active**: 2026-09-11
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~501 | Active |
+| `journal-1.md` | ~537 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 16 | 2026-09-11 | T09 人工审核持久闭环与视频证据时间轴 | jj tmkruxqq | `-` |
 | 15 | 2026-09-11 | 置信度分层复核与固定48图新实测 | jj kqysvuqx | `-` |
 | 14 | 2026-09-11 | YOLO 引导复核负结果与48图全量实物证据 | - | `-` |
 | 13 | 2026-09-11 | 图片召回保护与独立扫描受控实验 | jj moqulzpv | `-` |
@@ -50,7 +51,7 @@
 
 ## Notes
 
-- 恢复先读 journal-1.md 的 Session 14 与 `.trellis/tasks/09-11-guided-review/report.md`。T01–T08 已完成；优先 Sewer2403 图片，视频/SEDD/T09 暂缓。最新引导复核实验未提高 P/R，不替换默认；48 图全量证据在 `var/evaluations/2026-09-11-guided/index.html`，下一步先人工核验字幕重叠等标注分歧。
+- 恢复先读 journal-1.md 的 Session 16 与 `.trellis/tasks/09-11-m2-human-review/report.md`。用户已接受图片优化并恢复原计划，T01–T09 已完成开发验收；下一任务 T10 条件式开放候选适配器。旧图片/视频暂停决定已被本轮覆盖；不追加付费实验、不默认启用实验融合。T09 本地 jj change `tmkruxqq`；升级前需 init_storage，未启动产品服务或推送。
 
 - Sessions are appended to journal files
 - New journal file created when current exceeds 2000 lines

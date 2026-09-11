@@ -32,7 +32,7 @@ def test_storage_initializer_uses_video_repository(monkeypatch):
             initialized.append(True)
 
     monkeypatch.setattr(module, "Settings", lambda: SimpleNamespace(database_dsn="fixture-dsn"))
-    monkeypatch.setattr(module, "VideoRepository", Repository)
+    monkeypatch.setattr(module, "HumanReviewRepository", Repository)
 
     module.main()
 
@@ -78,7 +78,7 @@ async def test_workers_share_one_detector_and_register_video_runtime(monkeypatch
     captured = {}
 
     monkeypatch.setattr(module, "Settings", lambda: settings)
-    monkeypatch.setattr(module, "VideoRepository", lambda dsn: repo)
+    monkeypatch.setattr(module, "HumanReviewRepository", lambda dsn: repo)
     monkeypatch.setattr(module, "MediaStore", lambda *args, **kwargs: object())
     monkeypatch.setattr(module, "ImageActivities", lambda *args, **kwargs: images)
 

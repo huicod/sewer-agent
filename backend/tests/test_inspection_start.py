@@ -110,6 +110,28 @@ def test_configuration_contains_versions_but_never_credentials():
     assert "private-key" not in str(config)
     assert "api_key" not in str(config)
     assert config["policy_version"]
+    assert config["human_review_version"] == "human-review-v1"
+
+
+@pytest.mark.asyncio
+async def test_waiting_image_can_cancel_without_restarting_models():
+    store = MemoryStore()
+    task_id = store.task.snapshot.task_id
+    store.task.snapshot = TaskSnapshot.model_validate(
+        store.task.snapshot.model_dump()
+        | {
+            "runtime_status": "waiting_review",
+            "stage": "human_review",
+            "waiting_reason": "需要人工确认",
+            "can_cancel": True,
+        }
+    )
+    store.run = {"task_id": str(task_id), "config": {"human_review_version": "human-review-v1"}}
+    handle = SimpleNamespace(execute_update=AsyncMock(return_value=True))
+    connect = AsyncMock(return_value=SimpleNamespace(get_workflow_handle=lambda _: handle))
+    starter = InspectionStarter(Settings(_env_file=None), store, connect=connect)
+    assert await starter.cancel(task_id) == store.task
+    handle.execute_update.assert_awaited_once_with("request_cancel")
 
 
 @pytest.mark.parametrize(

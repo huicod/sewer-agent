@@ -124,11 +124,12 @@ async def test_admission_cannot_reconstruct_missing_detector_evidence():
 async def test_supplement_workflow_runs_verify_then_finalize_only(monkeypatch):
     from pipe_inspector.workflow.supplement import ImageSupplementWorkflow
 
-    execute = AsyncMock(side_effect=[{"review": None}, {"stage": "finished"}])
+    final = {"stage": "finished", "runtime_status": "completed"}
+    execute = AsyncMock(side_effect=[{"review": None}, final])
     monkeypatch.setattr("pipe_inspector.workflow.supplement.workflow.execute_activity", execute)
     wf = ImageSupplementWorkflow()
     result = await wf.run(LinkedStore().run)
-    assert result == {"stage": "finished"}
+    assert result == final
     assert [call.args[0] for call in execute.call_args_list] == [
         "verify_image",
         "finish_image_supplement",

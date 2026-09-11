@@ -18,6 +18,16 @@ class BodyLimitMiddleware:
             return await self.app(scope, receive, send)
         is_upload = scope["path"] == "/api/assets"
         limit = self.max_upload_bytes + 65536 if is_upload else 65536
+        parts = scope["path"].rstrip("/").split("/")
+        if (
+            scope["method"] == "POST"
+            and len(parts) == 5
+            and parts[1:3] == ["api", "tasks"]
+            and parts[4] == "review"
+        ):
+            # Transport allowance for JSON spacing/escaping; the review model
+            # separately bounds the canonical Temporal submission to 1 MB.
+            limit = 2_000_000
         headers = Headers(scope=scope)
         try:
             length = int(headers.get("content-length", "0"))

@@ -7,6 +7,8 @@ from temporalio import workflow
 from temporalio.common import RetryPolicy
 from temporalio.exceptions import ActivityError, ApplicationError, CancelledError
 
+from pipe_inspector.workflow.human_review import HUMAN_REVIEW_VERSION, HumanReviewGate
+
 
 @workflow.defn
 class VideoInspectionWorkflow:
@@ -14,9 +16,16 @@ class VideoInspectionWorkflow:
         self.stage = "queued"
         self.cancel_requested = False
         self.active = None
+        self.review_gate = HumanReviewGate()
+
+    @workflow.update
+    async def submit_review(self, submission: dict) -> dict:
+        return await self.review_gate.submit(submission)
 
     @workflow.update
     def request_cancel(self):
+        if self.stage == "human_review":
+            return self.review_gate.request_cancel()
         if self.stage in {"reporting", "finished"}:
             return False
         self.cancel_requested = True
@@ -104,5 +113,11 @@ class VideoInspectionWorkflow:
             start_to_close_timeout=timedelta(seconds=60),
             retry_policy=RetryPolicy(maximum_attempts=0, maximum_interval=timedelta(seconds=30)),
         )
+        if (
+            run["config"].get("human_review_version") == HUMAN_REVIEW_VERSION
+            and result["runtime_status"] == "waiting_review"
+        ):
+            self.stage = "human_review"
+            result = await self.review_gate.wait(run)
         self.stage = "finished"
         return result

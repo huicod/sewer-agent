@@ -2,6 +2,10 @@ import type {
   AssetRecord,
   AssetRef,
   Finding,
+  FindingReview,
+  HumanReviewDetail,
+  HumanReviewRecord,
+  HumanReviewSubmission,
   RuntimeStatus,
   SessionDetail,
   SessionRecord,
@@ -10,6 +14,8 @@ import type {
   TurnRecord,
   TurnStage,
   TurnStatus,
+  VideoDetail,
+  VideoEvent,
 } from "./types";
 
 const UUID_PATTERN =
@@ -50,6 +56,10 @@ function isUuid(value: unknown): value is string {
 
 function isTimestamp(value: unknown): value is string {
   return typeof value === "string" && Number.isFinite(Date.parse(value));
+}
+
+function isAwareTimestamp(value: unknown): value is string {
+  return isTimestamp(value) && /(?:z|[+-]\d{2}:\d{2})$/i.test(value);
 }
 
 function isNullableString(value: unknown): value is string | null {
@@ -169,7 +179,7 @@ function isCoverage(value: unknown): boolean {
   );
 }
 
-function isTaskSnapshot(value: unknown): value is TaskSnapshot {
+export function isTaskSnapshot(value: unknown): value is TaskSnapshot {
   return (
     isRecord(value) &&
     value.schema_version === "1" &&
@@ -240,4 +250,162 @@ export function isTurnRecord(value: unknown): value is TurnRecord {
 
 export function isTurnList(value: unknown): value is TurnRecord[] {
   return Array.isArray(value) && value.every(isTurnRecord);
+}
+
+const DETECTION_LABELS = new Set(["AJ", "BX", "FS", "PL", "BLOCK", "OTHER"]);
+const VIDEO_LABELS = new Set(["AJ", "BX", "FS", "PL", "BLOCK"]);
+const REVIEW_ACTIONS = new Set(["confirm", "reject", "relabel"]);
+
+function isFindingReview(value: unknown): value is FindingReview {
+  if (
+    !isRecord(value) ||
+    !isUuid(value.finding_id) ||
+    typeof value.action !== "string" ||
+    !REVIEW_ACTIONS.has(value.action) ||
+    !(value.label === null || (typeof value.label === "string" && DETECTION_LABELS.has(value.label))) ||
+    !(value.open_label === null || isNonEmptyString(value.open_label)) ||
+    typeof value.reason !== "string" ||
+    value.reason.trim().length < 1 ||
+    value.reason.length > 1_000
+  ) return false;
+  if (value.action === "relabel") {
+    return value.label !== null &&
+      (value.label === "OTHER" ? value.open_label !== null : value.open_label === null);
+  }
+  if (value.action === "reject") return value.label === null && value.open_label === null;
+  return value.label === null;
+}
+
+function isHumanReviewSubmission(value: unknown): value is HumanReviewSubmission {
+  if (
+    !isRecord(value) || !isUuid(value.request_id) ||
+    typeof value.reviewer !== "string" || value.reviewer.trim().length < 1 || value.reviewer.length > 100 ||
+    !isAwareTimestamp(value.snapshot_updated_at) || !Array.isArray(value.decisions) ||
+    value.decisions.length > 2_000 || !value.decisions.every(isFindingReview) ||
+    typeof value.negative_audit_complete !== "boolean" ||
+    typeof value.note !== "string" || value.note.length > 2_000
+  ) return false;
+  const ids = value.decisions.map((decision) => decision.finding_id);
+  return ids.length === new Set(ids).size &&
+    new TextEncoder().encode(JSON.stringify(value)).byteLength <= 1_000_000;
+}
+
+export function isHumanReviewRecord(value: unknown): value is HumanReviewRecord {
+  return (
+    isRecord(value) && isUuid(value.task_id) &&
+    isHumanReviewSubmission(value.submission) &&
+    isTaskSnapshot(value.before) && isTaskSnapshot(value.after) &&
+    value.before.task_id === value.task_id && value.after.task_id === value.task_id &&
+    isAwareTimestamp(value.reviewed_at)
+  );
+}
+
+export function isHumanReviewDetail(value: unknown): value is HumanReviewDetail {
+  return (
+    isRecord(value) && isUuid(value.task_id) && typeof value.can_review === "boolean" &&
+    isTaskSnapshot(value.snapshot) && value.snapshot.task_id === value.task_id &&
+    (value.record === null || (isHumanReviewRecord(value.record) && value.record.task_id === value.task_id))
+  );
+}
+
+function isPositiveFinite(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value) && value > 0;
+}
+
+function isNonNegativeFinite(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0;
+}
+
+function isRegion(value: unknown): boolean {
+  if (!isRecord(value) || !Number.isInteger(value.width) || !Number.isInteger(value.height)) return false;
+  const width = value.width as number;
+  const height = value.height as number;
+  if (width <= 0 || height <= 0 || !Array.isArray(value.bbox_xyxy) || value.bbox_xyxy.length !== 4) return false;
+  const [x1, y1, x2, y2] = value.bbox_xyxy;
+  return [x1, y1, x2, y2].every(isNonNegativeFinite) && x1 < x2 && x2 <= width && y1 < y2 && y2 <= height;
+}
+
+function isQuality(value: unknown): boolean {
+  return isRecord(value) && isNonNegativeFinite(value.mean_luminance) &&
+    isNonNegativeFinite(value.contrast) && isNonNegativeFinite(value.sharpness) &&
+    typeof value.adequate === "boolean" && Array.isArray(value.reasons) &&
+    value.reasons.every(isNonEmptyString);
+}
+
+function isFrameLocator(value: unknown): boolean {
+  return isRecord(value) && isNonNegativeInteger(value.frame_index) &&
+    isNonNegativeFinite(value.timestamp_seconds) && Number.isInteger(value.width) &&
+    (value.width as number) > 0 && Number.isInteger(value.height) && (value.height as number) > 0 &&
+    isQuality(value.quality);
+}
+
+function isEventEvidence(value: unknown): boolean {
+  return isFrameLocator(value) && isRecord(value) &&
+    (value.detection_index === null || isNonNegativeInteger(value.detection_index)) &&
+    isRegion(value.region) && isProgress(value.score) &&
+    (value.region as { width: number }).width === value.width &&
+    (value.region as { height: number }).height === value.height;
+}
+
+function isVideoEvent(value: unknown): value is VideoEvent {
+  if (
+    !isRecord(value) || !isNonEmptyString(value.event_id) ||
+    typeof value.label !== "string" || !VIDEO_LABELS.has(value.label) ||
+    !isNonNegativeInteger(value.start_frame) || !isNonNegativeInteger(value.end_frame) ||
+    !isNonNegativeFinite(value.start_seconds) || !isNonNegativeFinite(value.end_seconds) ||
+    !Number.isInteger(value.observations) || (value.observations as number) < 1 ||
+    !isRegion(value.last_region) || !Array.isArray(value.evidence) ||
+    value.evidence.length < 1 || value.evidence.length > 3 || !value.evidence.every(isEventEvidence)
+  ) return false;
+  const startFrame = value.start_frame as number;
+  const endFrame = value.end_frame as number;
+  if (endFrame < startFrame || value.end_seconds < value.start_seconds) return false;
+  if ((value.observations as number) > endFrame - startFrame + 1) return false;
+  return value.evidence.every((item) => item.frame_index >= startFrame && item.frame_index <= endFrame);
+}
+
+function isVideoConfig(value: unknown): boolean {
+  return isRecord(value) && typeof value.policy_version === "string" &&
+    isPositiveFinite(value.iou_threshold) && value.iou_threshold <= 1 &&
+    isNonNegativeInteger(value.max_gap_frames) && isPositiveFinite(value.max_gap_seconds) &&
+    isNonNegativeFinite(value.evidence_separation_seconds) && isPositiveFinite(value.audit_interval_seconds);
+}
+
+function isVideoScan(value: unknown): boolean {
+  if (!isRecord(value) || !isRecord(value.state)) return false;
+  const state = value.state;
+  if (
+    !isAssetRef(state.source) || !isVideoConfig(state.config) ||
+    !isNullableString(state.detector_id) || !isNullableString(state.model_version) ||
+    !isNullableString(state.label_space_version) || !isNonNegativeInteger(state.next_frame) ||
+    !isNullableNonNegativeNumber(state.last_timestamp_seconds) || !isNonNegativeInteger(state.adequate_frames) ||
+    (state.adequate_frames as number) > (state.next_frame as number) ||
+    !Array.isArray(state.active) || !state.active.every(isVideoEvent) ||
+    !Array.isArray(state.events) || !state.events.every(isVideoEvent) ||
+    !Array.isArray(state.audit_frames) || !state.audit_frames.every(isFrameLocator) ||
+    typeof state.finalized !== "boolean" || (state.finalized && state.active.length > 0) ||
+    typeof value.decode_complete !== "boolean" ||
+    !(value.error_code === null || isNonEmptyString(value.error_code)) ||
+    value.inspection_result !== "pending"
+  ) return false;
+  if ((state.next_frame as number) > 0 && (
+    state.last_timestamp_seconds === null || !state.detector_id || !state.model_version || !state.label_space_version
+  )) return false;
+  if (value.decode_complete && (value.error_code !== null || state.next_frame === 0)) return false;
+  const ids = [...state.events, ...state.active].map((event) => event.event_id);
+  return ids.length === new Set(ids).size;
+}
+
+function isVideoEvidence(value: unknown): boolean {
+  if (!isRecord(value) || !Array.isArray(value.frames) || !Array.isArray(value.review_frames)) return false;
+  return value.frames.every((frame) =>
+    isRecord(frame) && isNonNegativeInteger(frame.frame_index) &&
+    isNonNegativeFinite(frame.timestamp_seconds) && isAssetRef(frame.asset),
+  ) && value.review_frames.every(isNonNegativeInteger);
+}
+
+export function isVideoDetail(value: unknown): value is VideoDetail {
+  return isRecord(value) && isUuid(value.task_id) &&
+    (value.scan === null || isVideoScan(value.scan)) &&
+    (value.evidence === null || isVideoEvidence(value.evidence));
 }

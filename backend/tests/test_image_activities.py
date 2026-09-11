@@ -101,7 +101,7 @@ async def test_missing_vlm_config_finishes_inconclusive_not_normal(setup):
     assert error.value.non_retryable
     assert error.value.type == "vlm_not_configured"
     result = env.run(activities.finish_image, {"run": run, "error": error.value.type})
-    assert result["runtime_status"] == "partial"
+    assert result["runtime_status"] == "waiting_review"
     assert result["inspection_result"] == "inconclusive"
     assert store.calls[-1].error.code == "vlm_not_configured"
 
@@ -177,7 +177,7 @@ async def test_all_images_audited_even_with_strong_detection(setup, force_review
     with pytest.raises(ApplicationError):
         await env.run(activities.verify_image, run)
     result = env.run(activities.finish_image, {"run": run, "error": "timeout"})
-    assert result["runtime_status"] == "partial"
+    assert result["runtime_status"] == "waiting_review"
     assert result["inspection_result"] != "normal"
     activities.reviewer.review.assert_awaited_once()
 

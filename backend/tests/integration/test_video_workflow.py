@@ -164,6 +164,36 @@ async def test_checkpoint_resume_materialization_and_cached_review(case, monkeyp
     assert result == await asyncio.to_thread(env.run, activities.finish_video, {"run": run})
 
 
+async def test_video_review_failure_waits_and_preserves_later_human_terminal(case):
+    from pipe_inspector.contracts.tasks import TaskSnapshot
+
+    _, repo, _, _, _, activities, run = case
+    task_id = UUID(run["task_id"])
+    env = ActivityEnvironment()
+    await asyncio.to_thread(env.run, activities.scan_video, run)
+    await asyncio.to_thread(env.run, activities.prepare_video, run)
+    result = await asyncio.to_thread(
+        env.run, activities.finish_video, {"run": run, "error": "review_failed"}
+    )
+    assert result["runtime_status"] == "waiting_review"
+    before = repo.get_task(task_id).snapshot
+    assert before.stage == "human_review" and before.can_cancel
+    after = TaskSnapshot.model_validate(
+        before.model_dump()
+        | {
+            "runtime_status": "partial",
+            "stage": "finished",
+            "can_cancel": False,
+            "overall_progress": 1,
+            "waiting_reason": "人工确认覆盖不足",
+        }
+    )
+    repo.update_snapshot(after)
+    result = await asyncio.to_thread(env.run, activities.finish_video, {"run": run})
+    assert result["runtime_status"] == "partial"
+    assert repo.get_task(task_id).snapshot == after
+
+
 async def test_real_workflow_worker_replacement_after_scan(case):
     settings, repo, _, detector, reviewer, activities, run = case
     client = await Client.connect(settings.temporal_address)

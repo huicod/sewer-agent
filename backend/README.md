@@ -1,6 +1,6 @@
 # 后端开发入口
 
-当前已接通图片检测、VLM 复检，以及持久对话＋附件入口：对话可启动图片检查、追问已存证据、获取报告和追加一次关联复检。T08 视频工程闭环已实现，现按用户要求暂停视频推进，优先优化图片召回；人工审核等待仍未交付。总范围见 [总体开发计划](../project_management/DEVELOPMENT_PLAN.md)，本轮边界与实测见 [图片召回报告](../.trellis/tasks/09-11-image-recall/report.md)。
+当前已接通对话＋附件、图片/视频检测与复检、报告、关联复检，以及 T09 人工审核等待/恢复和视频证据时间轴。用户已接受当前图片优化并恢复总体开发；本阶段不继续模型实验，也未把实验融合策略切为 worker 默认。总范围见 [总体开发计划](../project_management/DEVELOPMENT_PLAN.md)，当前交接见 [T09 记录](../.trellis/tasks/09-11-m2-human-review/report.md)。
 
 ## 本服务器环境
 
@@ -130,15 +130,15 @@ SEWER_RUN_STORAGE_TEST=1 .venv/bin/python -m pytest backend/tests/integration/te
 .venv/bin/python scripts/inspection_worker.py gpu
 ```
 
-- 页面“启动图片检查”或 POST /api/tasks/{id}/start 显式启动，返回 202。相同任务重复点击沿用固定工作流 ID 与首次落盘配置；启动请求超时可重试，不另建任务。视频当前返回 409；终态重处理需新建任务。
+- 页面启动按钮或 POST /api/tasks/{id}/start 显式启动图片/视频检查，返回 202。相同任务重复点击沿用固定工作流 ID 与首次落盘配置；启动请求超时可重试，不另建任务；终态重处理需新建任务。
 - GET /api/tasks/{id} 的 snapshot 包含实际阶段、重试次数、结论和证据；GET /api/tasks/{id}/calls 查看每个工具的各次尝试。成功 Activity 结果落检查点，可跨 worker 重启复用。
 - 图片默认采用 `candidate_review`：保留已有 v2 候选复核并加入召回保护，所有图片审核一次，高置信检测也不跳过。代码保留全部原始检测类别/框/分数，VLM 分歧不能删除它们，新增和未决发现保持待审。视频仍沿用原条件式候选复核，不受本次策略修改影响。
-- 正常必须满足画质、全图检测覆盖和完成的全图阴性审核。OTHER、强证据冲突或不能判断的候选为待复核；T05 暂以 partial 保存，T09 才提供真正的人工等待/审核流程。
+- 正常必须满足画质、全图检测覆盖和完成的全图阴性审核。OTHER、冲突或不能判断的候选为待复核；T09 新任务进入真正的人工等待，旧 pinless 任务维持历史 partial 行为，详见下节。
 - VLM 传输最多 3 次尝试；鉴权/配置/结构错误不重试，超时/网络失败标记 uncertain。检测端的可恢复传输失败最多重试 3 次；本地最终落库可耐久重试，但不会再执行检测或 VLM。供应商可能已处理请求，不能保证无重复计费。当前只记录次数与状态，未计量真实 token/金额。
 - VLM 使用原图（默认最多 8 MiB）。可选实验模式 `SEWER_IMAGE_REVIEW_MODE=independent_discovery` 不提供检测器答案；大于 1024 像素且短边至少 256 时，同一次 API 请求加入最多四个重叠原生裁剪，不进行超分或增强。裁剪超出单图/总字节预算时省略该裁剪，保留整图。实验输出使用归一化坐标，由后端换算；原件不修改。API 失败保留检测证据，不报告正常。
 - 两种图片模式均固定 `image-recall-v1`；默认候选复核为 `image-review-v2`，实验独检为 `image-discovery-v2` + `native-quadrants-v1`。模式及版本固定入任务；已有结果不改写，旧版本未完成任务/运行中切模式不会被新 worker 悄悄换规则执行，配置不符将明确失败。
 - 独检模式因真实评测中误报/重复候选和自动确认退化，未获默认启用验收；只有显式设置才使用。相近 VLM 框作为定位备选保留待审，候选召回不等于最终准确率。当前 `.env` 未改动、服务未重启。
-- 恢复时要求检测器/标签空间及规则、Prompt、VLM 配置版本一致；不要原地覆盖同版本权重。此阶段未实现视频恢复、用户取消或进程开机自启；对应 T07/T08/T16。
+- 恢复时要求检测器/标签空间及规则、Prompt、VLM 配置版本一致；不要原地覆盖同版本权重。视频恢复/取消已接通；图片仅支持取消人工等待，活动中的图片 GPU 调用取消和开机自启尚未提供。
 
 用户已选定 `qwen3.8-max`，LLM/VLM 两个角色均复用本地 `DASHSCOPE_API_KEY`；已验证 `https://dashscope.aliyuncs.com/compatible-mode/v1`。不自动切换地域或服务商。模型效果仍需固定集评估：[官方模型说明](https://help.aliyun.com/zh/model-studio/qwen3-8-max)。
 
@@ -155,16 +155,33 @@ SEWER_RUN_STORAGE_TEST=1 .venv/bin/python -m pytest backend/tests/integration/te
 - 报告仅查询存储，不调用模型、不改变旧结论；HTML 证据链接指向服务器媒体接口，不包含离线打包的原图。
 - 选择已完成或部分完成的原图片任务，发送“请对这个任务追加一次 VLM 复检”：新建带 `parent_task_id` 的关联任务，复用原图及冻结的检测证据，不运行 GPU 检测、不改写原结果。页面和 HTML 报告可回到原任务报告，原检测版本/调用记录仍属于原任务。
 - 每个原任务最多一个复检子任务；重复 request_id 沿用首次身份与配置，子任务不能再追加子任务，失败也占用次数。启动确认失败可对同一子任务重试 `/start`；已结束的复检不因 `/start` 重做。复检只需 CPU/API worker，允许使用当前配置的 VLM，但重试不得切换模型或参数。
-- 追加操作仅允许 `verify`（可附带摘要/报告）；若同时要求尚未部署的分割/增强等工具，本次全部不执行。前后 VLM 实质判断冲突保留待审；原有 VLM 新增发现/OTHER 不因新回答遗漏而消失。缺失或弃权的原复检可由新的有效审核补足；复检失败不能得出正常。视频、人工审核等待及后置工具仍未交付，不能称完整首版已完成。
+- 追加操作仅允许 `verify`（可附带摘要/报告）；若同时要求尚未部署的分割/增强等工具，本次全部不执行。前后 VLM 实质判断冲突保留待审；原有 VLM 新增发现/OTHER 不因新回答遗漏而消失。缺失或弃权的原复检可由新的有效审核补足；复检失败不能得出正常。后置工具仍未交付，不能称完整首版已完成。
 - 任务和对话关联必须属于同一会话；上传资产沿用本机单用户全局模型，没有上传者所有权或用户鉴权。这不是多用户数据隔离方案，仍只能绑定本机使用。
 
 本地对话恢复测试：`SEWER_RUN_CONVERSATION_TEST=1 .venv/bin/pytest -q backend/tests/integration/test_conversation_workflow.py -m 'not live_api'`。只使用隔离测试 schema/队列，不重启共享服务；另加 `SEWER_RUN_LIVE_API=1` 并选择 `-k real_qwen` 才会付费调用文本 API。真实测试使用合成已存证据验证查询分派，不代表正常样本验收。远端成功但尚未保存本地检查点的崩溃窗口仍可能重复付费，不能承诺 exactly-once。
 
 关联复检的本地 PG/Temporal 验证：`SEWER_RUN_CONVERSATION_TEST=1 .venv/bin/pytest -q backend/tests/integration/test_image_supplement_integration.py`；无需 GPU 或付费 API，覆盖限流重试、重复分派、保留 OTHER、Worker 替换及最终写库失败恢复。
 
+## 人工审核与事件证据（T09）
+
+- 升级时先运行 `scripts/init_storage.py` 新增审核表，再重启 API 和 CPU worker；旧数据不重写。新入场任务固定 `human_review_version=human-review-v1`，已有旧任务不追加入场或重新打开。
+- 新图片、关联复检及视频任务存在未决结果时停在 `waiting_review / human_review`（95%），无活动模型调用。页面“进入人工复核”展示原始输入、原坐标框与证据时间；必须逐项确认、改类或驳回并填写理由。OTHER 只能由人工明确名称。
+- GET `/api/tasks/{id}/review` 查询快照及历史；POST 同路径提交 `request_id`、`reviewer`、`snapshot_updated_at`、完整 `decisions`，可附阴性审计声明和备注。同一内容重试必须沿用 UUID；内容变化或过期快照返回 409。审核人是自报字段，不是登录鉴权。
+- 审核决定与前后快照在一个事务中保存；Temporal 收到持久化回执后结束等待。取消使用原 `/cancel` 接口；审核正在提交时拒绝竞争取消。已完成的人工结果不被自动流程重放覆盖。
+- 不能通过人工点击补出缺失覆盖或画质；全拒绝也不必然等于正常。首版只支持一次完整批次，不含多人审核、补画新框或修订已提交审核。终态可查看审核记录、导出原报告。
+- 视频时间轴复用已保存候选事件和证据帧，显示源时间戳/帧区间与解码完整性，不再调用模型；候选事件不等于已确认缺陷。
+
+无付费调用的真实等待恢复测试：
+
+```bash
+SEWER_RUN_STORAGE_TEST=1 SEWER_RUN_HUMAN_REVIEW_WORKFLOW_TEST=1 .venv/bin/pytest \
+  backend/tests/integration/test_human_review_storage.py \
+  backend/tests/integration/test_human_review_recovery.py -q --tb=short --log-level=CRITICAL
+```
+
 ## 视频初查核心（T07）
 
-已提供独立的本地初查入口：逐帧解码并保留原始 PTS，调用可替换检测器，跨块聚合同类候选事件，选择少量原帧证据。当前网页/对话仍不执行视频；T08 才接入 Temporal 长视频进度、检查点、取消与恢复，本 CLI 不支持断点续跑。
+已提供独立的本地初查入口：逐帧解码并保留原始 PTS，调用可替换检测器，跨块聚合同类候选事件，选择少量原帧证据。网页/对话已通过 T08 接入 Temporal 长视频进度、检查点、取消与恢复；下面的独立 CLI 本身不支持断点续跑。
 
 ```bash
 .venv/bin/python scripts/video_scan.py \

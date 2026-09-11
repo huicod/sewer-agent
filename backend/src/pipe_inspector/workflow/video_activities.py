@@ -335,14 +335,14 @@ class VideoActivities(ImageActivities):
     def finish_video(self, payload: dict) -> dict:
         run, error = payload["run"], payload.get("error")
         task_id = UUID(run["task_id"])
+        task = self.repo.get_task(task_id)
+        if task.snapshot.is_terminal:
+            return self._summary(task.snapshot)
         cached = self.repo.load_step(task_id, "final")
         if cached is not None:
             snapshot = TaskSnapshot.model_validate(cached)
             self.repo.update_snapshot(snapshot)
             return self._summary(snapshot)
-        task = self.repo.get_task(task_id)
-        if task.snapshot.is_terminal:
-            return self._summary(task.snapshot)
         self._publish(task_id, "reporting")
         task = self.repo.get_task(task_id)
         cancelled = bool(payload.get("cancelled"))
@@ -419,6 +419,21 @@ class VideoActivities(ImageActivities):
                 "waiting_reason": "；".join(reasons) or None,
             }
         )
+        if (
+            run["config"].get("human_review_version") == "human-review-v1"
+            and snapshot.runtime_status == "partial"
+            and not configuration_changed
+        ):
+            snapshot = TaskSnapshot.model_validate(
+                snapshot.model_dump()
+                | {
+                    "runtime_status": "waiting_review",
+                    "stage": "human_review",
+                    "overall_progress": 0.95,
+                    "can_cancel": True,
+                    "waiting_reason": snapshot.waiting_reason or "请人工审核检测结果",
+                }
+            )
         saved = self.repo.save_step(task_id, "final", snapshot.model_dump(mode="json"))
         snapshot = TaskSnapshot.model_validate(saved)
         self.repo.update_snapshot(snapshot)

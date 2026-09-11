@@ -1,19 +1,26 @@
 import type {
   AssetRecord,
+  HumanReviewDetail,
+  HumanReviewRecord,
+  HumanReviewSubmission,
   SessionDetail,
   SessionRecord,
   TaskRecord,
   TaskSubmission,
   TurnRecord,
   TurnSubmission,
+  VideoDetail,
 } from "./types";
 import {
   isAssetRecord,
+  isHumanReviewDetail,
+  isHumanReviewRecord,
   isSessionDetail,
   isSessionRecord,
   isTaskRecord,
   isTurnList,
   isTurnRecord,
+  isVideoDetail,
 } from "./validators";
 
 export class ApiError extends Error {
@@ -86,6 +93,13 @@ export function uploadAsset(file: File): Promise<AssetRecord> {
   return requestJson<AssetRecord>("/api/assets", isAssetRecord, { method: "POST", body });
 }
 
+export function getAsset(ref: { asset_id: string; version: number }): Promise<AssetRecord> {
+  return requestJson<AssetRecord>(
+    `/api/assets/${encodeURIComponent(ref.asset_id)}/versions/${ref.version}`,
+    isAssetRecord,
+  );
+}
+
 export function createTask(submission: TaskSubmission): Promise<TaskRecord> {
   return requestJson<TaskRecord>("/api/tasks", isTaskRecord, {
     method: "POST",
@@ -104,6 +118,35 @@ export function cancelTask(taskId: string): Promise<TaskRecord> {
 
 export function getTask(taskId: string): Promise<TaskRecord> {
   return requestJson<TaskRecord>(`/api/tasks/${encodeURIComponent(taskId)}`, isTaskRecord);
+}
+
+export function getReview(taskId: string): Promise<HumanReviewDetail> {
+  return requestJson<HumanReviewDetail>(
+    `/api/tasks/${encodeURIComponent(taskId)}/review`,
+    isHumanReviewDetail,
+  );
+}
+
+export function submitReview(
+  taskId: string,
+  submission: HumanReviewSubmission,
+): Promise<HumanReviewRecord> {
+  return requestJson<HumanReviewRecord>(
+    `/api/tasks/${encodeURIComponent(taskId)}/review`,
+    isHumanReviewRecord,
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(submission),
+    },
+  );
+}
+
+export function getVideo(taskId: string): Promise<VideoDetail> {
+  return requestJson<VideoDetail>(
+    `/api/tasks/${encodeURIComponent(taskId)}/video`,
+    isVideoDetail,
+  );
 }
 
 export function createTurn(sessionId: string, submission: TurnSubmission): Promise<TurnRecord> {

@@ -69,6 +69,7 @@ def run_config(
         "prompt_version": PROMPT_VERSION if independent else IMAGE_REVIEW_PROMPT_VERSION,
         "view_policy_version": VIEW_POLICY_VERSION if independent else None,
         "image_review_mode": settings.image_review_mode,
+        "human_review_version": "human-review-v1",
         "api_timeout_seconds": settings.api_timeout_seconds,
         "api_enable_thinking": settings.api_enable_thinking,
         "api_max_output_tokens": settings.api_max_output_tokens,
@@ -228,13 +229,20 @@ class InspectionStarter:
     async def cancel(self, task_id: UUID):
         record = await asyncio.to_thread(self.repo.get_task, task_id)
         asset = await asyncio.to_thread(self.repo.get_asset, record.input_asset)
-        if asset.kind != AssetKind.VIDEO:
-            raise InspectionStartError("video_only", "只有视频任务支持取消", 409)
+        run = await asyncio.to_thread(self.repo.get_run, task_id)
+        review_enabled = run and run["config"].get("human_review_version") == "human-review-v1"
+        if asset.kind != AssetKind.VIDEO and not (
+            review_enabled
+            and (
+                record.snapshot.runtime_status == "waiting_review"
+                or record.snapshot.runtime_status == "cancelled"
+            )
+        ):
+            raise InspectionStartError("video_only", "图片任务仅在人工审核等待期间支持取消", 409)
         if record.snapshot.is_terminal:
             return record
-        run = await asyncio.to_thread(self.repo.get_run, task_id)
         if run is None:
-            raise InspectionStartError("not_started", "视频任务尚未启动，无法取消", 409)
+            raise InspectionStartError("not_started", "任务尚未启动，无法取消", 409)
         try:
             async with asyncio.timeout(10):
                 client = await self.connect(

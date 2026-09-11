@@ -499,3 +499,39 @@ T08 工程验收完成。两段真实视频4259帧、SIGTERM恢复和有界复�
 
 - 先核验主集14/15/21/28与回归6的低分改类/删除及部分未标注新增，不继续无界重跑或据当前数据追阈值。
 - 视频/SEDD/T09仍暂停；未部署、改环境或推送；worker默认不变。
+
+
+## Session 16: T09 人工审核持久闭环与视频证据时间轴
+
+**Date**: 2026-09-11
+**Task**: T09 人工审核持久闭环与视频证据时间轴
+
+### Summary
+
+用户接受当前图片优化，恢复原计划。完成 T09 审核 API/页面、真实等待/恢复、视频候选时间轴；本轮无付费模型调用，默认复核策略和历史实验不变。
+
+### Main Changes
+
+- 原自动 final 保留为审核前检查点；人工决定、前后快照原子落库；请求幂等、审核取消串行、旧 pinless 不重开。
+- 新任务 human-review-v1；页面原图/原框/视频时间证据与完整批次操作；独立审查后修复请求大小不一致和同任务页面缓存不刷新。
+- 报告 .trellis/tasks/09-11-m2-human-review/report.md；总体计划与 backend/README.md 已更新。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `jj tmkruxqq` | (see git log) |
+
+### Testing
+
+- [OK] 后端564 passed/81 skipped；前端52 passed及构建通过；Ruff全项目及本次31个Python变更格式检查通过。
+- [OK] 真实PG/Temporal隔离集成17 passed/1 live_api deselected；停worker后CPU恢复审核/取消、丢提交响应重试、HTTP确认OTHER/重复提交与报告均通过，模型为确定性替身。
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- 下一任务T10：首个YOLOE开放候选适配器及条件触发；无条件双跑、训练和新评测不在本阶段。先读T09报告与DEVELOPMENT_PLAN，不再沿用Session15的暂停决定。
+- 本轮只启动原有loopback PG/Temporal；产品API/CPU/GPU worker未启动，public业务表未迁移，实际升级先init_storage再启动服务。未推送；浏览器视觉验收待后续联调。

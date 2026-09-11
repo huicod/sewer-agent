@@ -62,7 +62,7 @@ class FaultStore:
 
     def update_snapshot(self, snapshot):
         self.snapshot_updates += 1
-        if self.snapshot_failures and snapshot.is_terminal:
+        if self.snapshot_failures and (snapshot.is_terminal or snapshot.stage == "human_review"):
             self.snapshot_failures -= 1
             raise RuntimeError("injected projection write failure")
         self.task.snapshot = snapshot

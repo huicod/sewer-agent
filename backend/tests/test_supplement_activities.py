@@ -87,7 +87,7 @@ async def test_supplement_finalization_preserves_frozen_source_and_replays_witho
     if configuration_changed:
         run["config"]["supplement_policy_version"] = "retired-policy"
     first = env.run(activities.finish_supplement, {"run": run})
-    assert first["runtime_status"] == ("failed" if configuration_changed else "partial")
+    assert first["runtime_status"] == ("failed" if configuration_changed else "waiting_review")
     assert first["inspection_result"] == "inconclusive"
     assert first["findings"][0]["canonical_label"] == "OTHER"
     assert store.steps["source"]["task"] == parent.model_dump(mode="json")

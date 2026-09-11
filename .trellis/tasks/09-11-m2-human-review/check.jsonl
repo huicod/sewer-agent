@@ -1,0 +1,2 @@
+{"file":".trellis/tasks/09-11-m2-human-review/design.md","reason":"Check workflow/DB/UI consistency and legacy compatibility"}
+{"file":".trellis/spec/backend/conventions.md","reason":"No external I/O in workflows or sensitive exception payloads"}

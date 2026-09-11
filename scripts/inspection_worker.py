@@ -9,10 +9,11 @@ from datetime import timedelta
 
 from pipe_inspector.config import Settings
 from pipe_inspector.media import MediaStore
-from pipe_inspector.storage.video import VideoRepository
+from pipe_inspector.storage.human_review import HumanReviewRepository
 from pipe_inspector.workflow.activities import ImageActivities
 from pipe_inspector.workflow.conversation import ConversationWorkflow
 from pipe_inspector.workflow.conversation_activities import TurnActivities
+from pipe_inspector.workflow.human_review_activities import HumanReviewActivities
 from pipe_inspector.workflow.image import ImageInspectionWorkflow
 from pipe_inspector.workflow.supplement import ImageSupplementWorkflow
 from pipe_inspector.workflow.supplement_activities import SupplementActivities
@@ -24,7 +25,7 @@ from temporalio.worker import Worker
 
 async def serve(kind: str) -> None:
     settings = Settings()
-    repo = VideoRepository(settings.database_dsn)
+    repo = HumanReviewRepository(settings.database_dsn)
     media = MediaStore(
         settings.asset_root,
         max_upload_bytes=settings.max_upload_bytes,
@@ -35,6 +36,7 @@ async def serve(kind: str) -> None:
     videos = VideoActivities(settings, repo, media, detector=activities.detector)
     supplements = SupplementActivities(settings, repo, media)
     turns = TurnActivities(settings, repo)
+    human_reviews = HumanReviewActivities(repo)
     client = await Client.connect(settings.temporal_address, namespace=settings.temporal_namespace)
     gpu = kind == "gpu"
     # Temporal logs Activity arguments on failure. Our DB tool records contain safe codes;
@@ -65,6 +67,8 @@ async def serve(kind: str) -> None:
                 turns.parse_turn,
                 turns.dispatch_turn,
                 turns.finish_turn,
+                human_reviews.apply_human_review,
+                human_reviews.cancel_human_review,
             ],
             activity_executor=executor,
             max_concurrent_activities=1 if gpu else 4,

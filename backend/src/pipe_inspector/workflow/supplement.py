@@ -6,11 +6,22 @@ from temporalio import workflow
 from temporalio.common import RetryPolicy
 from temporalio.exceptions import ActivityError, ApplicationError
 
+from pipe_inspector.workflow.human_review import HUMAN_REVIEW_VERSION, HumanReviewGate
+
 
 @workflow.defn
 class ImageSupplementWorkflow:
     def __init__(self):
         self.stage = "queued"
+        self.review_gate = HumanReviewGate()
+
+    @workflow.update
+    async def submit_review(self, submission: dict) -> dict:
+        return await self.review_gate.submit(submission)
+
+    @workflow.update
+    def request_cancel(self) -> bool:
+        return self.review_gate.request_cancel()
 
     @workflow.run
     async def run(self, run: dict) -> dict:
@@ -41,6 +52,12 @@ class ImageSupplementWorkflow:
                 maximum_interval=timedelta(seconds=30),
             ),
         )
+        if (
+            run["config"].get("human_review_version") == HUMAN_REVIEW_VERSION
+            and result["runtime_status"] == "waiting_review"
+        ):
+            self.stage = "human_review"
+            result = await self.review_gate.wait(run)
         self.stage = "finished"
         return result
 

@@ -20,13 +20,15 @@ from pipe_inspector.agent.image_review import ImageReviewer
 from pipe_inspector.agent.intent import IntentParser
 from pipe_inspector.api.app import create_app
 from pipe_inspector.config import Settings
+from pipe_inspector.contracts.human_review import FindingReview, HumanReviewSubmission
 from pipe_inspector.contracts.inspection import ImageObservation, ImageReview
 from pipe_inspector.contracts.intake import TaskSubmission
 from pipe_inspector.contracts.tasks import TaskSnapshot
 from pipe_inspector.media import MediaStore
-from pipe_inspector.storage.supplements import SupplementRepository
+from pipe_inspector.storage.human_review import HumanReviewRepository
 from pipe_inspector.workflow.conversation import ConversationWorkflow
 from pipe_inspector.workflow.conversation_activities import TurnActivities
+from pipe_inspector.workflow.human_review_activities import HumanReviewActivities
 from pipe_inspector.workflow.start import InspectionStarter, run_config
 from pipe_inspector.workflow.supplement import ImageSupplementWorkflow
 from pipe_inspector.workflow.supplement_activities import SupplementActivities
@@ -65,7 +67,7 @@ def case(tmp_path):
     with psycopg.connect(settings.database_dsn.get_secret_value()) as conn:
         conn.execute(sql.SQL("CREATE SCHEMA {}").format(sql.Identifier(schema)))
     try:
-        repo = SupplementRepository(settings.database_dsn, schema=schema)
+        repo = HumanReviewRepository(settings.database_dsn, schema=schema)
         repo.initialize()
         media = MediaStore(
             tmp_path, max_upload_bytes=1024**2, max_pixels=100_000, probe_timeout_seconds=5
@@ -193,6 +195,7 @@ async def test_conversation_re_review_preserves_source_budget_and_report(case, m
     activities = SupplementActivities(
         settings, repo, media, reviewer=ImageReviewer(api(vlm_provider))
     )
+    human = HumanReviewActivities(repo)
     original_save = repo.save_turn_step
     dispatch_attempts = 0
 
@@ -219,6 +222,8 @@ async def test_conversation_re_review_preserves_source_budget_and_report(case, m
                     turns.finish_turn,
                     activities.verify_image,
                     activities.finish_supplement,
+                    human.apply_human_review,
+                    human.cancel_human_review,
                 ],
                 activity_executor=executor,
             ):
@@ -246,18 +251,51 @@ async def test_conversation_re_review_preserves_source_budget_and_report(case, m
                     child_id = UUID(result["linked_task_id"])
                     child_handle = client.get_workflow_handle(f"inspection:{child_id}")
                     handles.append(child_handle)
+                    if other:
+                        async with asyncio.timeout(30):
+                            while await child_handle.query("current_stage") != "human_review":
+                                await asyncio.sleep(0.05)
+                        detail = await http.get(f"/api/tasks/{child_id}/review")
+                        assert detail.status_code == 200 and detail.json()["can_review"]
+                        before = TaskSnapshot.model_validate(detail.json()["snapshot"])
+                        body_review = HumanReviewSubmission(
+                            request_id=uuid4(),
+                            reviewer="huicod",
+                            snapshot_updated_at=before.updated_at,
+                            decisions=tuple(
+                                FindingReview(
+                                    finding_id=f.finding_id,
+                                    action="confirm",
+                                    open_label="异物",
+                                    reason="人工确认开放类别",
+                                )
+                                for f in before.findings
+                            ),
+                        ).model_dump(mode="json")
+                        review_response = await http.post(
+                            f"/api/tasks/{child_id}/review", json=body_review
+                        )
+                        assert review_response.status_code == 200
+                        duplicate = await http.post(
+                            f"/api/tasks/{child_id}/review", json=body_review
+                        )
+                        assert duplicate.status_code == 200
+                        assert duplicate.json() == review_response.json()
                     async with asyncio.timeout(30):
                         final = await child_handle.result()
-                    assert final["runtime_status"] == ("partial" if other else "completed")
-                    assert final["inspection_result"] == ("inconclusive" if other else "normal")
+                    assert final["runtime_status"] == "completed"
+                    assert final["inspection_result"] == ("defects_found" if other else "normal")
                     if other:
-                        assert final["findings"][0]["canonical_label"] == "OTHER"
+                        reviewed = repo.get_task(child_id).snapshot.findings[0]
+                        assert (
+                            reviewed.canonical_label == "OTHER" and reviewed.confirmed_by == "human"
+                        )
                     replay = await send(body)
                     assert replay["linked_task_id"] == str(child_id)
                     assert (await http.post(f"/api/tasks/{child_id}/start")).status_code == 202
                     answer = await send({"request_id": str(uuid4()), "text": "为什么这样判断？"})
                     assert answer["linked_task_id"] == str(child_id)
-                    assert ("无法判定" if other else "正常") in answer["reply"]
+                    assert ("缺陷" if other else "正常") in answer["reply"]
                     for target in (parent.snapshot.task_id, child_id):
                         limited = await send(
                             {
@@ -284,7 +322,7 @@ async def test_conversation_re_review_preserves_source_budget_and_report(case, m
                         == parent_json
                     )
                     assert not repo.list_calls(parent.snapshot.task_id)
-                    reopened = SupplementRepository(settings.database_dsn, schema=repo._schema)
+                    reopened = HumanReviewRepository(settings.database_dsn, schema=repo._schema)
                     assert len(reopened.get_session(session_id).tasks) == 2
                     assert reopened.get_task(child_id).parent_task_id == parent.snapshot.task_id
     finally:
@@ -325,7 +363,7 @@ async def test_worker_restart_after_verify_checkpoint_retries_only_final_storage
                 await starter.start(child.snapshot.task_id)
                 async with asyncio.timeout(15):
                     await checkpointed.wait()
-            reopened = SupplementRepository(settings.database_dsn, schema=repo._schema)
+            reopened = HumanReviewRepository(settings.database_dsn, schema=repo._schema)
             replaced = SupplementActivities(settings, reopened, media, reviewer=reviewer)
             updated = reopened.update_snapshot
             final_attempts = 0

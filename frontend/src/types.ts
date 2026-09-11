@@ -26,6 +26,7 @@ export type RuntimeStatus =
 export type InspectionResult = "pending" | "normal" | "defects_found" | "inconclusive";
 export type ReviewStatus = "tentative" | "confirmed" | "rejected" | "needs_review";
 export type DetectionLabel = "AJ" | "BX" | "FS" | "PL" | "BLOCK" | "OTHER";
+export type DetectorLabel = Exclude<DetectionLabel, "OTHER">;
 
 export type EvidenceRef = {
   asset: AssetRef;
@@ -118,4 +119,120 @@ export type TurnRecord = TurnSubmission & {
   linked_task_id: string | null;
   error_code: string | null;
   attempts: number;
+};
+
+export type FindingReviewAction = "confirm" | "reject" | "relabel";
+
+export type FindingReview = {
+  finding_id: string;
+  action: FindingReviewAction;
+  label: DetectionLabel | null;
+  open_label: string | null;
+  reason: string;
+};
+
+export type HumanReviewSubmission = {
+  request_id: string;
+  reviewer: string;
+  snapshot_updated_at: string;
+  decisions: FindingReview[];
+  negative_audit_complete: boolean;
+  note: string;
+};
+
+export type HumanReviewRecord = {
+  task_id: string;
+  submission: HumanReviewSubmission;
+  before: TaskSnapshot;
+  after: TaskSnapshot;
+  reviewed_at: string;
+};
+
+export type HumanReviewDetail = {
+  task_id: string;
+  can_review: boolean;
+  snapshot: TaskSnapshot;
+  record: HumanReviewRecord | null;
+};
+
+export type QualitySummary = {
+  mean_luminance: number;
+  contrast: number;
+  sharpness: number;
+  adequate: boolean;
+  reasons: string[];
+};
+
+export type FrameLocator = {
+  frame_index: number;
+  timestamp_seconds: number;
+  width: number;
+  height: number;
+  quality: QualitySummary;
+};
+
+export type EventEvidence = FrameLocator & {
+  detection_index: number | null;
+  region: NonNullable<EvidenceRef["region"]>;
+  score: number;
+};
+
+export type VideoEvent = {
+  event_id: string;
+  label: DetectorLabel;
+  start_frame: number;
+  end_frame: number;
+  start_seconds: number;
+  end_seconds: number;
+  observations: number;
+  last_region: NonNullable<EvidenceRef["region"]>;
+  evidence: EventEvidence[];
+};
+
+export type VideoAggregationConfig = {
+  policy_version: string;
+  iou_threshold: number;
+  max_gap_frames: number;
+  max_gap_seconds: number;
+  evidence_separation_seconds: number;
+  audit_interval_seconds: number;
+};
+
+export type VideoAggregationState = {
+  source: AssetRef;
+  config: VideoAggregationConfig;
+  detector_id: string | null;
+  model_version: string | null;
+  label_space_version: string | null;
+  next_frame: number;
+  last_timestamp_seconds: number | null;
+  adequate_frames: number;
+  active: VideoEvent[];
+  events: VideoEvent[];
+  audit_frames: FrameLocator[];
+  finalized: boolean;
+};
+
+export type VideoScanResult = {
+  state: VideoAggregationState;
+  decode_complete: boolean;
+  error_code: string | null;
+  inspection_result: "pending";
+};
+
+export type VideoEvidenceFrame = {
+  frame_index: number;
+  timestamp_seconds: number;
+  asset: AssetRef;
+};
+
+export type VideoEvidence = {
+  frames: VideoEvidenceFrame[];
+  review_frames: number[];
+};
+
+export type VideoDetail = {
+  task_id: string;
+  scan: VideoScanResult | null;
+  evidence: VideoEvidence | null;
 };

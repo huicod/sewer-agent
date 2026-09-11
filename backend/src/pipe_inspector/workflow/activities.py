@@ -277,6 +277,9 @@ class ImageActivities:
         run = payload["run"]
         task_id = UUID(run["task_id"])
         error = payload.get("error")
+        current = self.repo.get_task(task_id).snapshot
+        if current.is_terminal:
+            return current.model_dump(mode="json")
         self.publish_stage({"run": run, "stage": "reporting"})
         self._mark_running_calls_uncertain(task_id, error or "activity_interrupted")
         cached = self.repo.load_step(task_id, "final")
@@ -343,6 +346,17 @@ class ImageActivities:
                     processed_frames=1,
                     waiting_reason="；".join(waiting_reasons) or None,
                 )
+        if (
+            run["config"].get("human_review_version") == "human-review-v1"
+            and values["runtime_status"] == "partial"
+        ):
+            values.update(
+                runtime_status="waiting_review",
+                stage="human_review",
+                overall_progress=0.95,
+                can_cancel=True,
+                waiting_reason=values.get("waiting_reason") or "请人工审核检测结果",
+            )
         snapshot = TaskSnapshot.model_validate(values)
         saved = self.repo.save_step(task_id, "final", snapshot.model_dump(mode="json"))
         self.repo.update_snapshot(TaskSnapshot.model_validate(saved))

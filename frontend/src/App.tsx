@@ -7,6 +7,7 @@ import {
   createTask,
   createTurn,
   getSession,
+  getAsset,
   getTask,
   getTurn,
   listTurns,
@@ -21,6 +22,8 @@ import type {
   TurnRecord,
   TurnSubmission,
 } from "./types";
+import { ReviewPanel } from "./ReviewPanel";
+import { VideoTimeline } from "./VideoTimeline";
 
 const SESSION_KEY = "pipe-inspector.session-id";
 const ACTIVE_STATUSES = new Set<RuntimeStatus>(["queued", "running", "waiting_review"]);
@@ -116,13 +119,36 @@ type TaskCardProps = {
   cancelling: boolean;
   onStart: (taskId: string) => void;
   onCancel: (taskId: string) => void;
+  onReviewed: (task: TaskRecord, snapshot: TaskRecord["snapshot"]) => void;
 };
 
-function TaskCard({ task, starting, cancelling, onStart, onCancel }: TaskCardProps) {
+function TaskCard({ task, starting, cancelling, onStart, onCancel, onReviewed }: TaskCardProps) {
+  const [reviewOpen, setReviewOpen] = useState(false);
+  const [mediaKind, setMediaKind] = useState<string | null>(null);
+  const [mediaLoading, setMediaLoading] = useState(false);
+  const [mediaError, setMediaError] = useState<string | null>(null);
   const progress = Math.round(
     Math.min(1, Math.max(0, task.snapshot.overall_progress)) * 100,
   );
   const queued = task.snapshot.runtime_status === "queued";
+  const waitingReview = task.snapshot.runtime_status === "waiting_review";
+  const hasVideoLocator = task.snapshot.findings.some((finding) =>
+    finding.evidence.some((evidence) => evidence.frame_index !== null),
+  );
+
+  async function discoverMedia() {
+    if (mediaLoading || mediaKind) return;
+    setMediaLoading(true);
+    setMediaError(null);
+    try {
+      const asset = await getAsset(task.input_asset);
+      setMediaKind(asset.kind);
+    } catch (nextError) {
+      setMediaError(formatError(nextError));
+    } finally {
+      setMediaLoading(false);
+    }
+  }
 
   return (
     <article className="task-card">
@@ -156,6 +182,11 @@ function TaskCard({ task, starting, cancelling, onStart, onCancel }: TaskCardPro
       {task.snapshot.runtime_status === "running" ? (
         <p className="truth-note">{task.parent_task_id ? "关联复检正在执行（不重新检测）" : "检查正在执行"}</p>
       ) : null}
+      {waitingReview ? (
+        <button type="button" onClick={() => setReviewOpen((open) => !open)}>
+          {reviewOpen ? "收起人工复核" : "开始人工复核"}
+        </button>
+      ) : null}
       {task.snapshot.can_cancel === true && !isTerminalTask(task) ? (
         <button
           type="button"
@@ -167,7 +198,7 @@ function TaskCard({ task, starting, cancelling, onStart, onCancel }: TaskCardPro
         </button>
       ) : null}
       {task.snapshot.runtime_status === "partial" ? (
-        <p className="truth-note">检查部分完成；未解决项尚无人工处理入口</p>
+        <p className="truth-note">检查部分完成；新任务可查看审核记录，旧任务可能仅保留历史结果。</p>
       ) : null}
       {task.snapshot.runtime_status === "failed" ? (
         <p className="task-error">服务器报告任务处理失败</p>
@@ -247,6 +278,33 @@ function TaskCard({ task, starting, cancelling, onStart, onCancel }: TaskCardPro
           </ul>
         </div>
       ) : null}
+      {!waitingReview && isTerminalTask(task) ? (
+        <button type="button" className="secondary-button" onClick={() => setReviewOpen((open) => !open)}>
+          {reviewOpen ? "收起审核记录" : "查看审核记录"}
+        </button>
+      ) : null}
+      {reviewOpen ? (
+        <ReviewPanel
+          key={task.snapshot.task_id}
+          taskId={task.snapshot.task_id}
+          snapshotRevision={task.snapshot.updated_at}
+          runtimeStatus={task.snapshot.runtime_status}
+          sourceAsset={task.input_asset}
+          onAccepted={(snapshot) => onReviewed(task, snapshot)}
+        />
+      ) : null}
+      {hasVideoLocator || mediaKind === "video" ? (
+        <VideoTimeline taskId={task.snapshot.task_id} snapshotRevision={task.snapshot.updated_at} />
+      ) : null}
+      {!hasVideoLocator && !mediaKind ? (
+        <button type="button" className="secondary-button" disabled={mediaLoading} onClick={() => void discoverMedia()}>
+          {mediaLoading ? "正在识别媒体…" : "查看媒体证据"}
+        </button>
+      ) : null}
+      {mediaKind && mediaKind !== "video" ? (
+        <a className="source-asset-link" href={evidenceUrl(task.input_asset)} target="_blank" rel="noreferrer">打开源图片</a>
+      ) : null}
+      {mediaError ? <p className="task-error" role="alert">{mediaError}</p> : null}
       {isTerminalTask(task) ? (
         <div className="report-links" aria-label="检查报告">
           <a href={reportUrl(task.snapshot.task_id, "json")} target="_blank" rel="noreferrer">JSON 报告</a>
@@ -779,6 +837,9 @@ export default function App({ pollIntervalMs = 2_000 }: AppProps) {
               cancelling={cancellingTaskIds.has(task.snapshot.task_id)}
               onStart={(taskId) => void startInspection(taskId)}
               onCancel={(taskId) => void cancelInspection(taskId)}
+              onReviewed={(reviewedTask, snapshot) => {
+                setTasks((current) => upsertTask(current, { ...reviewedTask, snapshot }));
+              }}
             />
           ))}
         </div>
