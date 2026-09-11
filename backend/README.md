@@ -247,3 +247,31 @@ SEWER_RUN_STORAGE_TEST=1 SEWER_RUN_HUMAN_REVIEW_WORKFLOW_TEST=1 .venv/bin/pytest
 YOLO 引导复核仍仅用于实验，不替换 worker 默认策略：`scripts/guided_review_eval.py --baseline <已有 state.json> --output <新实验目录> --live` 复用完全相同的检测/画质缓存，每张一次 VLM 请求，保存输入视图、逐框回答和融合预测。当前 `yolo-guided-review-v2` / `guided-confidence-v2` 将 score≥0.85 的原类别、框和分数保留，VLM 否决/改类仅记录待审；低分候选仍允许明确证据下的删除/原框改类，不确定保留。新增须可定位且无重复/类别冲突。去掉 `--live` 只复算同版本已存结果；新版本必须用新目录，不能把旧响应冒充新 Prompt 实测。
 
 `evaluation.gallery.export_gallery(manifest, records, output_dir)` 导出全部图片的原图、YOLO、VLM 新增建议（融合前）、实际融合预测、标注及逐框理由。SVG 嵌入未经改写的原始图片；GT 只参与评分和展示，不进入模型。P/R 按同一原标注计算，未匹配框不等于人工确认误报；高分保留也不等于 VLM 确认正确。最新实验及逐图入口见[置信度分层复核记录](../.trellis/tasks/09-11-confidence-review/report.md)，[上轮结果](../.trellis/tasks/09-11-guided-review/report.md)保持不变。
+
+## 开放补检模型替代实验（图片，非生产切换）
+
+安装可选 `open-scan-hf` 依赖，并按[模型记录](../.trellis/tasks/09-11-open-detector-alternatives/research/models.md)
+用 `huggingface_hub.snapshot_download` 将固定版本的官方模型、处理器及 tokenizer 下载到
+`var/models/open-detectors/mm-gdino-base` 和 `owlv2-large`，保留其自动生成的下载版本元数据。
+模型使用 safetensors，本地推理不联网，不训练，也不读取 API Key。
+
+```bash
+.venv/bin/python -m pipe_inspector.evaluation.open_alternatives \
+  --reference var/evaluations/2026-09-11-incremental/verified/state.json \
+  --fixed-manifest .trellis/tasks/09-11-m3-incremental-evaluation/fixed-set.json \
+  --guided-state var/evaluations/2026-09-11-confidence/paired/state.json \
+  --guided-state var/evaluations/2026-09-11-confidence/regression/state.json \
+  --models-root var/models/open-detectors \
+  --output var/evaluations/2026-09-11-open-alternatives
+```
+
+复用原 48 图的检测/VLM 缓存及条件触发，不包含视频、不产生 VLM 请求。
+新模型输入为原图和相同七项文字概念，不是 VLM 绘制图或 YOLO 裁剪。
+`index.html` 并排展示 VLM 基线与各补检结果；模型子目录包含 `state.json`、
+`summary.json`、全流程图库和保留已有人工编辑的 `review-queue.csv`。
+原 YOLOE 缓存仅只读引用/导出，不覆盖历史目录。重复运行复用结果；不同配置须新目录。
+新模型在一次离线运行内复用显存，结束后释放；旧评测/生产逐次释放默认不变。
+当前原生实现采用 MM FP32、OWLv2 eager FP16；版本元数据检查不是文件内容哈希，
+不得原位替换同版本权重/处理器/图片，换资产应使用新版本和新实验目录。
+新增框均为待审，OTHER 不计入五类指标；各模型阈值、分辨率、计时口径不同，不能按框数
+判胜或宣称严格速度排名。生产补检依然默认关闭，未将替代模型接入在线 worker。

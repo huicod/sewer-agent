@@ -265,7 +265,10 @@ def _validate_batch(batch, sample, pins):
         raise ValueError("open model output differs from pins/source")
 
 
-def run_incremental(samples, output_dir: Path, *, detector, configuration: dict):
+def run_incremental(
+    samples, output_dir: Path, *, detector, configuration: dict, unload_after_sample: bool = True
+):
+    """Run checkpoints; an offline session may explicitly own final model unloading."""
     samples = validate_samples(samples)
     _validate_nonsecret_settings(configuration)
     for key in ("confidence", "image_size", "device"):
@@ -355,7 +358,8 @@ def run_incremental(samples, output_dir: Path, *, detector, configuration: dict)
                 except Exception:
                     batch, status, error = None, "failed", "open_scan_failed"
                 finally:
-                    detector.unload()
+                    if unload_after_sample:
+                        detector.unload()
                     duration = time.monotonic() - start
         state["records"].append(_record(sample, batch, status, error, duration))
         _write_json(path, state)

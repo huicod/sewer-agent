@@ -144,6 +144,14 @@ def test_failure_is_checkpointed_not_retried_and_not_reported_as_success(tmp_pat
     assert "do not leak" not in (tmp_path / "out/state.json").read_text()
 
 
+def test_offline_session_can_own_model_lifetime_without_changing_default(tmp_path):
+    detector = Detector()
+    result = run(tmp_path, [sample(tmp_path)], detector, unload_after_sample=False)
+    assert result["records"][0]["open_status"] == "succeeded"
+    assert detector.calls == 1
+    assert detector.unloads == 0
+
+
 @pytest.mark.parametrize(
     ("empty", "adequate", "expected"),
     [

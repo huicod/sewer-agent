@@ -603,3 +603,37 @@ T08 工程验收完成。两段真实视频4259帧、SIGTERM恢复和有界复�
 ### Next Steps
 
 - 先读T11 report.md与review-resolution.md；下一任务T12图像增强/质量门控，自动增强无收益时保持关闭；准确率仍需人工真值。
+
+
+## Session 19: 开放补检替代模型实测完成，VLM保持不变
+
+**Date**: 2026-09-11
+**Task**: 开放补检替代模型实测完成，VLM保持不变
+
+### Summary
+
+MM-GDINO Base与OWLv2 Large完成固定48图本地对比；模型效果未获替换验收，T12继续暂停。
+
+### Main Changes
+
+- 新增离线HF适配器和同图对比入口，保留VLM/主检测器/融合；无需回退，无新增VLM请求或推送。
+- 完整三模型逐图证据：var/evaluations/2026-09-11-open-alternatives/index.html；详情见任务report.md。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `jj nzqxsnsw` | (see git log) |
+
+### Testing
+
+- [OK] 后端695 passed/84 skipped；Ruff及一次集成审查/定向修复复审通过。
+- [OK] MM/OWL各27次GPU扫描成功、21未触发、0失败；新增待审96/715，新增原标注匹配0/1，新增原YOLO漏检命中均0。
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- 先读09-11-open-detector-alternatives/report.md并人工查看sample-0042、0004、0022；不自动启用补检或恢复T12。

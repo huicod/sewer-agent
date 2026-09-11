@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 18
+- **Total Sessions**: 19
 - **Last Active**: 2026-09-11
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~605 | Active |
+| `journal-1.md` | ~639 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 19 | 2026-09-11 | 开放补检替代模型实测完成，VLM保持不变 | jj nzqxsnsw | `-` |
 | 18 | 2026-09-11 | T11 固定集增量评测与实图交付 | jj yvnxyszk | `-` |
 | 17 | 2026-09-11 | T10 条件式开放候选与真实 GPU 验证 | jj prnozqso | `-` |
 | 16 | 2026-09-11 | T09 人工审核持久闭环与视频证据时间轴 | jj tmkruxqq | `-` |
