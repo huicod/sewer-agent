@@ -23,6 +23,12 @@ dependencies = [
 dev = ["pytest==9.1.1", "pytest-asyncio==1.4.0", "ruff==0.16.6"]
 # Verified against the existing trusted YOLO26 checkpoint with one real GPU image.
 gpu = ["ultralytics==8.4.46"]
+# Text tokenizer only; local YOLOE and MobileCLIP2 assets are provisioned separately.
+open-scan = [
+  "clip @ git+https://github.com/ultralytics/CLIP.git@a13192f8cb767260d7dfd98c843b0716593169e7",
+  "ftfy==6.3.1",
+  "regex==2026.9.3",
+]
 # Optional SDKs for reproducing the provider's published API examples.
 qwen-sdk = ["openai==3.11.0", "dashscope==1.27.4"]
 

@@ -23,7 +23,7 @@ from pipe_inspector.config import Settings
 from pipe_inspector.contracts.assets import AssetKind
 from pipe_inspector.contracts.inspection import ImageObservation
 from pipe_inspector.contracts.intake import TaskSubmission
-from pipe_inspector.contracts.planning import TaskPlan
+from pipe_inspector.contracts.planning import ActionKind, TaskPlan
 from pipe_inspector.contracts.tasks import TaskSnapshot
 from pipe_inspector.contracts.video import VideoAggregationConfig
 from pipe_inspector.storage.repository import SubmissionConflict
@@ -59,6 +59,12 @@ def run_config(
         settings.detector_path, device=settings.detector_device
     )
     independent = settings.image_review_mode == "independent_discovery"
+    if (
+        plan
+        and (plan.open_anomaly_audit or any(s.action == ActionKind.OPEN_SCAN for s in plan.steps))
+        and not settings.open_scan_config
+    ):
+        raise InspectionStartError("tool_unavailable", "开放候选模型尚未配置", 409)
     return {
         "detector_id": detector.detector_id,
         "model_version": detector.model_version,
@@ -79,6 +85,7 @@ def run_config(
         "gpu_queue": settings.task_queue + "-gpu",
         "force_review": force_review,
         "plan": plan.model_dump(mode="json") if plan is not None else None,
+        **({"open_scan": settings.open_scan_config} if settings.open_scan_config else {}),
     }
 
 
@@ -89,7 +96,7 @@ def video_run_config(
     force_review: bool = False,
     plan: TaskPlan | None = None,
 ) -> dict:
-    return run_config(settings, detector=detector, force_review=force_review, plan=plan) | {
+    config = run_config(settings, detector=detector, force_review=force_review, plan=plan) | {
         "operation": "video_inspection",
         "policy_version": "image-policy-v1",
         "prompt_version": IMAGE_REVIEW_PROMPT_VERSION,
@@ -100,6 +107,13 @@ def video_run_config(
         "video_chunk_size": 8,
         "video_review_budget": 32,
     }
+    if config.get("open_scan"):
+        total = plan.budget.max_tool_calls if plan else 32
+        reserve = min(settings.open_scan_max_frames, max(0, total - 1))
+        if plan and plan.budget.per_event_open_scan == 0:
+            reserve = 0
+        config["video_review_budget"] = min(32, max(0, total - 1 - reserve))
+    return config
 
 
 class InspectionStartError(Exception):
@@ -119,6 +133,7 @@ class InspectionStarter:
         except ValidationError:
             raise SupplementNotAllowed("source_evidence_missing") from None
         config = run_config(self.settings, detector=observation.detection, force_review=True)
+        config.pop("open_scan", None)  # Child task is a bounded VLM-only follow-up.
         config.update(
             operation="supplement_review",
             parent_task_id=str(parent_task_id),

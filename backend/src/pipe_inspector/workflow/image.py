@@ -66,6 +66,38 @@ class ImageInspectionWorkflow:
         except ActivityError as exc:
             cause = exc.cause
             error = cause.type if isinstance(cause, ApplicationError) else "activity_interrupted"
+        # No new commands for histories admitted before the opt-in configuration existed.
+        if run["config"].get("open_scan") and error != "configuration_changed":
+            self.stage = "tools"
+            try:
+                selected = await workflow.execute_activity(
+                    "select_open_scan",
+                    run,
+                    start_to_close_timeout=timedelta(seconds=60),
+                    retry_policy=storage_retry,
+                )
+                for index in range(len(selected["selected"])):
+                    try:
+                        await workflow.execute_activity(
+                            "scan_open_candidate",
+                            {"run": run, "index": index},
+                            task_queue=run["config"]["gpu_queue"],
+                            start_to_close_timeout=timedelta(seconds=180),
+                            retry_policy=RetryPolicy(
+                                maximum_attempts=(run["config"].get("plan") or {})
+                                .get("budget", {})
+                                .get("max_transport_attempts", 3)
+                            ),
+                        )
+                    except ActivityError as exc:
+                        cause = exc.cause
+                        error = error or (
+                            cause.type
+                            if isinstance(cause, ApplicationError)
+                            else "open_scan_interrupted"
+                        )
+            except ActivityError:
+                error = error or "open_selection_failed"
         self.stage = "reporting"
         result = await workflow.execute_activity(
             "finish_image",

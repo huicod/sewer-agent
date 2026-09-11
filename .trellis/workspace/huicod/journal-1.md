@@ -535,3 +535,37 @@ T08 工程验收完成。两段真实视频4259帧、SIGTERM恢复和有界复�
 
 - 下一任务T10：首个YOLOE开放候选适配器及条件触发；无条件双跑、训练和新评测不在本阶段。先读T09报告与DEVELOPMENT_PLAN，不再沿用Session15的暂停决定。
 - 本轮只启动原有loopback PG/Temporal；产品API/CPU/GPU worker未启动，public业务表未迁移，实际升级先init_storage再启动服务。未推送；浏览器视觉验收待后续联调。
+
+
+## Session 17: T10 条件式开放候选与真实 GPU 验证
+
+**Date**: 2026-09-11
+**Task**: T10 条件式开放候选与真实 GPU 验证
+
+### Summary
+
+完成可替换 YOLOE、条件选择/预算/恢复及待审融合；默认关闭，下一步 T11。
+
+### Main Changes
+
+- 检查点复用、阶段工具记录、只增不删；三项集成审查问题已修复。
+- 官方模型置于 var/models/yoloe，仅安装 CLIP/ftfy/regex；未改 .env、无付费 API、未启动产品服务或推送。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `jj prnozqso` | (see git log) |
+
+### Testing
+
+- [OK] 后端636 passed/84 skipped；真实PG/Temporal12 passed；前端52 passed/build通过；Ruff与diff检查通过。
+- [OK] 固定sewer2403两图GPU冒烟；原始JSON/四张框图在var/open-scans/2026-09-11-t10-b8h4j412。并非准确率验收。
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- T11 小型固定集比较主检测/VLM/开放候选增量，人工区分漏标与误报；恢复先读T10 report.md。

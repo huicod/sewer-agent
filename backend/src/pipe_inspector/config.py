@@ -25,6 +25,11 @@ class Settings(BaseSettings):
         "yolov26/experiments/sewer2403_5class_yolo26s_img960_e100/weights/best.pt"
     )
     detector_device: str = "0"
+    open_detector_path: Path | None = None
+    open_text_encoder_path: Path | None = None
+    open_scan_confidence: float = Field(default=0.25, gt=0, le=1, allow_inf_nan=False)
+    open_scan_image_size: int = Field(default=640, ge=320, le=1280)
+    open_scan_max_frames: int = Field(default=8, ge=1, le=32)
     llm_base_url: str | None = None
     llm_model: str | None = None
     llm_api_key: SecretStr | None = None
@@ -39,6 +44,33 @@ class Settings(BaseSettings):
     api_timeout_seconds: float = Field(default=60, gt=0, allow_inf_nan=False)
     vlm_max_image_bytes: int = Field(default=8 * 1024**2, gt=0)
     image_review_mode: Literal["candidate_review", "independent_discovery"] = "candidate_review"
+
+    @model_validator(mode="after")
+    def paired_open_models(self):
+        if (self.open_detector_path is None) != (self.open_text_encoder_path is None):
+            raise ValueError(
+                "open_detector_path and open_text_encoder_path must be configured together"
+            )
+        return self
+
+    @property
+    def open_scan_config(self) -> dict | None:
+        if self.open_detector_path is None:
+            return None
+        from pipe_inspector.contracts.open_scan import OPEN_SCAN_VERSION, OPEN_VOCABULARY_VERSION
+
+        return {
+            "version": OPEN_SCAN_VERSION,
+            "detector_id": "yoloe",
+            "model_version": self.open_detector_path.name,
+            "vocabulary_version": OPEN_VOCABULARY_VERSION,
+            "checkpoint": str(self.open_detector_path),
+            "text_encoder": str(self.open_text_encoder_path),
+            "device": self.detector_device,
+            "confidence": self.open_scan_confidence,
+            "image_size": self.open_scan_image_size,
+            "max_frames": self.open_scan_max_frames,
+        }
 
     @model_validator(mode="after")
     def resolve_dashscope_key(self):

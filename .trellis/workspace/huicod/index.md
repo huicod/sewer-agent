@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 16
+- **Total Sessions**: 17
 - **Last Active**: 2026-09-11
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~537 | Active |
+| `journal-1.md` | ~571 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 17 | 2026-09-11 | T10 条件式开放候选与真实 GPU 验证 | jj prnozqso | `-` |
 | 16 | 2026-09-11 | T09 人工审核持久闭环与视频证据时间轴 | jj tmkruxqq | `-` |
 | 15 | 2026-09-11 | 置信度分层复核与固定48图新实测 | jj kqysvuqx | `-` |
 | 14 | 2026-09-11 | YOLO 引导复核负结果与48图全量实物证据 | - | `-` |
@@ -51,7 +52,7 @@
 
 ## Notes
 
-- 恢复先读 journal-1.md 的 Session 16 与 `.trellis/tasks/09-11-m2-human-review/report.md`。用户已接受图片优化并恢复原计划，T01–T09 已完成开发验收；下一任务 T10 条件式开放候选适配器。旧图片/视频暂停决定已被本轮覆盖；不追加付费实验、不默认启用实验融合。T09 本地 jj change `tmkruxqq`；升级前需 init_storage，未启动产品服务或推送。
+- 恢复先读 journal-1.md 的 Session 17 与 `.trellis/tasks/09-11-m3-open-candidates/report.md`。T01–T10 已完成工程验收；下一任务 T11 固定集增量评估。YOLOE 已实现并完成两图真实 GPU 冒烟，但默认关闭/准确率未验收；原实验融合未切生产默认。T10 本地 jj change `prnozqso`；模型/证据与配置说明见报告，未修改 .env、调用付费 API、启动产品服务或推送。
 
 - Sessions are appended to journal files
 - New journal file created when current exceeds 2000 lines

@@ -330,6 +330,9 @@ class ImageActivities:
                     else None
                 )
                 decision = self._decide(run, task, observation, review, error)
+                from pipe_inspector.workflow.open_scan_activities import apply_open_results
+
+                decision = apply_open_results(self.repo, run, decision)
                 partial = (
                     bool(error)
                     or decision.needs_review

@@ -51,7 +51,11 @@ class ConversationDispatcher:
             return await self._supplement(turn, intent, task)
         if intent.kind == "inspect":
             try:
-                plan = compile_inspection_plan(intent, available_actions=AVAILABLE_ACTIONS)
+                settings = getattr(self.starter, "settings", None)
+                available = AVAILABLE_ACTIONS
+                if settings is not None and settings.open_scan_config:
+                    available = available | {ActionKind.OPEN_SCAN}
+                plan = compile_inspection_plan(intent, available_actions=available)
             except IntentPlanningError:
                 return self._reply(
                     "所请求的工具当前未部署，本次未启动检查。"

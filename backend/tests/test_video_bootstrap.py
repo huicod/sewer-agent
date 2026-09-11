@@ -75,6 +75,7 @@ async def test_workers_share_one_detector_and_register_video_runtime(monkeypatch
         verify_video_frame=object(),
         finish_video=object(),
     )
+    open_scans = SimpleNamespace(scan_open_candidate=object(), select_open_scan=object())
     captured = {}
 
     monkeypatch.setattr(module, "Settings", lambda: settings)
@@ -88,6 +89,7 @@ async def test_workers_share_one_detector_and_register_video_runtime(monkeypatch
         return video
 
     monkeypatch.setattr(module, "VideoActivities", make_video)
+    monkeypatch.setattr(module, "OpenScanActivities", lambda *args, **kwargs: open_scans)
     monkeypatch.setattr(
         module,
         "SupplementActivities",
@@ -120,8 +122,13 @@ async def test_workers_share_one_detector_and_register_video_runtime(monkeypatch
 
     if kind == "gpu":
         assert captured["workflows"] == []
-        assert captured["activities"] == [images.detect_image, video.scan_video]
+        assert captured["activities"] == [
+            images.detect_image,
+            video.scan_video,
+            open_scans.scan_open_candidate,
+        ]
     else:
         assert module.VideoInspectionWorkflow in captured["workflows"]
+        assert open_scans.select_open_scan in captured["activities"]
         for activity in (video.prepare_video, video.verify_video_frame, video.finish_video):
             assert activity in captured["activities"]

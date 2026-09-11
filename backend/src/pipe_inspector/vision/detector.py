@@ -76,6 +76,22 @@ class UltralyticsDetector:
     def load(self) -> None:
         self._ensure_model()
 
+    def unload(self) -> None:
+        """Release GPU ownership before another local model uses the serial worker."""
+        model, self._model = self._model, None
+        self._class_names = None
+        if model is not None:
+            import gc
+
+            import torch
+
+            model.cpu()  # Ultralytics resets its predictor and releases its cached backend.
+            model.predictor = None
+            del model
+            gc.collect()
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+
     def warmup(self, image_path: str | Path) -> None:
         self.predict_image(image_path)
 

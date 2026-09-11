@@ -212,6 +212,15 @@ class VideoActivities(ImageActivities):
         # Persist event evidence too, even where a required review cannot fit the API budget.
         selected = set(review_frames)
         selected.update(item.frame_index for event in scan.state.events for item in event.evidence)
+        if run["config"].get("open_scan"):
+            # Reuse this decode pass even when VLM reviews consumed a smaller reserved budget.
+            negative_frames = [
+                item.frame_index
+                for item in scan.state.audit_frames
+                if observations[item.frame_index].quality.adequate
+                and not observations[item.frame_index].detection.detections
+            ]
+            selected.update(negative_frames[: run["config"]["open_scan"]["max_frames"]])
         artifacts = []
         if selected:
             with closing(
@@ -385,6 +394,9 @@ class VideoActivities(ImageActivities):
             errors,
             force_review=run["config"]["force_review"] or configuration_changed,
         )
+        from pipe_inspector.workflow.open_scan_activities import apply_open_results
+
+        decision = apply_open_results(self.repo, run, decision)
         partial = bool(
             error or errors or decision.needs_review or decision.inspection_result == "inconclusive"
         )

@@ -37,14 +37,15 @@ class VideoInspectionWorkflow:
     def current_stage(self) -> str:
         return self.stage
 
-    async def _execute(self, name, payload, **options):
+    async def _execute(self, name, payload, *, retry_policy=None, **options):
         if self.cancel_requested:
             raise CancelledError()
         self.active = workflow.start_activity(
             name,
             payload,
             cancellation_type=workflow.ActivityCancellationType.WAIT_CANCELLATION_COMPLETED,
-            retry_policy=RetryPolicy(
+            retry_policy=retry_policy
+            or RetryPolicy(
                 maximum_attempts=3,
                 initial_interval=timedelta(seconds=1),
                 maximum_interval=timedelta(seconds=5),
@@ -95,6 +96,30 @@ class VideoInspectionWorkflow:
                     if self.cancel_requested:
                         raise CancelledError() from None
                     review_errors[str(index)] = self._error(exc)
+            if run["config"].get("open_scan"):
+                self.stage = "tools"
+                selected = await self._execute(
+                    "select_open_scan", run, start_to_close_timeout=timedelta(seconds=60)
+                )
+                for index in range(len(selected["selected"])):
+                    try:
+                        await self._execute(
+                            "scan_open_candidate",
+                            {"run": run, "index": index},
+                            task_queue=run["config"]["gpu_queue"],
+                            start_to_close_timeout=timedelta(seconds=180),
+                            retry_policy=RetryPolicy(
+                                maximum_attempts=(run["config"].get("plan") or {})
+                                .get("budget", {})
+                                .get("max_transport_attempts", 3),
+                                initial_interval=timedelta(seconds=1),
+                                maximum_interval=timedelta(seconds=5),
+                            ),
+                        )
+                    except ActivityError as exc:
+                        if self.cancel_requested:
+                            raise CancelledError() from None
+                        error = error or self._error(exc)
         except ActivityError as exc:
             error = self._error(exc)
         except (CancelledError, asyncio.CancelledError):
