@@ -6,7 +6,7 @@ from uuid import UUID, uuid5
 from temporalio import activity
 from temporalio.exceptions import ApplicationError, CancelledError
 
-from pipe_inspector.agent.open_scan import merge_open_candidates
+from pipe_inspector.agent.open_scan import merge_open_candidates, open_scan_reason
 from pipe_inspector.contracts.assets import AssetRef
 from pipe_inspector.contracts.inspection import ImageObservation, ImageReview
 from pipe_inspector.contracts.open_scan import OpenDetectionBatch, OpenScanEvidence
@@ -108,14 +108,13 @@ class OpenScanActivities:
             raw = self.repo.load_step(task_id, "detect")
             if raw:
                 obs = ImageObservation.model_validate(raw)
-                reason = (
-                    "explicit_request"
-                    if explicit
-                    else "suspected_miss"
-                    if self._suspected(self.repo.load_step(task_id, "verify"))
-                    else "negative_audit"
-                    if obs.quality.adequate and not obs.detection.detections
-                    else None
+                verified = self.repo.load_step(task_id, "verify")
+                reason = open_scan_reason(
+                    obs,
+                    ImageReview.model_validate(verified["review"])
+                    if verified and verified.get("review")
+                    else None,
+                    explicit=explicit,
                 )
                 if reason:
                     eligible.append(

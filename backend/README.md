@@ -88,7 +88,28 @@ SEWER_RUN_OPEN_SCAN_TEST=1 .venv/bin/pytest backend/tests/integration/test_open_
 .venv/bin/python .trellis/tasks/09-11-m3-open-candidates/smoke.py
 ```
 
-第二条只在本服务器运行两张固定原图的 GPU 冒烟，生成原图坐标框和原始 JSON，不调用 API。零样本 YOLOE 的管网准确率未通过验收，默认仍关闭；T11 才进行固定集增量对比，不用候选数量替代准确率。
+第二条只在本服务器运行两张固定原图的 GPU 冒烟，生成原图坐标框和原始 JSON，不调用 API。零样本 YOLOE 的管网准确率未通过验收，默认仍关闭；T11 固定集增量对比见下文，不用候选数量替代准确率。
+
+## 固定集增量评估（T11）
+
+离线入口复用 48 张 Sewer2403 的已接受引导复核缓存，加 8 张真实视频证据帧的历史复核，仅条件式运行本地 YOLOE；不重新调用 VLM。图片使用 `guided-confidence-v2`，视频沿用历史 `image-review-v1` / `video-review-v1` 的事件输出，两组分开报告。它不修改生产复核策略或原标签。
+
+```bash
+.venv/bin/python -m pipe_inspector.evaluation.incremental \
+  --fixed-manifest .trellis/tasks/09-11-m3-incremental-evaluation/fixed-set.json \
+  --guided-state var/evaluations/2026-09-11-confidence/paired/state.json \
+  --guided-state var/evaluations/2026-09-11-confidence/regression/state.json \
+  --video-cache var/evaluations/2026-09-11-incremental/video-cache.json \
+  --model var/models/yoloe/yoloe-26s-seg.pt \
+  --text-encoder var/models/yoloe/mobileclip2_b.ts \
+  --output var/evaluations/2026-09-11-incremental/verified
+```
+
+生成 `state.json`（固定输入/版本/逐样本检查点）、`summary.json`、`review-queue.csv`、`gallery/index.html`。CLI 按清单校验 48+8 的固定身份与策略，少传/换样本会拒绝。同参数重跑复用成功及失败记录，不重复计算；只补未完成项。要重新尝试已记录的模型错误，使用新输出目录，保留首次证据。单写进程运行；计算后落盘前的崩溃仍可能重复本地调用，不承诺 exactly-once。CSV 含 finding ID、来源/帧定位与图库链接，已有人工意见不覆盖；本轮仅导出，未自动导入为新真值。
+
+版本约束采用 ID/路径/配置快照，不校验文件内容指纹：原图、权重和编码器不得原位替换同名文件；修改资产必须换身份/版本路径并使用新的评测目录。不会检测“相同路径、相同尺寸但像素已被改写”的情况，不应把元数据一致说成文件内容完整性证明。
+
+`primary` 是原检测；`guided` 是已保存的复核融合；`combined` 是加上开放待审五类后的候选集合，**不是自动确认结果**。`OTHER` 单列人工待审。指标按原标注匹配，未匹配不能直接判定真实误报；视频无人工真值，指标为 null。图库逐项保留原图、原检测、VLM 新增建议、既有融合、开放模型全部框及去重后的待审联合层，跳过/失败/无标注明确显示。域内图片可能训练重叠，视频帧不代表全片覆盖；结论与证据见 [T11 交付记录](../.trellis/tasks/09-11-m3-incremental-evaluation/report.md)。
 
 ## 统一契约入口
 

@@ -10,12 +10,28 @@ from pipe_inspector.contracts.findings import (
     FindingSource,
     ReviewStatus,
 )
-from pipe_inspector.contracts.inspection import InspectionDecision
+from pipe_inspector.contracts.inspection import ImageObservation, ImageReview, InspectionDecision
 from pipe_inspector.contracts.open_scan import OpenCandidate, OpenScanEvidence
 from pipe_inspector.contracts.tasks import CoverageSummary, InspectionResult
 
 OPEN_CANDIDATE_REVIEW_REASON = "open_candidate_requires_review"
 OPEN_SCAN_INCOMPLETE_REASON = "open_scan_incomplete"
+
+
+def open_scan_reason(
+    observation: ImageObservation, review: ImageReview | None, *, explicit: bool = False
+) -> str | None:
+    """Shared single-image gate; video scheduling additionally applies audit/event budgets."""
+    if explicit:
+        return "explicit_request"
+    if review and (
+        review.additional_anomalies
+        or any(candidate.verdict == "need_more_context" for candidate in review.candidates)
+    ):
+        return "suspected_miss"
+    if observation.quality.adequate and not observation.detection.detections:
+        return "negative_audit"
+    return None
 
 
 def _intersection_over_union(
@@ -51,8 +67,7 @@ def _is_duplicate(
                 evidence.asset == scan.asset
                 and evidence.frame_index == scan.frame_index
                 and evidence.region is not None
-                and _intersection_over_union(evidence.region.bbox_xyxy, candidate.bbox_xyxy)
-                >= 0.5
+                and _intersection_over_union(evidence.region.bbox_xyxy, candidate.bbox_xyxy) >= 0.5
             ):
                 return True
     return False

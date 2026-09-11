@@ -70,10 +70,18 @@ class YOLOEOpenDetector:
         if not image_path.is_file():
             raise FileNotFoundError(f"input image does not exist: {image_path}")
 
+        source: Any = str(image_path)
+        if not image_path.suffix:
+            # MediaStorage uses extensionless `source` files; the vendor path loader
+            # filters by suffix. Decode the original pixels without re-encoding a file.
+            from PIL import Image
+
+            with Image.open(image_path) as original:
+                source = original.convert("RGB")
         model = self._ensure_model()
         results = tuple(
             model.predict(
-                source=str(image_path),
+                source=source,
                 device=self.device,
                 imgsz=self.image_size,
                 conf=self.confidence,

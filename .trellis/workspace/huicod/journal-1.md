@@ -569,3 +569,37 @@ T08 工程验收完成。两段真实视频4259帧、SIGTERM恢复和有界复�
 ### Next Steps
 
 - T11 小型固定集比较主检测/VLM/开放候选增量，人工区分漏标与误报；恢复先读T10 report.md。
+
+
+## Session 18: T11 固定集增量评测与实图交付
+
+**Date**: 2026-09-11
+**Task**: T11 固定集增量评测与实图交付
+
+### Summary
+
+48图+8实帧固定重放，工程评测完成；开放模型未证明增量召回，仍默认关闭。
+
+### Main Changes
+
+- 新增固定清单校验、检查点恢复、阶段指标、图库及可定位人工审核CSV；修正YOLOE读取无扩展名媒体。
+- 复用55成功VLM缓存及1历史错误，新增API请求0；未改.env、安装依赖、启动产品服务或推送。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `jj yvnxyszk` | (see git log) |
+
+### Testing
+
+- [OK] 后端667 passed/84 skipped；真实PG/Temporal开放扫描3 passed；Ruff与定向恢复通过。
+- [OK] 56样本：32扫描成功、24未触发、13候选待审；21/21高置信原框保留，开放层无新增原标注召回；完整证据在var/evaluations/2026-09-11-incremental/verified。
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- 先读T11 report.md与review-resolution.md；下一任务T12图像增强/质量门控，自动增强无收益时保持关闭；准确率仍需人工真值。

@@ -21,6 +21,21 @@ EXPECTED_VOCABULARY = (
 )
 
 
+def test_extensionless_media_asset_is_decoded_before_vendor_prediction(tmp_path, monkeypatch):
+    from PIL import Image
+
+    checkpoint, encoder, _ = local_assets(tmp_path)
+    image_path = tmp_path / "source"
+    Image.new("RGB", (200, 100), color=(12, 34, 56)).save(image_path, format="PNG")
+    models, _ = install_fake_vendor(monkeypatch)
+    detector = detector_module.YOLOEOpenDetector(checkpoint, encoder)
+    detector.predict_image(image_path)
+    source = models[0].predict_calls[0]["source"]
+    assert isinstance(source, Image.Image)
+    assert source.size == (200, 100)
+    assert source.getpixel((0, 0)) == (12, 34, 56)
+
+
 class FakeTensor:
     def __init__(self, values: list[Any], owner: FakeResult) -> None:
         self._values = values
