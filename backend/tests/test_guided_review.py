@@ -9,7 +9,7 @@ from pipe_inspector.contracts.detection import Detection, DetectionBatch
 from pipe_inspector.contracts.inspection import ImageObservation, QualitySummary
 
 
-def observation(count=1):
+def observation(count=1, score=0.9):
     return ImageObservation(
         detection=DetectionBatch(
             detector_id="cached",
@@ -18,7 +18,9 @@ def observation(count=1):
             width=640,
             height=480,
             detections=tuple(
-                Detection(label="PL", native_label="PL", score=0.9, bbox_xyxy=(200, 100, 300, 200))
+                Detection(
+                    label="PL", native_label="PL", score=score, bbox_xyxy=(200, 100, 300, 200)
+                )
                 for _ in range(count)
             ),
         ),
@@ -146,7 +148,7 @@ def test_fusion_revises_in_place_and_rejects_without_mutating_observation():
     from pipe_inspector.agent.guided_review import GuidedReview
     from pipe_inspector.evaluation.guided import fuse_guided
 
-    obs = observation(2)
+    obs = observation(2, score=0.7)
     before = obs.model_dump()
     payload = response([candidate(0, "revise", label="BLOCK"), candidate(1, "reject")])
     payload.pop("coordinate_space")
@@ -155,6 +157,60 @@ def test_fusion_revises_in_place_and_rejects_without_mutating_observation():
     assert result["predictions"][0]["bbox_xyxy"] == [200, 100, 300, 200]
     assert [c["action"] for c in result["changes"]] == ["revise", "reject"]
     assert obs.model_dump() == before
+
+
+@pytest.mark.parametrize("score", [0.85, 0.8661702871, 0.9408751130, 0.9433636069])
+@pytest.mark.parametrize("verdict,label", [("reject", None), ("revise", "BLOCK")])
+def test_high_confidence_disagreement_keeps_exact_detector_evidence(score, verdict, label):
+    from pipe_inspector.agent.guided_review import GuidedReview
+    from pipe_inspector.evaluation.guided import fuse_guided
+
+    obs = observation(score=score)
+    before = obs.model_dump()
+    payload = response([candidate(verdict=verdict, label=label)])
+    payload.pop("coordinate_space")
+    result = fuse_guided(obs, GuidedReview.model_validate(payload))
+    assert result["predictions"] == [dict(label="PL", bbox_xyxy=[200, 100, 300, 200], score=score)]
+    change = result["changes"][0]
+    assert change["action"] == "retain_high_confidence"
+    assert change["pending"] is True
+    assert change["vlm_verdict"] == verdict
+    assert change["proposed_label"] == label
+    assert "高置信度" in change["gate"]
+    assert obs.model_dump() == before
+
+
+@pytest.mark.parametrize("score", [0.8499, 0.7123959661, 0.5573102832, 0.3012649715])
+def test_low_confidence_clear_rejection_remains_available(score):
+    from pipe_inspector.agent.guided_review import GuidedReview
+    from pipe_inspector.evaluation.guided import fuse_guided
+
+    payload = response([candidate(verdict="reject")])
+    payload.pop("coordinate_space")
+    result = fuse_guided(observation(score=score), GuidedReview.model_validate(payload))
+    assert result["predictions"] == []
+    assert result["changes"][0]["action"] == "reject"
+    assert result["changes"][0]["pending"] is False
+
+
+@pytest.mark.asyncio
+async def test_prompt_and_candidate_metadata_expose_confidence_policy(tmp_path):
+    from pipe_inspector.agent.guided_review import GuidedImageReviewer
+
+    path = tmp_path / "image.png"
+    Image.new("RGB", (640, 480)).save(path)
+    obs = observation(2).model_dump()
+    obs["detection"]["detections"][0]["score"] = 0.85
+    obs["detection"]["detections"][1]["score"] = 0.8499
+    client = Client(response([candidate(0), candidate(1)]))
+    await GuidedImageReviewer(client).review(path, ImageObservation.model_validate(obs))
+    messages = client.requests[0]
+    metadata = json.loads(messages[1]["content"][0]["text"])
+    assert metadata["confidence_policy"]["high_score_threshold"] == 0.85
+    assert [c["protected_by_detector_prior"] for c in metadata["candidates"]] == [True, False]
+    assert "高置信度" in messages[0]["content"]
+    assert "低置信度" in messages[0]["content"]
+    assert len(metadata["views"]) == 3
 
 
 @pytest.mark.parametrize("review_type", ["failure", "uncertain", "unassessable"])

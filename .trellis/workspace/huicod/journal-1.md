@@ -465,3 +465,37 @@ T08 工程验收完成。两段真实视频4259帧、SIGTERM恢复和有界复�
 ### Next Steps
 
 - 先人工核验少量类别/字幕重叠/框范围分歧，再建立人工核验固定集；无已证实的联合精度增益，视频/SEDD/T09仍暂停。
+
+
+## Session 15: 置信度分层复核与固定48图新实测
+
+**Date**: 2026-09-11
+**Task**: 置信度分层复核与固定48图新实测
+
+### Summary
+
+高分原框硬保护，低分仍可鉴别，整图继续补漏。21个高分预测全保留；原标注命中27→34，未补回YOLO原漏目标，不替换默认。完整PNG/HTML/API证据已保存。
+
+### Main Changes
+
+- jj kqysvuqx：Prompt v2、confidence fusion v2、阈值pin/边界回归、图库拟改类别可见；基线8c8dfb59。
+- 用户确认主集7/11/22原高分应保留、17/18低分删除可接受；本轮17删除、18不确定保留，7响应schema失败回退；未改源GT。
+- 报告 .trellis/tasks/09-11-confidence-review/report.md；证据 var/evaluations/2026-09-11-confidence/index.html。旧响应离线重放与新API实测分开，全部旧产物保留。
+
+### Git Commits
+
+本地 jj change `kqysvuqx`（包含实现与验证）；未推送远端。
+
+### Testing
+
+- [OK] 后端526 passed / 75 skipped；47项相关测试通过；独立审查无阻断问题，Ruff/格式及diff检查通过。
+- [OK] 48份请求、47有效响应、1 schema失败无重试。主集24/34/10，回归10/13/2（TP/原标注未匹配/FN）；48原图、192PNG尺寸及离线汇总核对一致。
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- 先核验主集14/15/21/28与回归6的低分改类/删除及部分未标注新增，不继续无界重跑或据当前数据追阈值。
+- 视频/SEDD/T09仍暂停；未部署、改环境或推送；worker默认不变。

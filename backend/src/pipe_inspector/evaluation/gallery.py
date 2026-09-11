@@ -281,6 +281,10 @@ def _changes_markup(changes: Sequence[Mapping[str, Any]]) -> str:
             bits.append(f"新增序号：{change['additional_index']}")
         if change.get("label") is not None:
             bits.append(f"类别：{change['label']}")
+        if change.get("vlm_verdict") is not None:
+            bits.append(f"VLM 裁决：{change['vlm_verdict']}")
+        if change.get("proposed_label") is not None:
+            bits.append(f"VLM 建议类别：{change['proposed_label']}")
         if change.get("gate") is not None:
             bits.append(f"门控：{change['gate']}")
         if change.get("bbox_xyxy") is not None:

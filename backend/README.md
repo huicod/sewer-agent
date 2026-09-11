@@ -183,6 +183,6 @@ SEWER_RUN_STORAGE_TEST=1 .venv/bin/python -m pytest backend/tests/integration/te
 
 已完成真实 Sewer2403 配对试验，但原训练划分清单缺失，不能称为独立泛化测试；五类空标签也不等于管道正常。历史数据要求见[评估说明](../.trellis/tasks/09-10-m2-video-core/evaluation-report.md)。
 
-新的 YOLO 引导复核仅用于离线实验，不替换 worker 默认策略：`scripts/guided_review_eval.py --baseline <已有 state.json> --output <新实验目录> --live` 复用完全相同的检测/画质缓存，每张一次 VLM 请求，保存输入视图、逐框回答和融合预测。去掉 `--live` 只复算已存结果。明确证据可删除/原框改类；不确定保留原框；新增须可定位且无重复/类别冲突。P/R 必须同集比较，不能把待审队列或自动确认子集混成整体效果。
+YOLO 引导复核仍仅用于实验，不替换 worker 默认策略：`scripts/guided_review_eval.py --baseline <已有 state.json> --output <新实验目录> --live` 复用完全相同的检测/画质缓存，每张一次 VLM 请求，保存输入视图、逐框回答和融合预测。当前 `yolo-guided-review-v2` / `guided-confidence-v2` 将 score≥0.85 的原类别、框和分数保留，VLM 否决/改类仅记录待审；低分候选仍允许明确证据下的删除/原框改类，不确定保留。新增须可定位且无重复/类别冲突。去掉 `--live` 只复算同版本已存结果；新版本必须用新目录，不能把旧响应冒充新 Prompt 实测。
 
-`evaluation.gallery.export_gallery(manifest, records, output_dir)` 导出全部图片的原图、YOLO、VLM 新增建议（融合前）、实际融合预测、标注及逐框理由。SVG 嵌入未经改写的原始图片；GT 只参与评分和展示，不进入模型。实验详情及证据入口见[本轮记录](../.trellis/tasks/09-11-guided-review/report.md)。
+`evaluation.gallery.export_gallery(manifest, records, output_dir)` 导出全部图片的原图、YOLO、VLM 新增建议（融合前）、实际融合预测、标注及逐框理由。SVG 嵌入未经改写的原始图片；GT 只参与评分和展示，不进入模型。P/R 按同一原标注计算，未匹配框不等于人工确认误报；高分保留也不等于 VLM 确认正确。最新实验及逐图入口见[置信度分层复核记录](../.trellis/tasks/09-11-confidence-review/report.md)，[上轮结果](../.trellis/tasks/09-11-guided-review/report.md)保持不变。

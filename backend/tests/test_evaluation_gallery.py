@@ -124,6 +124,28 @@ def test_image_level_pending_and_incomplete_audit_are_visible(tmp_path):
     assert "全图审计：未完成" in detail
 
 
+def test_protected_disagreement_displays_vlm_proposal_separately_from_kept_class(tmp_path):
+    from pipe_inspector.contracts.inspection import ImageObservation
+    from pipe_inspector.evaluation.guided import fuse_guided
+
+    fixed = _manifest(tmp_path, ("first",))
+    record = _record("first")
+    record["review"]["candidates"][0]["evidence_strength"] = "clear"
+    record.update(
+        fuse_guided(
+            ImageObservation.model_validate(record["observation"]),
+            GuidedReview.model_validate(record["review"]),
+        )
+    )
+    export_gallery(fixed, [record], tmp_path / "gallery")
+    directory = tmp_path / "gallery" / "sample-0001"
+    detail = (directory / "index.html").read_text()
+    assert "VLM 裁决：revise" in detail
+    assert "VLM 建议类别：FS" in detail
+    assert "retain_high_confidence" in detail
+    assert _box_attributes(directory / "fused.svg")["data-label"] == "PL"
+
+
 def test_export_copies_manifest_images_and_draws_exact_scored_boxes(tmp_path) -> None:
     fixed = _manifest(tmp_path, ("first", "second"))
     originals = [sample.image_path.read_bytes() for sample in fixed.samples]

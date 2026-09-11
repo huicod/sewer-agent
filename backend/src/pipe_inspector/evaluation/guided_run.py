@@ -24,6 +24,7 @@ from pydantic import BaseModel
 
 from pipe_inspector.agent.api_client import APIClientError, OpenAICompatibleClient
 from pipe_inspector.agent.guided_review import (
+    GUIDED_HIGH_SCORE_THRESHOLD,
     GUIDED_PROMPT_VERSION,
     SYSTEM_PROMPT,
     VIEW_POLICY_VERSION,
@@ -109,6 +110,7 @@ def _run_pins(provider_settings: Mapping[str, Any]) -> dict[str, Any]:
         },
         "fusion": {
             "version": FUSION_VERSION,
+            "high_score_threshold": GUIDED_HIGH_SCORE_THRESHOLD,
             "novelty_iou": NOVELTY_IOU,
             "addition_duplicate_iou": ADDITION_DUPLICATE_IOU,
         },

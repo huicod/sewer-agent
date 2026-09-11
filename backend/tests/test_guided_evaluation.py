@@ -173,6 +173,27 @@ async def test_resume_rejects_changed_baseline_pins_or_observation_before_call(t
     assert reviewer.calls == 1
 
 
+@pytest.mark.asyncio
+async def test_resume_rejects_changed_protection_threshold_before_call(tmp_path, monkeypatch):
+    from pipe_inspector.evaluation import guided_run
+
+    baseline = _baseline(tmp_path, [_observation()])
+    output = tmp_path / "guided"
+    reviewer = _Reviewer(_guided_review())
+    settings = {"model": "fixture"}
+    await guided_run.run_cached_evaluation(
+        baseline, output, reviewer=reviewer, provider_settings=settings
+    )
+    saved = json.loads((output / "state.json").read_text())
+    assert saved["run_pins"]["fusion"]["high_score_threshold"] == 0.85
+    monkeypatch.setattr(guided_run, "GUIDED_HIGH_SCORE_THRESHOLD", 0.9)
+    with pytest.raises(ValueError, match="guided pins"):
+        await guided_run.run_cached_evaluation(
+            baseline, output, reviewer=reviewer, provider_settings=settings
+        )
+    assert reviewer.calls == 1
+
+
 def _record(
     sample_id: str,
     observation: dict,

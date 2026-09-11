@@ -4,11 +4,11 @@ No ground truth is accepted here. All advice remains in the record; only the
 returned predictions are scored. Uncertainty/failure does not erase a prediction.
 """
 
-from pipe_inspector.agent.guided_review import GuidedReview
+from pipe_inspector.agent.guided_review import GUIDED_HIGH_SCORE_THRESHOLD, GuidedReview
 from pipe_inspector.contracts.inspection import ImageObservation
 from pipe_inspector.evaluation.review import LABELS, LabeledBox, _iou, _raw_boxes
 
-FUSION_VERSION = "guided-balanced-v1"
+FUSION_VERSION = "guided-confidence-v2"
 NOVELTY_IOU = 0.3
 ADDITION_DUPLICATE_IOU = 0.5
 
@@ -23,8 +23,16 @@ def fuse_guided(observation: ImageObservation, review: GuidedReview | None) -> d
             review and review.image_assessable and advice and advice.evidence_strength == "clear"
         )
         action, pending, prediction = "retain_pending", True, original
+        gate = None
         if clear and advice.verdict == "accept":
             action, pending = "accept", False
+        elif (
+            clear
+            and advice.verdict in ("reject", "revise")
+            and original.score >= GUIDED_HIGH_SCORE_THRESHOLD
+        ):
+            action = "retain_high_confidence"
+            gate = "高置信度原类别、原框和原分数保留；VLM 否决/改类建议仅交人工复审"
         elif clear and advice.verdict == "reject":
             action, pending, prediction = "reject", False, None
         elif clear and advice.verdict == "revise":
@@ -40,6 +48,9 @@ def fuse_guided(observation: ImageObservation, review: GuidedReview | None) -> d
                 label=prediction.label.value if prediction else original.label.value,
                 bbox_xyxy=list(original.bbox_xyxy),
                 reason=advice.reason if advice else "复核失败或缺失，保留原检测待审",
+                vlm_verdict=advice.verdict if advice else None,
+                proposed_label=advice.proposed_label if advice else None,
+                gate=gate,
             )
         )
     accepted_additions = []
