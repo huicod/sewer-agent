@@ -33,9 +33,14 @@ open-scan = [
 qwen-sdk = ["openai==3.11.0", "dashscope==1.27.4"]
 # Offline alternative-detector experiments; provision public safetensors separately.
 open-scan-hf = ["transformers==4.57.6"]
+# Local restoration architectures; use the existing GPU torch environment.
+enhancement = ["einops==0.8.1"]
 
 [tool.setuptools.packages.find]
 where = ["backend/src"]
+
+[tool.setuptools.package-data]
+"pipe_inspector.vision._enhancement_vendor" = ["*.md", "*.txt"]
 
 [tool.pytest.ini_options]
 testpaths = ["backend/tests"]

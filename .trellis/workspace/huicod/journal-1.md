@@ -671,3 +671,37 @@ MM-GDINO Base与OWLv2 Large完成固定48图本地对比；模型效果未获替
 ### Next Steps
 
 - T12尚未开发；继续原计划时不要重新启用开放补检。部署需统一新版API/CPU/GPU worker。
+
+
+## Session 21: 恢复 T12：三种增强工具与原图对照完成，在线集成待续
+
+**Date**: 2026-09-12
+**Task**: 恢复 T12：三种增强工具与原图对照完成，在线集成待续
+
+### Summary
+
+T12-A 完成，保留五类/VLM/融合及开放补检退出在线的边界；T12 整体未完成。
+
+### Main Changes
+
+- 统一派生资产/ROI 坐标映射、保守自动关闭门控、DehazeFormer-MCT/Restormer/Real-ESRGAN 三种真实本地适配器；仅新增可选 einops。
+- 完整图库和 JSON 在 var/evaluations/2026-09-12-enhancement；详见 09-12-m4-enhancement-tools/report.md 与 model-report.md。无新 API 调用、服务启动、删除、回退或推送。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `jj nnvxzzxz` | (see git log) |
+
+### Testing
+
+- [OK] 后端 753 passed/84 skipped；Ruff 与 diff 检查通过；一次独立审查无 P1/P2。
+- [OK] 三种 GPU 冒烟成功，三张 Sewer2403 的 9 次增强全部成功；累计工具耗时 12.782 秒。不代表检测精度提升；过暗仍未解决，超分可能平滑细纹。
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- 继续 T12-B：受约束对话、GPU Activity/持久检查点、阶段展示、报告和辅助复检。自动增强仍关闭；不要调整 VLM Prompt/融合或重新启用开放补检。

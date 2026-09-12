@@ -1,0 +1,17 @@
+[
+  {
+    "sample_id": "sample-0008",
+    "image": "var/evaluations/2026-09-11-confidence/paired/gallery/sample-0008/original.jpg",
+    "roi": [40, 130, 296, 386]
+  },
+  {
+    "sample_id": "sample-0022",
+    "image": "var/evaluations/2026-09-11-confidence/paired/gallery/sample-0022/original.jpg",
+    "roi": [150, 50, 406, 306]
+  },
+  {
+    "sample_id": "sample-0025",
+    "image": "var/evaluations/2026-09-11-confidence/paired/gallery/sample-0025/original.jpg",
+    "roi": [140, 220, 396, 476]
+  }
+]

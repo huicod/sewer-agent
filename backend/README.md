@@ -274,4 +274,29 @@ YOLO 引导复核仍仅用于实验，不替换 worker 默认策略：`scripts/g
 当前原生实现采用 MM FP32、OWLv2 eager FP16；版本元数据检查不是文件内容哈希，
 不得原位替换同版本权重/处理器/图片，换资产应使用新版本和新实验目录。
 新增框均为待审，OTHER 不计入五类指标；各模型阈值、分辨率、计时口径不同，不能按框数
-判胜或宣称严格速度排名。生产补检依然默认关闭，未将替代模型接入在线 worker。
+判胜或宣称严格速度排名。开放补检现已退出在线入口和 worker；上述入口仅保留为历史离线实验。
+
+## 图像增强工具（T12-A，尚未接入在线对话）
+
+本地适配器支持 DehazeFormer-MCT 去雾、Restormer motion 去模糊和 Real-ESRGAN
+`realesr-general-x4v3` ROI 四倍超分。使用已有 GPU PyTorch 环境，额外依赖仅
+`einops==0.8.1`（`enhancement` 可选依赖组）。固定权重来源、版本及许可见
+[模型记录](../.trellis/tasks/09-12-m4-enhancement-tools/model-report.md)。推理只读取本地可信权重，不联网下载。
+
+```bash
+.venv/bin/python -m pipe_inspector.evaluation.enhancement \
+  --manifest .trellis/tasks/09-12-m4-enhancement-tools/samples.json \
+  --models-dir var/models/enhancement \
+  --output var/evaluations/enhancement-example-001
+```
+
+输出目录必须不存在；该离线比较入口不提供断点续跑。每张样本显式比较三种工具，输出
+`index.html`、`results.json` 和各 `sample-*/` 下的原图/增强 PNG；失败单独记录，不用插值或锐化冒充模型结果。
+原图保持不变；增强资产记录父资产、模型版本、原始 ROI 坐标和前后质量摘要。
+单次输入最多 1,048,576 像素，输出最多 4,194,304 像素；超分必须提供原图坐标 ROI。
+
+自动门控目前只给建议，不执行模型：低对比不等于有雾，过暗/过曝不会自动套用这些模型。
+锐度、对比度提高不证明缺陷准确率提高，超分前后不同分辨率的锐度值也不能直接比较。
+增强图始终是需复核的派生证据，不可替代原图或用于无标定的真实尺寸测量。
+T12-B 将接入对话、Temporal 检查点、报告和辅助复检；本切片不新增在线工具能力，
+不改变现有 VLM Prompt、五类检测或融合，也不恢复开放补检。

@@ -1,6 +1,7 @@
 """Versioned provisional image-quality gates for the primary still image."""
 
 from pathlib import Path
+from typing import BinaryIO
 
 from PIL import Image, ImageFilter, ImageStat
 
@@ -13,7 +14,7 @@ MIN_CONTRAST = 18.0
 MIN_SHARPNESS = 50.0
 
 
-def analyze_quality(path: Path) -> QualitySummary:
+def analyze_quality(path: Path | BinaryIO) -> QualitySummary:
     with Image.open(path) as image:
         gray = image.convert("L")
         statistics = ImageStat.Stat(gray)
