@@ -1,11 +1,14 @@
 """Durable run pins, tool attempts, checkpoints, and task projections."""
 
+import math
 from uuid import UUID, uuid4
 
 import psycopg
 from psycopg import sql
 from psycopg.types.json import Jsonb
 
+from pipe_inspector.contracts.assets import AssetKind, AssetRecord, AssetRef
+from pipe_inspector.contracts.enhancement import EnhancementKind, EnhancementResult
 from pipe_inspector.contracts.intake import TaskRecord
 from pipe_inspector.contracts.tasks import TaskSnapshot
 from pipe_inspector.contracts.tools import ToolCall, ToolCallStatus
@@ -159,6 +162,179 @@ class InspectionRepository(PostgresRepository):
                 return row[0]
         except psycopg.errors.ForeignKeyViolation as error:
             raise MissingRecord from error
+
+    def save_enhancement(
+        self,
+        task_id: UUID,
+        result: EnhancementResult,
+        call: ToolCall,
+    ) -> dict:
+        payload = result.model_dump(mode="json")
+        try:
+            with self._connect() as connection:
+                task_row = connection.execute(
+                    sql.SQL(
+                        """
+                        SELECT input_asset_id, input_asset_version
+                        FROM {} WHERE task_id = %s FOR UPDATE
+                        """
+                    ).format(self._table("sewer_tasks")),
+                    (task_id,),
+                ).fetchone()
+                if task_row is None:
+                    raise MissingRecord
+                checkpoint = connection.execute(
+                    sql.SQL(
+                        "SELECT payload FROM {} WHERE task_id = %s AND step = 'enhance'"
+                    ).format(self._table("sewer_step_checkpoints")),
+                    (task_id,),
+                ).fetchone()
+                run_row = connection.execute(
+                    sql.SQL("SELECT run_id, config FROM {} WHERE task_id = %s").format(
+                        self._table("sewer_inspection_runs")
+                    ),
+                    (task_id,),
+                ).fetchone()
+                if run_row is None:
+                    raise MissingRecord
+                pin = self._enhancement_pin(run_row[1])
+                self._validate_enhancement_call_identity(task_id, run_row[0], pin, call)
+                if checkpoint is not None:
+                    return EnhancementResult.model_validate(checkpoint[0]).model_dump(mode="json")
+
+                input_ref = AssetRef(asset_id=task_row[0], version=task_row[1])
+                input_row = connection.execute(
+                    sql.SQL(
+                        "SELECT record FROM {} WHERE asset_id = %s AND version = %s"
+                    ).format(self._table("sewer_assets")),
+                    (input_ref.asset_id, input_ref.version),
+                ).fetchone()
+                if input_row is None:
+                    raise MissingRecord
+                input_asset = AssetRecord.model_validate(input_row[0])
+                self._validate_enhancement_first_write(
+                    input_asset, result, call, pin
+                )
+                existing_output = connection.execute(
+                    sql.SQL(
+                        "SELECT 1 FROM {} WHERE asset_id = %s AND version = %s"
+                    ).format(self._table("sewer_assets")),
+                    (result.output_asset.ref.asset_id, result.output_asset.ref.version),
+                ).fetchone()
+                if existing_output is not None:
+                    raise SubmissionConflict
+                self._save_asset(connection, result.output_asset)
+                self._record_call(connection, call)
+                connection.execute(
+                    sql.SQL(
+                        "INSERT INTO {} (task_id, step, payload) VALUES (%s, 'enhance', %s)"
+                    ).format(self._table("sewer_step_checkpoints")),
+                    (task_id, Jsonb(payload)),
+                )
+                return payload
+        except psycopg.errors.ForeignKeyViolation as error:
+            raise MissingRecord from error
+
+    @staticmethod
+    def _enhancement_pin(config: dict) -> dict:
+        pin = config.get("enhancement") if isinstance(config, dict) else None
+        if not isinstance(pin, dict):
+            raise SubmissionConflict
+        return pin
+
+    @staticmethod
+    def _validate_enhancement_call_identity(
+        task_id: UUID,
+        run_id: UUID,
+        pin: dict,
+        call: ToolCall,
+    ) -> None:
+        if (
+            call.task_id != task_id
+            or call.step_id != "enhance"
+            or call.idempotency_key != f"{run_id}:enhance"
+            or str(call.call_id) != pin.get("call_id")
+        ):
+            raise SubmissionConflict
+
+    @staticmethod
+    def _enhancement_source_box(
+        input_asset: AssetRecord,
+        result: EnhancementResult,
+        options: object,
+    ) -> tuple[int, int, int, int]:
+        if not isinstance(options, dict) or set(options) != {"kind", "roi_xyxy"}:
+            raise SubmissionConflict
+        if options["kind"] != result.kind:
+            raise SubmissionConflict
+        roi = options["roi_xyxy"]
+        if result.kind == EnhancementKind.SUPER_RESOLUTION and roi is None:
+            raise SubmissionConflict
+        if roi is None:
+            box = (0, 0, input_asset.width, input_asset.height)
+        else:
+            if (
+                not isinstance(roi, (list, tuple))
+                or len(roi) != 4
+                or any(
+                    isinstance(value, bool) or not isinstance(value, (int, float))
+                    for value in roi
+                )
+                or any(not math.isfinite(value) for value in roi)
+            ):
+                raise SubmissionConflict
+            x1, y1, x2, y2 = roi
+            if not (
+                0 <= x1 < x2 <= input_asset.width
+                and 0 <= y1 < y2 <= input_asset.height
+            ):
+                raise SubmissionConflict
+            box = (math.floor(x1), math.floor(y1), math.ceil(x2), math.ceil(y2))
+        if (
+            result.source_region.width != input_asset.width
+            or result.source_region.height != input_asset.height
+            or result.source_region.bbox_xyxy != box
+        ):
+            raise SubmissionConflict
+        return box
+
+    @classmethod
+    def _validate_enhancement_first_write(
+        cls,
+        input_asset: AssetRecord,
+        result: EnhancementResult,
+        call: ToolCall,
+        pin: dict,
+    ) -> None:
+        if (
+            input_asset.kind != AssetKind.IMAGE
+            or input_asset.parent is not None
+            or result.input_asset != input_asset.ref
+            or result.output_asset.kind != AssetKind.ENHANCED_IMAGE
+            or result.output_asset.parent != input_asset.ref
+            or result.output_asset.ref == input_asset.ref
+        ):
+            raise SubmissionConflict
+        if (
+            pin.get("version") != "enhancement-online-v1"
+            or pin.get("model_id") != result.model_id
+            or pin.get("model_version") != result.model_version
+        ):
+            raise SubmissionConflict
+        box = cls._enhancement_source_box(input_asset, result, pin.get("options"))
+        scale = 4 if result.kind == EnhancementKind.SUPER_RESOLUTION else 1
+        expected_size = ((box[2] - box[0]) * scale, (box[3] - box[1]) * scale)
+        if (result.output_asset.width, result.output_asset.height) != expected_size:
+            raise SubmissionConflict
+        if (
+            call.status != ToolCallStatus.SUCCEEDED
+            or call.tool_name != "enhance"
+            or call.resource != "gpu"
+            or call.input_assets != (input_asset.ref,)
+            or call.output_assets != (result.output_asset.ref,)
+            or call.model_version != result.model_version
+        ):
+            raise SubmissionConflict
 
     def _record_call(self, connection: psycopg.Connection, call: ToolCall) -> None:
         row = connection.execute(

@@ -25,6 +25,8 @@ class Settings(BaseSettings):
         "yolov26/experiments/sewer2403_5class_yolo26s_img960_e100/weights/best.pt"
     )
     detector_device: str = "0"
+    enhancement_models_dir: Path = Path("var/models/enhancement")
+    enhancement_device: str = "cuda:0"
     open_detector_path: Path | None = None
     open_text_encoder_path: Path | None = None
     open_scan_confidence: float = Field(default=0.25, gt=0, le=1, allow_inf_nan=False)

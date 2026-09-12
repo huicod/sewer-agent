@@ -13,14 +13,10 @@ from pipe_inspector.agent.enhancement_policy import ENHANCEMENT_POLICY_VERSION, 
 from pipe_inspector.contracts.common import ContractModel, ImageRegion
 from pipe_inspector.contracts.enhancement import EnhancementRequest
 from pipe_inspector.media import MediaStore
-from pipe_inspector.vision.enhancement import run_enhancement
+from pipe_inspector.vision.enhancement import ENHANCEMENT_MODELS, run_enhancement
 from pipe_inspector.vision.quality import analyze_quality
 
-CHECKPOINTS = {
-    "dehaze": "dehazeformer-mct-8e0b26c7.pth",
-    "deblur": "restormer-motion-v1.0.pth",
-    "super_resolution": "realesr-general-x4v3-v0.2.5.0.pth",
-}
+CHECKPOINTS = {kind: item[1] for kind, item in ENHANCEMENT_MODELS.items()}
 NAMES = {"dehaze": "去雾", "deblur": "去模糊", "super_resolution": "ROI 超分 ×4"}
 
 

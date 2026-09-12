@@ -9,6 +9,7 @@ from pydantic import Field, model_validator
 
 from pipe_inspector.contracts.common import ContractModel, NonEmptyStr
 from pipe_inspector.contracts.detection import DetectionLabel
+from pipe_inspector.contracts.enhancement import EnhancementOptions
 
 
 class ActionKind(StrEnum):
@@ -51,9 +52,14 @@ class TaskPlan(ContractModel):
     steps: tuple[PlanStep, ...]
     outputs: tuple[OutputFormat, ...] = (OutputFormat.JSON, OutputFormat.HTML)
     budget: CallBudget = Field(default_factory=CallBudget)
+    enhancement: EnhancementOptions | None = None
 
     @model_validator(mode="after")
     def validate_plan(self) -> "TaskPlan":
+        if self.enhancement is not None and sum(
+            step.action == ActionKind.ENHANCE for step in self.steps
+        ) != 1:
+            raise ValueError("enhancement options require exactly one enhance step")
         if not self.target_labels or len(set(self.target_labels)) != len(self.target_labels):
             raise ValueError("target_labels must be nonempty and unique")
         if not self.outputs or len(set(self.outputs)) != len(self.outputs):

@@ -22,7 +22,7 @@ from pipe_inspector.agent.supplement_policy import SUPPLEMENT_POLICY_VERSION
 from pipe_inspector.config import Settings
 from pipe_inspector.contracts.assets import AssetKind
 from pipe_inspector.contracts.inspection import ImageObservation
-from pipe_inspector.contracts.intake import TaskSubmission
+from pipe_inspector.contracts.intake import TaskRecord, TaskSubmission
 from pipe_inspector.contracts.planning import ActionKind, TaskPlan
 from pipe_inspector.contracts.tasks import TaskSnapshot
 from pipe_inspector.contracts.video import VideoAggregationConfig
@@ -60,7 +60,7 @@ def run_config(
     )
     independent = settings.image_review_mode == "independent_discovery"
     _reject_retired_plan(plan)
-    return {
+    config = {
         "detector_id": detector.detector_id,
         "model_version": detector.model_version,
         "label_space_version": detector.label_space_version,
@@ -81,6 +81,13 @@ def run_config(
         "force_review": force_review,
         "plan": plan.model_dump(mode="json") if plan is not None else None,
     }
+    if plan and any(s.action == ActionKind.ENHANCE for s in plan.steps):
+        from pipe_inspector.workflow.enhancement_config import build_enhancement_config
+
+        if plan.enhancement is None:
+            raise InspectionStartError("enhancement_parameters_required", "请指定增强种类", 409)
+        config["enhancement"] = build_enhancement_config(settings, plan.enhancement)
+    return config
 
 
 def video_run_config(
@@ -90,6 +97,8 @@ def video_run_config(
     force_review: bool = False,
     plan: TaskPlan | None = None,
 ) -> dict:
+    if plan and any(s.action == ActionKind.ENHANCE for s in plan.steps):
+        raise InspectionStartError("enhancement_image_only", "视频增强尚未接入", 409)
     config = run_config(settings, detector=detector, force_review=force_review, plan=plan) | {
         "operation": "video_inspection",
         "policy_version": "image-policy-v1",
@@ -117,11 +126,35 @@ def _reject_retired_plan(plan: TaskPlan | None) -> None:
         raise InspectionStartError("tool_unavailable", "开放候选补检已停用，请使用 VLM 复检", 409)
 
 
+def validate_existing_admission(
+    record: TaskRecord, submission: TaskSubmission, *, parent_task_id: UUID | None
+) -> TaskRecord:
+    stored_submission = TaskSubmission(
+        request_id=record.request_id,
+        session_id=record.session_id,
+        input_asset=record.input_asset,
+        instruction=record.instruction,
+    )
+    if stored_submission != submission or record.parent_task_id != parent_task_id:
+        raise SubmissionConflict
+    return record
+
+
 class InspectionStarter:
     def __init__(self, settings, repository, *, connect=Client.connect):
         self.settings, self.repo, self.connect = settings, repository, connect
 
-    async def admit_supplement(self, parent_task_id: UUID, submission: TaskSubmission):
+    async def admit_supplement(
+        self, parent_task_id: UUID, submission: TaskSubmission, *, enhancement=None
+    ):
+        if enhancement is not None:
+            existing = await asyncio.to_thread(
+                self.repo.find_task_by_request_id, submission.request_id
+            )
+            if existing is not None:
+                return validate_existing_admission(
+                    existing, submission, parent_task_id=parent_task_id
+                )
         raw = await asyncio.to_thread(self.repo.load_step, parent_task_id, "detect")
         try:
             observation = ImageObservation.model_validate(raw)
@@ -133,6 +166,15 @@ class InspectionStarter:
             parent_task_id=str(parent_task_id),
             supplement_policy_version=SUPPLEMENT_POLICY_VERSION,
         )
+        if enhancement is not None:
+            from pipe_inspector.workflow.enhancement_config import (
+                build_enhancement_config,
+                validate_enhancement_input,
+            )
+
+            asset = await asyncio.to_thread(self.repo.get_asset, submission.input_asset)
+            validate_enhancement_input(asset, enhancement)
+            config["enhancement"] = build_enhancement_config(self.settings, enhancement)
         return await asyncio.to_thread(
             self.repo.admit_supplement, parent_task_id, submission, config
         )
@@ -148,6 +190,10 @@ class InspectionStarter:
                 "unsupported_media", "当前执行器只支持已接纳的图片或视频", 409
             )
         is_video = asset.kind == AssetKind.VIDEO
+        if plan and plan.enhancement is not None:
+            from pipe_inspector.workflow.enhancement_config import validate_enhancement_input
+
+            validate_enhancement_input(asset, plan.enhancement)
         if record.snapshot.is_terminal and plan is None:
             return record
         run = await asyncio.to_thread(self.repo.get_run, task_id)
@@ -190,7 +236,10 @@ class InspectionStarter:
             )
         if plan is not None and (
             run is None
-            or run["config"].get("plan") != plan.model_dump(mode="json")
+            or (
+                TaskPlan.model_validate(run["config"]["plan"])
+                if run["config"].get("plan") is not None else None
+            ) != plan
             or run["config"].get("force_review", False) != force_review
         ):
             raise InspectionStartError(

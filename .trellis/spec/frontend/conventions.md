@@ -8,3 +8,4 @@
 - Display real server stages/progress/errors; T04 queued means accepted but not executed. A chat-style page must not invent an assistant response.
 - UI tests: npm --prefix frontend test; build/typecheck: npm --prefix frontend run build. This server needs .tools/node/bin on PATH, not its older system Node.
 - Component tests use explicit HTTP-boundary responses; real backend/database integration is verified separately. Passing a DOM test is not visual browser acceptance.
+- Enhancement evidence is an on-demand task panel; invalidate requests on task switch/close, refresh expanded panels with server revisions, and distinguish absent output from API failure. Draw ROI in original pixels and label enhanced images as auxiliary evidence, not restored truth or accuracy gains.

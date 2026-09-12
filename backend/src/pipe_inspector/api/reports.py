@@ -6,6 +6,7 @@ from uuid import UUID
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import HTMLResponse, JSONResponse
 
+from pipe_inspector.api.inspection import load_enhancement_detail
 from pipe_inspector.contracts.reports import TaskReport
 from pipe_inspector.reports import render_html
 
@@ -24,7 +25,13 @@ def report_router(repository) -> APIRouter:
                     "message": "任务尚未结束，请先查看实时进度",
                 },
             )
-        report = TaskReport(task=task, tool_calls=repository.list_calls(task_id))
+        enhancement = load_enhancement_detail(repository, task)
+        report = TaskReport(
+            task=task,
+            tool_calls=repository.list_calls(task_id),
+            enhancement=enhancement.result,
+            enhancement_review=enhancement.review,
+        )
         headers = {
             "X-Content-Type-Options": "nosniff",
             "Cache-Control": "no-store",
@@ -32,7 +39,7 @@ def report_router(repository) -> APIRouter:
         }
         if format == "html":
             headers["Content-Security-Policy"] = (
-                "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; "
+                "default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; base-uri 'none'; "
                 "form-action 'none'; frame-ancestors 'none'"
             )
             return HTMLResponse(render_html(report), headers=headers)

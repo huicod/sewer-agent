@@ -6,6 +6,7 @@ from temporalio import workflow
 from temporalio.common import RetryPolicy
 from temporalio.exceptions import ActivityError, ApplicationError
 
+from pipe_inspector.workflow.enhancement import run_image_enhancement
 from pipe_inspector.workflow.human_review import HUMAN_REVIEW_VERSION, HumanReviewGate
 
 
@@ -28,16 +29,22 @@ class ImageSupplementWorkflow:
         error = None
         self.stage = "verifying"
         try:
-            await workflow.execute_activity(
-                "verify_image",
-                run,
-                start_to_close_timeout=timedelta(seconds=run["config"]["api_timeout_seconds"] + 30),
-                retry_policy=RetryPolicy(
-                    maximum_attempts=3,
-                    initial_interval=timedelta(seconds=1),
-                    maximum_interval=timedelta(seconds=5),
-                ),
-            )
+            if "enhancement" in run["config"]:
+                self.stage = "tools"
+                await run_image_enhancement(run)
+            else:
+                await workflow.execute_activity(
+                    "verify_image",
+                    run,
+                    start_to_close_timeout=timedelta(
+                        seconds=run["config"]["api_timeout_seconds"] + 30
+                    ),
+                    retry_policy=RetryPolicy(
+                        maximum_attempts=3,
+                        initial_interval=timedelta(seconds=1),
+                        maximum_interval=timedelta(seconds=5),
+                    ),
+                )
         except ActivityError as exc:
             cause = exc.cause
             error = cause.type if isinstance(cause, ApplicationError) else "activity_interrupted"

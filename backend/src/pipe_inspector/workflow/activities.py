@@ -277,6 +277,7 @@ class ImageActivities:
         run = payload["run"]
         task_id = UUID(run["task_id"])
         error = payload.get("error")
+        enhancement_failed = False
         current = self.repo.get_task(task_id).snapshot
         if current.is_terminal:
             return current.model_dump(mode="json")
@@ -329,10 +330,30 @@ class ImageActivities:
                     if saved_review and saved_review.get("review")
                     else None
                 )
-                decision = self._decide(run, task, observation, review, error)
-                from pipe_inspector.workflow.open_scan_activities import apply_open_results
+                if "enhancement" in run["config"]:
+                    from pipe_inspector.agent.enhancement_fusion import apply_enhancement_review
+                    from pipe_inspector.contracts.enhancement import (
+                        EnhancementResult,
+                        EnhancementReview,
+                    )
+                    from pipe_inspector.workflow.enhancement_activities import enhancement_baseline
 
-                decision = apply_open_results(self.repo, run, decision)
+                    decision = enhancement_baseline(self.repo, run, task, observation, review)
+                    enhanced = self.repo.load_step(task_id, "enhance")
+                    auxiliary = self.repo.load_step(task_id, "enhancement_review")
+                    enhancement_failed = bool(error) or enhanced is None or auxiliary is None
+                    decision = apply_enhancement_review(
+                        decision,
+                        EnhancementResult.model_validate(enhanced) if enhanced else None,
+                        EnhancementReview.model_validate(auxiliary) if auxiliary else None,
+                        task_id=task_id,
+                        error=error,
+                    )
+                else:
+                    from pipe_inspector.workflow.open_scan_activities import apply_open_results
+
+                    decision = self._decide(run, task, observation, review, error)
+                    decision = apply_open_results(self.repo, run, decision)
                 partial = (
                     bool(error)
                     or decision.needs_review
@@ -352,6 +373,7 @@ class ImageActivities:
         if (
             run["config"].get("human_review_version") == "human-review-v1"
             and values["runtime_status"] == "partial"
+            and not enhancement_failed
         ):
             values.update(
                 runtime_status="waiting_review",

@@ -25,6 +25,7 @@ def intent_payload(**changes: Any) -> dict[str, Any]:
         "target_labels": ["PL"],
         "outputs": ["json"],
         "message": "将检查图像并重点报告破裂。",
+        "enhancement": {"kind": "dehaze", "roi_xyxy": None},
     }
     payload.update(changes)
     return payload
@@ -98,10 +99,10 @@ def test_compile_inspection_plan_injects_safe_serial_dependencies_and_existing_b
     assert plan is not None
     assert [step.action for step in plan.steps] == [
         ActionKind.DETECT,
-        ActionKind.ENHANCE,
         ActionKind.SEGMENT,
         ActionKind.RELATIVE_MEASURE,
         ActionKind.VERIFY,
+        ActionKind.ENHANCE,
         ActionKind.SUMMARIZE,
         ActionKind.EXPORT_REPORT,
     ]
@@ -113,6 +114,8 @@ def test_compile_inspection_plan_injects_safe_serial_dependencies_and_existing_b
     assert all(step.required for step in plan.steps)
     assert plan.target_labels == (DetectionLabel.PL,)
     assert plan.outputs == (OutputFormat.JSON,)
+    assert plan.enhancement is not None
+    assert plan.enhancement.kind == "dehaze"
     assert plan.budget.max_tool_calls == 32
     assert plan.budget.max_transport_attempts == 3
 
@@ -170,6 +173,17 @@ def test_compile_rejects_requested_action_missing_from_current_capabilities() ->
 
     assert caught.value.code == "tool_unavailable"
     assert "compare" not in str(caught.value)
+
+
+def test_legacy_enhance_intent_without_options_remains_readable_but_cannot_compile() -> None:
+    intent = ConversationIntent.model_validate(
+        intent_payload(actions=["enhance"], enhancement=None)
+    )
+
+    with pytest.raises(IntentPlanningError) as caught:
+        compile_inspection_plan(intent, available_actions=set(ActionKind))
+
+    assert caught.value.code == "enhancement_parameters_required"
 
 
 @pytest.mark.asyncio

@@ -131,7 +131,7 @@ class PostgresRepository:
         tasks = tuple(TaskRecord.model_validate(task_row[0]) for task_row in task_rows)
         return SessionDetail(session=session, tasks=tasks)
 
-    def save_asset(self, asset: AssetRecord) -> None:
+    def _save_asset(self, connection: psycopg.Connection, asset: AssetRecord) -> None:
         parent = asset.parent
         values = (
             asset.ref.asset_id,
@@ -140,30 +140,33 @@ class PostgresRepository:
             parent.version if parent else None,
             Jsonb(asset.model_dump(mode="json")),
         )
+        inserted = connection.execute(
+            sql.SQL(
+                """
+                INSERT INTO {} (
+                    asset_id, version, parent_asset_id, parent_version, record
+                ) VALUES (%s, %s, %s, %s, %s)
+                ON CONFLICT (asset_id, version) DO NOTHING
+                RETURNING record
+                """
+            ).format(self._table("sewer_assets")),
+            values,
+        ).fetchone()
+        if inserted is not None:
+            return
+        existing = connection.execute(
+            sql.SQL(
+                "SELECT record FROM {} WHERE asset_id = %s AND version = %s"
+            ).format(self._table("sewer_assets")),
+            (asset.ref.asset_id, asset.ref.version),
+        ).fetchone()
+        if existing is None or AssetRecord.model_validate(existing[0]) != asset:
+            raise SubmissionConflict
+
+    def save_asset(self, asset: AssetRecord) -> None:
         try:
             with self._connect() as connection:
-                inserted = connection.execute(
-                    sql.SQL(
-                        """
-                        INSERT INTO {} (
-                            asset_id, version, parent_asset_id, parent_version, record
-                        ) VALUES (%s, %s, %s, %s, %s)
-                        ON CONFLICT (asset_id, version) DO NOTHING
-                        RETURNING record
-                        """
-                    ).format(self._table("sewer_assets")),
-                    values,
-                ).fetchone()
-                if inserted is not None:
-                    return
-                existing = connection.execute(
-                    sql.SQL(
-                        "SELECT record FROM {} WHERE asset_id = %s AND version = %s"
-                    ).format(self._table("sewer_assets")),
-                    (asset.ref.asset_id, asset.ref.version),
-                ).fetchone()
-                if existing is None or AssetRecord.model_validate(existing[0]) != asset:
-                    raise SubmissionConflict
+                self._save_asset(connection, asset)
         except psycopg.errors.ForeignKeyViolation as error:
             raise MissingRecord from error
 
@@ -178,6 +181,16 @@ class PostgresRepository:
         if row is None:
             raise MissingRecord
         return AssetRecord.model_validate(row[0])
+
+    def find_task_by_request_id(self, request_id: UUID) -> TaskRecord | None:
+        with self._connect() as connection:
+            row = connection.execute(
+                sql.SQL("SELECT record FROM {} WHERE request_id = %s").format(
+                    self._table("sewer_tasks")
+                ),
+                (request_id,),
+            ).fetchone()
+        return None if row is None else TaskRecord.model_validate(row[0])
 
     def create_task(self, submission: TaskSubmission) -> TaskRecord:
         created_at = datetime.now(timezone.utc)

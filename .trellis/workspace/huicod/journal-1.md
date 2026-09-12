@@ -705,3 +705,37 @@ T12-A 完成，保留五类/VLM/融合及开放补检退出在线的边界；T12
 ### Next Steps
 
 - 继续 T12-B：受约束对话、GPU Activity/持久检查点、阶段展示、报告和辅助复检。自动增强仍关闭；不要调整 VLM Prompt/融合或重新启用开放补检。
+
+
+## Session 22: T12-B 图片增强对话与持久闭环完成
+
+**Date**: 2026-09-12
+**Task**: T12-B 图片增强对话与持久闭环完成
+
+### Summary
+
+显式图片增强、冻结原结论、原子资产检查点、双图辅助复核、UI报告和恢复验收完成；下一步T13，首版仍未整体完成。
+
+### Main Changes
+
+- 新图片按detect/verify后增强，原任务单次关联增强不重跑原检测；自动/视频增强关闭，原VLM与开放补检停用决定不变。
+- 修复未知定位被填ROI及同请求重试重做部署准入；需求、设计、原图对照和交接保存在T12-B任务。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `jj vxkrkvwz` | (see git log) |
+
+### Testing
+
+- [OK] 后端797passed113skipped；Ruff/diff通过；前端63passed及build通过。
+- [OK] 隔离PG/Temporal最终33passed1deselected；真实上传/对话/检测/SR/Qwen共3API1增强，28.08秒通过，文件保留在var/evaluations/2026-09-12-enhancement-online。
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- T13提示式分割/相对深度：限定原图坐标、仅像素与相对量，不无依据输出毫米值。先读T12-B report.md及唯一DEVELOPMENT_PLAN.md；基础服务运行，产品API/worker未常驻。

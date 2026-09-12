@@ -163,6 +163,45 @@ export type QualitySummary = {
   reasons: string[];
 };
 
+export type ImageRegion = {
+  width: number;
+  height: number;
+  bbox_xyxy: [number, number, number, number];
+};
+
+export type EnhancementKind = "dehaze" | "deblur" | "super_resolution";
+
+export type EnhancementResult = {
+  schema_version: "1";
+  input_asset: AssetRef;
+  output_asset: AssetRecord & { kind: "enhanced_image" };
+  kind: EnhancementKind;
+  model_id: string;
+  model_version: string;
+  source_region: ImageRegion;
+  quality_before: QualitySummary;
+  quality_after: QualitySummary;
+  review_required: true;
+};
+
+export type EnhancementReview = {
+  quality_effect: "improved" | "unchanged" | "degraded" | "uncertain";
+  conflicting_finding_ids: string[];
+  additional_anomalies: Array<{
+    label: DetectionLabel;
+    name: string | null;
+    bbox_xyxy: [number, number, number, number] | null;
+    reason: string;
+  }>;
+  summary: string;
+};
+
+export type EnhancementDetail = {
+  task_id: string;
+  result: EnhancementResult | null;
+  review: EnhancementReview | null;
+};
+
 export type FrameLocator = {
   frame_index: number;
   timestamp_seconds: number;

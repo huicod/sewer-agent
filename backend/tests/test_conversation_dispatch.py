@@ -14,7 +14,7 @@ from pipe_inspector.workflow.start import InspectionStartError
 
 
 class Store:
-    def __init__(self, *, kind="image"):
+    def __init__(self, *, kind="image", width=640, height=480, parent=None):
         now = datetime.now(timezone.utc)
         self.asset = AssetRef(asset_id=uuid4())
         self.turn = TurnRecord(
@@ -41,12 +41,23 @@ class Store:
         self.created = []
         self.steps = {}
         self.kind = kind
+        self.width = width
+        self.height = height
+        self.parent = parent
 
     def get_task(self, task_id):
         return self.task
 
+    def find_task_by_request_id(self, request_id):
+        return None
+
     def get_asset(self, ref):
-        return SimpleNamespace(kind=self.kind)
+        return SimpleNamespace(
+            kind=self.kind,
+            width=self.width,
+            height=self.height,
+            parent=self.parent,
+        )
 
     def list_turns(self, session_id, limit=50):
         return ()
@@ -180,6 +191,7 @@ async def test_supplement_persists_child_link_before_start(start_fails):
         assert result["linked_task_id"] == str(child.snapshot.task_id)
         assert "原结果" in result["reply"]
     args = starter.admit_supplement.call_args.args
+    assert starter.admit_supplement.call_args.kwargs == {}
     assert args[0] == parent_id
     assert args[1].request_id == turn.request_id
     assert args[1].input_asset == store.asset

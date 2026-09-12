@@ -1,11 +1,13 @@
 import type {
   AssetRecord,
   AssetRef,
+  EnhancementDetail,
   Finding,
   FindingReview,
   HumanReviewDetail,
   HumanReviewRecord,
   HumanReviewSubmission,
+  ImageRegion,
   RuntimeStatus,
   SessionDetail,
   SessionRecord,
@@ -44,6 +46,10 @@ const TURN_FIELDS = new Set([
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function hasExactFields(value: Record<string, unknown>, fields: Set<string>): boolean {
+  return Object.keys(value).length === fields.size && Object.keys(value).every((key) => fields.has(key));
 }
 
 function isNonEmptyString(value: unknown): value is string {
@@ -408,4 +414,92 @@ export function isVideoDetail(value: unknown): value is VideoDetail {
   return isRecord(value) && isUuid(value.task_id) &&
     (value.scan === null || isVideoScan(value.scan)) &&
     (value.evidence === null || isVideoEvidence(value.evidence));
+}
+
+const ASSET_RECORD_FIELDS = new Set([
+  "ref", "kind", "media_type", "byte_size", "width", "height", "duration_seconds", "parent",
+]);
+const ASSET_REF_FIELDS = new Set(["asset_id", "version"]);
+const REGION_FIELDS = new Set(["width", "height", "bbox_xyxy"]);
+const QUALITY_FIELDS = new Set(["mean_luminance", "contrast", "sharpness", "adequate", "reasons"]);
+const ENHANCEMENT_RESULT_FIELDS = new Set([
+  "schema_version", "input_asset", "output_asset", "kind", "model_id", "model_version",
+  "source_region", "quality_before", "quality_after", "review_required",
+]);
+const ENHANCEMENT_REVIEW_FIELDS = new Set([
+  "quality_effect", "conflicting_finding_ids", "additional_anomalies", "summary",
+]);
+const ADDITIONAL_ANOMALY_FIELDS = new Set(["label", "name", "bbox_xyxy", "reason"]);
+const ENHANCEMENT_KINDS = new Set(["dehaze", "deblur", "super_resolution"]);
+const QUALITY_EFFECTS = new Set(["improved", "unchanged", "degraded", "uncertain"]);
+
+function sameAsset(left: AssetRef, right: AssetRef): boolean {
+  return left.asset_id === right.asset_id && left.version === right.version;
+}
+
+function isExactAssetRef(value: unknown): value is AssetRef {
+  return isRecord(value) && hasExactFields(value, ASSET_REF_FIELDS) && isAssetRef(value);
+}
+
+function isExactAssetRecord(value: unknown): value is AssetRecord {
+  return isRecord(value) && hasExactFields(value, ASSET_RECORD_FIELDS) && isAssetRecord(value) &&
+    isExactAssetRef(value.ref) && (value.parent === null || isExactAssetRef(value.parent));
+}
+
+function isEnhancementQuality(value: unknown): boolean {
+  return isRecord(value) && hasExactFields(value, QUALITY_FIELDS) && isQuality(value);
+}
+
+function isEnhancementRegion(value: unknown): value is ImageRegion {
+  return isRecord(value) && hasExactFields(value, REGION_FIELDS) && isRegion(value);
+}
+
+function isAnomalyBox(value: unknown, width: number, height: number): boolean {
+  if (!Array.isArray(value) || value.length !== 4 || !value.every(isNonNegativeFinite)) return false;
+  const [x1, y1, x2, y2] = value;
+  return x1 < x2 && x2 <= width && y1 < y2 && y2 <= height;
+}
+
+function isEnhancementReview(
+  value: unknown,
+  sourceRegion: { width: number; height: number },
+): boolean {
+  if (
+    !isRecord(value) || !hasExactFields(value, ENHANCEMENT_REVIEW_FIELDS) ||
+    typeof value.quality_effect !== "string" || !QUALITY_EFFECTS.has(value.quality_effect) ||
+    !Array.isArray(value.conflicting_finding_ids) || value.conflicting_finding_ids.length > 128 ||
+    !value.conflicting_finding_ids.every(isUuid) ||
+    new Set(value.conflicting_finding_ids).size !== value.conflicting_finding_ids.length ||
+    !Array.isArray(value.additional_anomalies) || value.additional_anomalies.length > 12 ||
+    !isNonEmptyString(value.summary) || value.summary.length > 2_000
+  ) return false;
+  return value.additional_anomalies.every((anomaly) =>
+    isRecord(anomaly) && hasExactFields(anomaly, ADDITIONAL_ANOMALY_FIELDS) &&
+    typeof anomaly.label === "string" && DETECTION_LABELS.has(anomaly.label) &&
+    (anomaly.name === null || (typeof anomaly.name === "string" && anomaly.name.length <= 200)) &&
+    (anomaly.bbox_xyxy === null || isAnomalyBox(anomaly.bbox_xyxy, sourceRegion.width, sourceRegion.height)) &&
+    typeof anomaly.reason === "string" && anomaly.reason.trim().length > 0 && anomaly.reason.length <= 1_000,
+  );
+}
+
+export function isEnhancementDetail(value: unknown): value is EnhancementDetail {
+  if (
+    !isRecord(value) || !hasExactFields(value, new Set(["task_id", "result", "review"])) ||
+    !isUuid(value.task_id) || !(value.result === null || isRecord(value.result))
+  ) return false;
+  if (value.result === null) return value.review === null;
+  const result = value.result;
+  if (
+    !hasExactFields(result, ENHANCEMENT_RESULT_FIELDS) || result.schema_version !== "1" ||
+    !isExactAssetRef(result.input_asset) || !isExactAssetRecord(result.output_asset) ||
+    result.output_asset.kind !== "enhanced_image" || result.output_asset.parent === null ||
+    !sameAsset(result.output_asset.parent, result.input_asset) ||
+    sameAsset(result.output_asset.ref, result.input_asset) ||
+    typeof result.kind !== "string" || !ENHANCEMENT_KINDS.has(result.kind) ||
+    !isNonEmptyString(result.model_id) || !isNonEmptyString(result.model_version) ||
+    !isEnhancementRegion(result.source_region) ||
+    !isEnhancementQuality(result.quality_before) || !isEnhancementQuality(result.quality_after) ||
+    result.review_required !== true
+  ) return false;
+  return value.review === null || isEnhancementReview(value.review, result.source_region);
 }

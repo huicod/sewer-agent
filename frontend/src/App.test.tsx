@@ -170,6 +170,34 @@ describe("conversation-ready intake shell", () => {
     expect(fetchMock.mock.calls.some(([url]) => url === "/api/tasks")).toBe(false);
   });
 
+  it("names the active enhancement stage without fetching every task detail", async () => {
+    localStorage.setItem("pipe-inspector.session-id", sessionId);
+    const enhancing = {
+      ...task("running"),
+      snapshot: {
+        ...task("running").snapshot,
+        stage: "tools",
+        stage_progress: 0.5,
+        overall_progress: 0.75,
+        active_tool: "dehaze",
+      },
+    };
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({
+        session: { session_id: sessionId, created_at: createdAt },
+        tasks: [enhancing],
+      }))
+      .mockResolvedValueOnce(jsonResponse([]));
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App pollIntervalMs={60_000} />);
+
+    expect(await screen.findByText("图片增强处理")).toBeTruthy();
+    expect(screen.getByText("去雾增强")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "展开图片增强对照" })).toBeTruthy();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
   it("shows a safe start failure and keeps the same task available for retry", async () => {
     localStorage.setItem("pipe-inspector.session-id", sessionId);
     const fetchMock = vi.fn()

@@ -1,5 +1,6 @@
 import type {
   AssetRecord,
+  EnhancementDetail,
   HumanReviewDetail,
   HumanReviewRecord,
   HumanReviewSubmission,
@@ -13,6 +14,7 @@ import type {
 } from "./types";
 import {
   isAssetRecord,
+  isEnhancementDetail,
   isHumanReviewDetail,
   isHumanReviewRecord,
   isSessionDetail,
@@ -146,6 +148,14 @@ export function getVideo(taskId: string): Promise<VideoDetail> {
   return requestJson<VideoDetail>(
     `/api/tasks/${encodeURIComponent(taskId)}/video`,
     isVideoDetail,
+  );
+}
+
+export function getEnhancement(taskId: string): Promise<EnhancementDetail> {
+  return requestJson<EnhancementDetail>(
+    `/api/tasks/${encodeURIComponent(taskId)}/enhancement`,
+    (payload): payload is EnhancementDetail =>
+      isEnhancementDetail(payload) && payload.task_id === taskId,
   );
 }
 

@@ -12,6 +12,12 @@ from pipe_inspector.contracts.enhancement import EnhancementRequest, Enhancement
 from pipe_inspector.media import MediaStore
 from pipe_inspector.vision.quality import analyze_quality
 
+ENHANCEMENT_MODELS = {
+    "dehaze": ("dehazeformer-mct", "dehazeformer-mct-8e0b26c7.pth"),
+    "deblur": ("restormer-motion-deblurring", "restormer-motion-v1.0.pth"),
+    "super_resolution": ("realesr-general-x4v3", "realesr-general-x4v3-v0.2.5.0.pth"),
+}
+
 
 class EnhancementAdapter(Protocol):
     kind: str

@@ -24,6 +24,7 @@ import type {
 } from "./types";
 import { ReviewPanel } from "./ReviewPanel";
 import { VideoTimeline } from "./VideoTimeline";
+import { EnhancementPanel } from "./EnhancementPanel";
 
 const SESSION_KEY = "pipe-inspector.session-id";
 const ACTIVE_STATUSES = new Set<RuntimeStatus>(["queued", "running", "waiting_review"]);
@@ -47,6 +48,15 @@ const TURN_STAGE_TEXT = {
   executing: "正在执行",
   finished: "已结束",
 } as const;
+const TASK_STAGE_TEXT: Record<string, string> = {
+  tools: "图片增强处理",
+};
+const ACTIVE_TOOL_TEXT: Record<string, string> = {
+  dehaze: "去雾增强",
+  deblur: "去模糊增强",
+  super_resolution: "超分辨率增强",
+  enhancement_review: "增强辅助复核",
+};
 
 type PendingSubmission = {
   file: File;
@@ -222,7 +232,7 @@ function TaskCard({ task, starting, cancelling, onStart, onCancel, onReviewed }:
       <dl className="task-meta">
         <div>
           <dt>阶段</dt>
-          <dd>{task.snapshot.stage}</dd>
+          <dd>{TASK_STAGE_TEXT[task.snapshot.stage] ?? task.snapshot.stage}</dd>
         </div>
         <div>
           <dt>检查结论</dt>
@@ -230,7 +240,7 @@ function TaskCard({ task, starting, cancelling, onStart, onCancel, onReviewed }:
         </div>
         <div>
           <dt>活动工具</dt>
-          <dd>{task.snapshot.active_tool ?? "—"}</dd>
+          <dd>{task.snapshot.active_tool ? ACTIVE_TOOL_TEXT[task.snapshot.active_tool] ?? task.snapshot.active_tool : "—"}</dd>
         </div>
         <div>
           <dt>重试次数</dt>
@@ -293,6 +303,11 @@ function TaskCard({ task, starting, cancelling, onStart, onCancel, onReviewed }:
           onAccepted={(snapshot) => onReviewed(task, snapshot)}
         />
       ) : null}
+      <EnhancementPanel
+        taskId={task.snapshot.task_id}
+        snapshotRevision={task.snapshot.updated_at}
+        runtimeStatus={task.snapshot.runtime_status}
+      />
       {hasVideoLocator || mediaKind === "video" ? (
         <VideoTimeline taskId={task.snapshot.task_id} snapshotRevision={task.snapshot.updated_at} />
       ) : null}
@@ -705,7 +720,7 @@ export default function App({ pollIntervalMs = 2_000 }: AppProps) {
           <span>{turns.length} 条</span>
         </div>
         <p className="conversation-note">
-          可询问已存证据、请求报告，或上传图片/视频启动检查。每个已完成或部分完成的原图片任务可追加一次 VLM 复检；其他工具尚未接入。
+          可询问已存证据、请求报告，或上传图片/视频启动检查。原图片任务可显式请求一次关联补证或图片增强；增强不会自动触发。
           附件与已有任务二选一，选择一项会清除另一项。
         </p>
         <div className="transcript" aria-live="polite">

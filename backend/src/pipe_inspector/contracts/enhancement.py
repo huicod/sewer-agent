@@ -2,18 +2,34 @@
 
 from enum import StrEnum
 from typing import Literal
+from uuid import UUID
 
-from pydantic import model_validator
+from pydantic import Field, FiniteFloat, model_validator
 
 from .assets import AssetRecord, AssetRef
 from .common import ContractModel, ImageRegion, NonEmptyStr
-from .inspection import QualitySummary
+from .inspection import AdditionalAnomaly, QualitySummary
 
 
 class EnhancementKind(StrEnum):
     DEHAZE = "dehaze"
     DEBLUR = "deblur"
     SUPER_RESOLUTION = "super_resolution"
+
+
+class EnhancementOptions(ContractModel):
+    """User-selectable operation; no model, filesystem, device, or budget authority."""
+
+    kind: EnhancementKind
+    roi_xyxy: tuple[FiniteFloat, FiniteFloat, FiniteFloat, FiniteFloat] | None = None
+
+    @model_validator(mode="after")
+    def validate_roi(self):
+        if self.roi_xyxy is not None:
+            x1, y1, x2, y2 = self.roi_xyxy
+            if x1 < 0 or y1 < 0 or x2 <= x1 or y2 <= y1:
+                raise ValueError("ROI must have positive extent in original pixel coordinates")
+        return self
 
 
 class EnhancementRequest(ContractModel):
@@ -55,3 +71,24 @@ class EnhancementResult(ContractModel):
         ):
             raise ValueError("enhancement must create a separate derived asset with its parent")
         return self
+
+
+class EnhancementReview(ContractModel):
+    quality_effect: Literal["improved", "unchanged", "degraded", "uncertain"]
+    conflicting_finding_ids: tuple[UUID, ...] = Field(default=(), max_length=128)
+    additional_anomalies: tuple[AdditionalAnomaly, ...] = Field(default=(), max_length=12)
+    summary: str = Field(min_length=1, max_length=2000)
+
+    @model_validator(mode="after")
+    def validate_references(self):
+        if len(set(self.conflicting_finding_ids)) != len(self.conflicting_finding_ids):
+            raise ValueError("conflicting finding references must be unique")
+        if any(a.name is not None and len(a.name) > 200 for a in self.additional_anomalies):
+            raise ValueError("anomaly names must be bounded")
+        return self
+
+
+class EnhancementDetail(ContractModel):
+    task_id: UUID
+    result: EnhancementResult | None = None
+    review: EnhancementReview | None = None

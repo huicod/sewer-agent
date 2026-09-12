@@ -13,6 +13,7 @@ from pipe_inspector.storage.human_review import HumanReviewRepository
 from pipe_inspector.workflow.activities import ImageActivities
 from pipe_inspector.workflow.conversation import ConversationWorkflow
 from pipe_inspector.workflow.conversation_activities import TurnActivities
+from pipe_inspector.workflow.enhancement_activities import EnhancementActivities
 from pipe_inspector.workflow.human_review_activities import HumanReviewActivities
 from pipe_inspector.workflow.image import ImageInspectionWorkflow
 from pipe_inspector.workflow.retired_open_scan import RetiredOpenScanActivities
@@ -34,6 +35,7 @@ async def serve(kind: str) -> None:
         probe_timeout_seconds=settings.media_probe_timeout_seconds,
     )
     activities = ImageActivities(settings, repo, media)
+    enhancements = EnhancementActivities(settings, repo, media)
     videos = VideoActivities(settings, repo, media, detector=activities.detector)
     # Same activity names only drain old histories; no open model is loaded or run.
     open_scans = RetiredOpenScanActivities(repo)
@@ -57,12 +59,19 @@ async def serve(kind: str) -> None:
                 ConversationWorkflow,
                 ImageSupplementWorkflow,
             ],
-            activities=[activities.detect_image, videos.scan_video, open_scans.scan_open_candidate]
+            activities=[
+                activities.detect_image,
+                videos.scan_video,
+                open_scans.scan_open_candidate,
+                enhancements.enhance_image,
+            ]
             if gpu
             else [
                 activities.publish_stage,
                 activities.verify_image,
                 activities.finish_image,
+                enhancements.prepare_image_enhancement,
+                enhancements.review_image_enhancement,
                 open_scans.select_open_scan,
                 videos.prepare_video,
                 videos.verify_video_frame,

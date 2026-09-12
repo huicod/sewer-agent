@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 21
+- **Total Sessions**: 22
 - **Last Active**: 2026-09-12
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~707 | Active |
+| `journal-1.md` | ~741 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 22 | 2026-09-12 | T12-B 图片增强对话与持久闭环完成 | jj vxkrkvwz | `-` |
 | 21 | 2026-09-12 | 恢复 T12：三种增强工具与原图对照完成，在线集成待续 | jj nnvxzzxz | `-` |
 | 20 | 2026-09-12 | 开放补检退出在线，保留VLM主链路及历史证据 | jj oprqxzlv | `-` |
 | 19 | 2026-09-11 | 开放补检替代模型实测完成，VLM保持不变 | jj nzqxsnsw | `-` |
@@ -56,7 +57,7 @@
 
 ## Notes
 
-- 恢复先读 Session 20 与 `.trellis/tasks/09-12-retire-open-detectors/report.md`。按用户决定，三个开放补检模型退出在线，保留离线代码、权重和实验；不整仓回退，主检测/VLM/融合未改。本地 jj `oprqxzlv`，711 后端测试通过、84 跳过，Ruff 通过；一次独立审查 P2 已修复。持久服务及产品进程当前未启动，未重跑真实恢复测试。T12 尚未开发，后续不重新启用开放补检；原实验融合也未切生产默认。
+- 恢复先读最新 Session 22 与 `.trellis/tasks/09-12-m4-enhancement-online/report.md`。T12-A/B 图片增强已交付，对话/持久恢复/对照/辅助复核已接通；自动与视频增强未启用，首版仍有 T13–T16。jj `vxkrkvwz`；后端797通过113跳过、前端63通过及构建通过、服务集成33通过、真实3API+1增强通过。基础 PG/Temporal 本机运行，产品 API/worker 不常驻。三个开放补检继续退出在线，主检测/原VLM/原融合未改；不推送。
 
 - Sessions are appended to journal files
 - New journal file created when current exceeds 2000 lines

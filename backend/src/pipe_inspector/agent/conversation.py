@@ -8,9 +8,20 @@ from pipe_inspector.contracts.planning import ActionKind
 from pipe_inspector.reports import LABELS, RESULTS, REVIEWS
 from pipe_inspector.storage.repository import MissingRecord
 from pipe_inspector.storage.supplements import SupplementNotAllowed
+from pipe_inspector.workflow.enhancement_config import (
+    build_enhancement_config,
+    validate_enhancement_input,
+)
+from pipe_inspector.workflow.start import InspectionStartError, validate_existing_admission
 
 AVAILABLE_ACTIONS = frozenset(
-    {ActionKind.DETECT, ActionKind.VERIFY, ActionKind.SUMMARIZE, ActionKind.EXPORT_REPORT}
+    {
+        ActionKind.DETECT,
+        ActionKind.VERIFY,
+        ActionKind.ENHANCE,
+        ActionKind.SUMMARIZE,
+        ActionKind.EXPORT_REPORT,
+    }
 )
 
 
@@ -43,6 +54,16 @@ class ConversationDispatcher:
     def _reply(text, task_id=None):
         return {"reply": text, "linked_task_id": str(task_id) if task_id else None}
 
+    @staticmethod
+    def _enhancement_error(exc):
+        if exc.code == "enhancement_image_only":
+            return "当前只支持原始图片增强，视频或派生图片增强尚未接入。"
+        return str(exc) + "；本次未创建任务或执行工具。"
+
+    def _preflight_enhancement(self, asset, options):
+        validate_enhancement_input(asset, options)
+        build_enhancement_config(self.starter.settings, options)
+
     async def handle(self, turn, intent):
         if intent.kind in {"clarify", "refuse"}:
             return self._reply(intent.message)
@@ -52,27 +73,43 @@ class ConversationDispatcher:
         if intent.kind == "inspect":
             try:
                 plan = compile_inspection_plan(intent, available_actions=AVAILABLE_ACTIONS)
-            except IntentPlanningError:
+            except IntentPlanningError as exc:
+                if exc.code == "enhancement_parameters_required":
+                    return self._reply(
+                        "请从去雾、去模糊或局部超分中明确选择一种增强；"
+                        "局部超分还需提供原图像素框。本次未启动检查。"
+                    )
                 return self._reply(
                     "所请求的工具当前未部署或已停用，本次未启动检查。"
-                    "当前可用：图片/视频五类检测、条件 VLM 复检、证据报告。"
+                    "当前可用：图片/视频五类检测、条件 VLM 复检、"
+                    "显式图片增强与证据报告。"
                 )
             asset_ref = turn.input_asset or (task.input_asset if task else None)
             if asset_ref is None:
                 return self._reply("请上传 CCTV 图片或视频，或选择一个已有任务。")
+            submission = TaskSubmission(
+                request_id=turn.request_id,
+                session_id=turn.session_id,
+                input_asset=asset_ref,
+                instruction=turn.text,
+            )
+            existing = None
+            if plan.enhancement is not None:
+                existing = await asyncio.to_thread(
+                    self.repo.find_task_by_request_id, turn.request_id
+                )
+                if existing is not None:
+                    validate_existing_admission(existing, submission, parent_task_id=None)
             asset = await asyncio.to_thread(self.repo.get_asset, asset_ref)
+            if plan.enhancement is not None and existing is None:
+                try:
+                    self._preflight_enhancement(asset, plan.enhancement)
+                except InspectionStartError as exc:
+                    return self._reply(self._enhancement_error(exc))
             await asyncio.to_thread(
                 self.repo.save_turn_step, turn.request_id, "plan", plan.model_dump(mode="json")
             )
-            created = await asyncio.to_thread(
-                self.repo.create_task,
-                TaskSubmission(
-                    request_id=turn.request_id,
-                    session_id=turn.session_id,
-                    input_asset=asset_ref,
-                    instruction=turn.text,
-                ),
-            )
+            created = existing or await asyncio.to_thread(self.repo.create_task, submission)
             await asyncio.to_thread(
                 self.repo.update_turn, turn.request_id, linked_task_id=created.snapshot.task_id
             )
@@ -82,6 +119,11 @@ class ConversationDispatcher:
                 plan=plan,
             )
             media_name = "视频" if asset.kind == "video" else "图片"
+            if existing is not None and created.snapshot.is_terminal:
+                return self._reply(
+                    f"已复用已有{media_name}任务和结果，未新建任务或重复执行。",
+                    created.snapshot.task_id,
+                )
             return self._reply(
                 f"{media_name}任务已启动，检查结果尚未完成。"
                 "可在关联任务中查看阶段，稍后继续询问结果或获取报告。",
@@ -128,27 +170,60 @@ class ConversationDispatcher:
         return self._reply("\n".join(lines), snapshot.task_id)
 
     async def _supplement(self, turn, intent, task):
-        allowed = {ActionKind.VERIFY, ActionKind.SUMMARIZE, ActionKind.EXPORT_REPORT}
-        if ActionKind.VERIFY not in intent.actions or not set(intent.actions) <= allowed:
+        allowed = {
+            ActionKind.VERIFY,
+            ActionKind.ENHANCE,
+            ActionKind.SUMMARIZE,
+            ActionKind.EXPORT_REPORT,
+        }
+        requested = set(intent.actions)
+        if not requested & {ActionKind.VERIFY, ActionKind.ENHANCE} or not requested <= allowed:
             return self._reply(
-                "当前追加操作仅支持 VLM 复检及其报告；请求包含未部署工具，本次未执行任何追加操作。"
+                "当前追加操作仅支持 VLM 复检或一种图片增强及其报告；"
+                "请求包含未部署工具，本次未执行任何追加操作。"
+            )
+        enhancement_requested = ActionKind.ENHANCE in requested
+        if enhancement_requested and intent.enhancement is None:
+            return self._reply(
+                "请从去雾、去模糊或局部超分中明确选择一种追加增强；"
+                "局部超分还需提供原图像素框。本次未执行。"
             )
         if task is None:
-            return self._reply("请先选择一个已完成或部分完成的图片任务，再请求追加复检。")
+            return self._reply("请先选择一个已完成或部分完成的图片任务，再请求追加操作。")
         parent_id = task.snapshot.task_id
         if turn.input_asset is not None and turn.input_asset != task.input_asset:
             return self._reply(
                 "追加复检必须使用原任务图片；本次未执行。若要检查新图片，请发起新检查。", parent_id
             )
+        submission = TaskSubmission(
+            request_id=turn.request_id,
+            session_id=turn.session_id,
+            input_asset=task.input_asset,
+            instruction=turn.text,
+        )
+        existing = None
+        if enhancement_requested:
+            existing = await asyncio.to_thread(
+                self.repo.find_task_by_request_id, turn.request_id
+            )
+            if existing is not None:
+                validate_existing_admission(
+                    existing, submission, parent_task_id=parent_id
+                )
+        if enhancement_requested and existing is None:
+            asset = await asyncio.to_thread(self.repo.get_asset, task.input_asset)
+            try:
+                self._preflight_enhancement(asset, intent.enhancement)
+            except InspectionStartError as exc:
+                return self._reply(self._enhancement_error(exc), parent_id)
+        supplement_kwargs = (
+            {"enhancement": intent.enhancement} if enhancement_requested else {}
+        )
         try:
             child = await self.starter.admit_supplement(
                 parent_id,
-                TaskSubmission(
-                    request_id=turn.request_id,
-                    session_id=turn.session_id,
-                    input_asset=task.input_asset,
-                    instruction=turn.text,
-                ),
+                submission,
+                **supplement_kwargs,
             )
         except SupplementNotAllowed as exc:
             message = {
@@ -165,6 +240,18 @@ class ConversationDispatcher:
         # Link before Temporal start: ambiguous network failure must not orphan the child.
         await asyncio.to_thread(self.repo.update_turn, turn.request_id, linked_task_id=child_id)
         await self.starter.start(child_id)
+        if existing is not None and child.snapshot.is_terminal:
+            return self._reply(
+                "已复用已有关联任务和结果，未新建补证或重复执行；"
+                "原任务和已固定运行参数保持不变。",
+                child_id,
+            )
+        if enhancement_requested:
+            return self._reply(
+                "关联增强已启动，复用原图片和已冻结证据，不重新运行检测器或修改父任务；"
+                "增强图及辅助复核尚未完成，可在关联任务中查看进度和报告。",
+                child_id,
+            )
         return self._reply(
             "关联复检已启动，复用原图片和检测证据，不重新运行检测器；原结果保留。新的复检结果尚未完成，可在关联任务中查看进度和报告。",
             child_id,

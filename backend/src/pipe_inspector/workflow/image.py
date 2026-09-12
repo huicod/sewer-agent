@@ -6,6 +6,7 @@ from temporalio import workflow
 from temporalio.common import RetryPolicy
 from temporalio.exceptions import ActivityError, ApplicationError
 
+from pipe_inspector.workflow.enhancement import run_image_enhancement
 from pipe_inspector.workflow.human_review import HUMAN_REVIEW_VERSION, HumanReviewGate
 
 
@@ -98,6 +99,15 @@ class ImageInspectionWorkflow:
                         )
             except ActivityError:
                 error = error or "open_selection_failed"
+        if "enhancement" in run["config"] and error is None:
+            self.stage = "tools"
+            try:
+                await run_image_enhancement(run)
+            except ActivityError as exc:
+                cause = exc.cause
+                error = (
+                    cause.type if isinstance(cause, ApplicationError) else "enhancement_interrupted"
+                )
         self.stage = "reporting"
         result = await workflow.execute_activity(
             "finish_image",

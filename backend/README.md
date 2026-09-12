@@ -199,7 +199,7 @@ SEWER_RUN_STORAGE_TEST=1 .venv/bin/python -m pytest backend/tests/integration/te
 - 报告仅查询存储，不调用模型、不改变旧结论；HTML 证据链接指向服务器媒体接口，不包含离线打包的原图。
 - 选择已完成或部分完成的原图片任务，发送“请对这个任务追加一次 VLM 复检”：新建带 `parent_task_id` 的关联任务，复用原图及冻结的检测证据，不运行 GPU 检测、不改写原结果。页面和 HTML 报告可回到原任务报告，原检测版本/调用记录仍属于原任务。
 - 每个原任务最多一个复检子任务；重复 request_id 沿用首次身份与配置，子任务不能再追加子任务，失败也占用次数。启动确认失败可对同一子任务重试 `/start`；已结束的复检不因 `/start` 重做。复检只需 CPU/API worker，允许使用当前配置的 VLM，但重试不得切换模型或参数。
-- 追加操作仅允许 `verify`（可附带摘要/报告）；若同时要求尚未部署的分割/增强等工具，本次全部不执行。前后 VLM 实质判断冲突保留待审；原有 VLM 新增发现/OTHER 不因新回答遗漏而消失。缺失或弃权的原复检可由新的有效审核补足；复检失败不能得出正常。后置工具仍未交付，不能称完整首版已完成。
+- 追加操作支持 `verify` 或一种显式图片增强（见 T12），共用上述一次关联补证额度；可附带摘要/报告。若同时要求尚未部署的分割等工具，本次全部不执行。前后 VLM 实质判断冲突保留待审；原有 VLM 新增发现/OTHER 不因新回答遗漏而消失。复检失败不能得出正常。其余后置工具尚在开发，不能称完整首版已完成。
 - 任务和对话关联必须属于同一会话；上传资产沿用本机单用户全局模型，没有上传者所有权或用户鉴权。这不是多用户数据隔离方案，仍只能绑定本机使用。
 
 本地对话恢复测试：`SEWER_RUN_CONVERSATION_TEST=1 .venv/bin/pytest -q backend/tests/integration/test_conversation_workflow.py -m 'not live_api'`。只使用隔离测试 schema/队列，不重启共享服务；另加 `SEWER_RUN_LIVE_API=1` 并选择 `-k real_qwen` 才会付费调用文本 API。真实测试使用合成已存证据验证查询分派，不代表正常样本验收。远端成功但尚未保存本地检查点的崩溃窗口仍可能重复付费，不能承诺 exactly-once。
@@ -276,7 +276,7 @@ YOLO 引导复核仍仅用于实验，不替换 worker 默认策略：`scripts/g
 新增框均为待审，OTHER 不计入五类指标；各模型阈值、分辨率、计时口径不同，不能按框数
 判胜或宣称严格速度排名。开放补检现已退出在线入口和 worker；上述入口仅保留为历史离线实验。
 
-## 图像增强工具（T12-A，尚未接入在线对话）
+## 图像增强工具与在线对话（T12）
 
 本地适配器支持 DehazeFormer-MCT 去雾、Restormer motion 去模糊和 Real-ESRGAN
 `realesr-general-x4v3` ROI 四倍超分。使用已有 GPU PyTorch 环境，额外依赖仅
@@ -298,5 +298,29 @@ YOLO 引导复核仍仅用于实验，不替换 worker 默认策略：`scripts/g
 自动门控目前只给建议，不执行模型：低对比不等于有雾，过暗/过曝不会自动套用这些模型。
 锐度、对比度提高不证明缺陷准确率提高，超分前后不同分辨率的锐度值也不能直接比较。
 增强图始终是需复核的派生证据，不可替代原图或用于无标定的真实尺寸测量。
-T12-B 将接入对话、Temporal 检查点、报告和辅助复检；本切片不新增在线工具能力，
-不改变现有 VLM Prompt、五类检测或融合，也不恢复开放补检。
+在线示例：上传图片后说“检查图片，并做去雾辅助复核”；或选择已完成/部分完成的原图片任务，
+说“对原图像素区域 [150,50,406,306] 追加局部超分辅助复核”。坐标必须适合实际图片；
+超分缺 ROI 会先澄清，每次仅一种增强，不支持视频增强或增强图继续增强。
+
+新检查：原图检测 → 原 VLM → 保存基线 → 本地增强 → 原图/增强图辅助 VLM → 结果/人工审核。
+关联增强只复用冻结的原任务证据，不重新检测或重做原图 VLM；不修改父任务。
+辅助结论不删除/改类/移动/改分原发现，新异常和冲突待人工确认；不凭增强提高覆盖/阴性审计。
+必需增强或辅助复核失败保留原证据并输出 partial，不进入可误点完成的人工等待。
+
+沿用 CPU/API worker 和串行 GPU worker（`scripts/inspection_worker.py cpu|gpu`），模型路径配置见
+`.env.example`。阶段显示增强类型和辅助复核；`GET /api/tasks/{id}/enhancement` 可读取中途/终态的
+原图、派生资产、ROI、质量和辅助建议，无结果字段为 null。页面“图片增强对照”按需加载，
+终态 JSON/HTML 报告包含相同证据。原 VLM Prompt、主检测/融合及开放补检停用策略不变。
+
+无付费恢复验收（只使用独立 schema/队列，不重启共享服务）：
+
+```bash
+SEWER_RUN_STORAGE_TEST=1 .venv/bin/pytest -q backend/tests/integration/test_enhancement_storage.py
+SEWER_RUN_ENHANCEMENT_WORKFLOW_TEST=1 .venv/bin/pytest -q backend/tests/integration/test_enhancement_workflow_live.py
+```
+
+真实对话/上传/GPU/API 示例见 [T12-B 记录](../.trellis/tasks/09-12-m4-enhancement-online/report.md)。
+复现需显式设置 `SEWER_RUN_LIVE_ENHANCEMENT=1`、`SEWER_LIVE_IMAGE` 和不存在的
+`SEWER_ENHANCEMENT_OUTPUT` 后运行 `backend/tests/integration/test_live_enhancement_online.py`；
+该受控测试固定示例 ROI，至多 3 次 API 和一次增强推理，结束后保留文件、删除自己的测试 schema，
+不代替人工审核。原图/模型同名文件不得原位替换；提交前崩溃仍可能重算/重复计费，不承诺 exactly-once。

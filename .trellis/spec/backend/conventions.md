@@ -19,3 +19,4 @@
 
 - Shared DASHSCOPE_API_KEY is an explicit exception to the SEWER_ prefix: reuse only for explicitly configured Qwen roles on allowlisted official HTTPS hosts. Other providers need explicit role keys; never dump configuration secrets.
 - OpenAICompatibleClient response_model validates locally; it does not transmit JSON Schema. Structured parsers must include their schema in the actual messages, with a captured-request test.
+- Enhancement is explicit, original-image-only and one kind per run. New image commands follow original detect/verify; linked supplements freeze parent evidence and share the existing single supplement slot. Atomic save_enhancement commits asset/call/checkpoint together. Auxiliary review preserves original boxes/classes/scores/coverage, sends conflicts/new anomalies to review, and must not turn a required-tool failure into a completable human gate. No automatic enhancement or retired detector activation.

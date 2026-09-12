@@ -76,12 +76,18 @@ async def test_workers_share_one_detector_and_register_video_runtime(monkeypatch
         finish_video=object(),
     )
     open_scans = SimpleNamespace(scan_open_candidate=object(), select_open_scan=object())
+    enhancements = SimpleNamespace(
+        enhance_image=object(),
+        prepare_image_enhancement=object(),
+        review_image_enhancement=object(),
+    )
     captured = {}
 
     monkeypatch.setattr(module, "Settings", lambda: settings)
     monkeypatch.setattr(module, "HumanReviewRepository", lambda dsn: repo)
     monkeypatch.setattr(module, "MediaStore", lambda *args, **kwargs: object())
     monkeypatch.setattr(module, "ImageActivities", lambda *args, **kwargs: images)
+    monkeypatch.setattr(module, "EnhancementActivities", lambda *args, **kwargs: enhancements)
 
     def make_video(*args, **kwargs):
         assert args[1] is repo
@@ -126,9 +132,12 @@ async def test_workers_share_one_detector_and_register_video_runtime(monkeypatch
             images.detect_image,
             video.scan_video,
             open_scans.scan_open_candidate,
+            enhancements.enhance_image,
         ]
     else:
         assert module.VideoInspectionWorkflow in captured["workflows"]
         assert open_scans.select_open_scan in captured["activities"]
+        assert enhancements.prepare_image_enhancement in captured["activities"]
+        assert enhancements.review_image_enhancement in captured["activities"]
         for activity in (video.prepare_video, video.verify_video_frame, video.finish_video):
             assert activity in captured["activities"]

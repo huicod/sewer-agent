@@ -3,6 +3,7 @@
 from html import escape
 
 from pipe_inspector.contracts.assets import AssetRef
+from pipe_inspector.contracts.inspection import QualitySummary
 from pipe_inspector.contracts.reports import TaskReport
 
 LABELS = {
@@ -32,6 +33,60 @@ def evidence_link(asset: AssetRef) -> str:
     return f'<a href="{path}">原始/派生证据 {asset.asset_id} v{asset.version}</a>'
 
 
+def _asset_path(asset: AssetRef) -> str:
+    return f"/api/assets/{asset.asset_id}/versions/{asset.version}/content"
+
+
+def _quality(label: str, quality: QualitySummary) -> str:
+    status = "充分" if quality.adequate else "不足"
+    reasons = "、".join(escape(reason) for reason in quality.reasons) or "—"
+    return (
+        f"<h4>{label}</h4><p>亮度 {quality.mean_luminance:g}；"
+        f"对比度 {quality.contrast:g}；清晰度 {quality.sharpness:g}；"
+        f"质量{status}；说明 {reasons}</p>"
+    )
+
+
+def _enhancement_section(report: TaskReport) -> list[str]:
+    result = report.enhancement
+    if result is None:
+        return []
+    source_path = _asset_path(result.input_asset)
+    output_path = _asset_path(result.output_asset.ref)
+    roi = ", ".join(f"{coordinate:g}" for coordinate in result.source_region.bbox_xyxy)
+    lines = [
+        '<section class="enhancement"><h2>图片增强对照</h2>',
+        "<p>增强图是从原始输入派生的辅助证据；派生图仅供辅助复核，不改写原检查结论。</p>",
+        '<div class="image-comparison">',
+        f'<figure><img src="{source_path}" alt="原始输入"><figcaption>'
+        f'<a href="{source_path}">打开原始输入</a></figcaption></figure>',
+        f'<figure><img src="{output_path}" alt="增强派生图"><figcaption>'
+        f'<a href="{output_path}">打开增强派生图</a></figcaption></figure>',
+        "</div>",
+        f"<p>原图处理范围：{result.source_region.width} × {result.source_region.height} 像素；"
+        f"ROI（原图坐标）：({roi})</p>",
+        f"<p>增强类型：{escape(result.kind.value)}；模型：{escape(result.model_id)} "
+        f"v{escape(result.model_version)}</p>",
+        _quality("增强前质量", result.quality_before),
+        _quality("增强后质量", result.quality_after),
+    ]
+    if report.enhancement_review is None:
+        lines.append("<p>辅助复核尚未生成。</p>")
+    else:
+        review = report.enhancement_review
+        lines.extend(
+            [
+                "<h3>增强辅助复核</h3>",
+                f"<p>质量变化：{escape(review.quality_effect)}；"
+                f"冲突发现 {len(review.conflicting_finding_ids)} 项；"
+                f"新增疑似异常 {len(review.additional_anomalies)} 项。</p>",
+                "<p>复核摘要：" + escape(review.summary) + "</p>",
+            ]
+        )
+    lines.append("</section>")
+    return lines
+
+
 def render_html(report: TaskReport) -> str:
     task, snapshot = report.task, report.task.snapshot
     coverage = snapshot.coverage
@@ -44,7 +99,11 @@ def render_html(report: TaskReport) -> str:
         "<title>管网检查报告</title>",
         "<style>body{max-width:900px;margin:2rem auto;padding:0 1rem;font-family:sans-serif;"
         "line-height:1.6}section{border-top:1px solid #ccc;margin-top:1.5rem}"
-        "pre{white-space:pre-wrap;overflow-wrap:anywhere}li{margin:.5rem 0}</style></head><body>",
+        "pre{white-space:pre-wrap;overflow-wrap:anywhere}li{margin:.5rem 0}"
+        ".image-comparison{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1rem}"
+        ".image-comparison figure{margin:0}"
+        ".image-comparison img{display:block;width:100%;height:auto}"
+        "</style></head><body>",
         "<h1>管网检查报告</h1>",
         f"<p>任务：{snapshot.task_id}</p>",
         f"<p>结果：{RESULTS[snapshot.inspection_result]}"
@@ -63,6 +122,7 @@ def render_html(report: TaskReport) -> str:
         )
     if snapshot.waiting_reason:
         lines.append("<p>限制/待处理：" + escape(snapshot.waiting_reason) + "</p>")
+    lines.extend(_enhancement_section(report))
     lines.append("<h2>检测发现</h2>")
     if not snapshot.findings:
         lines.append("<p>没有已保存的缺陷发现；是否正常以任务结论和覆盖条件为准。</p>")

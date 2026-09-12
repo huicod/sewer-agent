@@ -6,8 +6,11 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 from pipe_inspector.api.app import create_app
 from pipe_inspector.config import Settings
-from pipe_inspector.contracts.assets import AssetRef
+from pipe_inspector.contracts.assets import AssetRecord, AssetRef
+from pipe_inspector.contracts.common import ImageRegion
+from pipe_inspector.contracts.enhancement import EnhancementResult, EnhancementReview
 from pipe_inspector.contracts.findings import EvidenceRef, Finding
+from pipe_inspector.contracts.inspection import QualitySummary
 from pipe_inspector.contracts.intake import TaskRecord
 from pipe_inspector.contracts.reports import TaskReport
 from pipe_inspector.contracts.tasks import TaskSnapshot
@@ -61,6 +64,45 @@ def report_fixture(status="partial"):
     return task, call
 
 
+def enhancement_fixture(task):
+    output = AssetRecord(
+        ref=AssetRef(asset_id=uuid4()),
+        kind="enhanced_image",
+        media_type="image/png",
+        byte_size=2048,
+        width=1280,
+        height=960,
+        parent=task.input_asset,
+    )
+    before = QualitySummary(
+        mean_luminance=42,
+        contrast=13,
+        sharpness=7,
+        adequate=False,
+        reasons=("low light",),
+    )
+    result = EnhancementResult(
+        input_asset=task.input_asset,
+        output_asset=output,
+        kind="super_resolution",
+        model_id="swinir",
+        model_version="v1<script>",
+        source_region=ImageRegion(width=640, height=480, bbox_xyxy=(10, 20, 310, 220)),
+        quality_before=before,
+        quality_after=QualitySummary(
+            mean_luminance=48,
+            contrast=18,
+            sharpness=14,
+            adequate=True,
+        ),
+    )
+    review = EnhancementReview(
+        quality_effect="improved",
+        summary='<img src=x onerror="alert(2)">辅助复核摘要',
+    )
+    return result, review
+
+
 def test_supplement_report_links_original_without_inventing_a_detection_call():
     task, call = report_fixture()
     parent_id = uuid4()
@@ -74,6 +116,7 @@ def test_supplement_report_links_original_without_inventing_a_detection_call():
 @pytest.fixture
 def report_app(tmp_path):
     task, call = report_fixture()
+    result, review = enhancement_fixture(task)
     reads = []
 
     def get_task(task_id):
@@ -86,14 +129,22 @@ def report_app(tmp_path):
         reads.append("calls")
         return (call,)
 
+    def load_step(task_id, step):
+        reads.append(step)
+        assert task_id == task.snapshot.task_id
+        return {
+            "enhance": result.model_dump(mode="json"),
+            "enhancement_review": review.model_dump(mode="json"),
+        }[step]
+
     # No create/start/model methods: report generation must be strictly read-only.
-    repo = SimpleNamespace(get_task=get_task, list_calls=list_calls)
+    repo = SimpleNamespace(get_task=get_task, list_calls=list_calls, load_step=load_step)
     app = create_app(Settings(_env_file=None, asset_root=tmp_path), repository=repo)
-    return app, task, call, reads
+    return app, task, call, result, review, reads
 
 
 async def test_json_report_preserves_stored_evidence_and_unresolved_result(report_app):
-    app, task, call, reads = report_app
+    app, task, call, result, review, reads = report_app
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         response = await client.get(f"/api/tasks/{task.snapshot.task_id}/report?format=json")
     assert response.status_code == 200
@@ -101,11 +152,13 @@ async def test_json_report_preserves_stored_evidence_and_unresolved_result(repor
     assert payload["schema_version"] == "1"
     assert payload["task"] == task.model_dump(mode="json")
     assert payload["tool_calls"] == [call.model_dump(mode="json")]
-    assert reads == ["task", "calls"]
+    assert payload["enhancement"] == result.model_dump(mode="json")
+    assert payload["enhancement_review"] == review.model_dump(mode="json")
+    assert reads == ["task", "enhance", "enhancement_review", "calls"]
 
 
 async def test_html_report_escapes_text_and_keeps_review_coverage_and_tool_failure(report_app):
-    app, task, _, _ = report_app
+    app, task, _, result, _, _ = report_app
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         response = await client.get(f"/api/tasks/{task.snapshot.task_id}/report?format=html")
     assert response.status_code == 200
@@ -119,12 +172,18 @@ async def test_html_report_escapes_text_and_keeps_review_coverage_and_tool_failu
     assert "timeout" in response.text and "uncertain" in response.text
     assert "fixture-qwen" in response.text
     assert f"/api/assets/{task.input_asset.asset_id}/versions/1/content" in response.text
+    assert f"/api/assets/{result.output_asset.ref.asset_id}/versions/1/content" in response.text
+    assert "(10, 20, 310, 220)" in response.text
+    assert "v1&lt;script&gt;" in response.text
+    assert "辅助复核摘要" in response.text
+    assert "派生图仅供辅助复核，不改写原检查结论" in response.text
     assert "default-src 'none'" in response.headers["content-security-policy"]
+    assert "img-src 'self'" in response.headers["content-security-policy"]
     assert response.headers["x-content-type-options"] == "nosniff"
 
 
 async def test_report_rejects_bad_format_and_unknown_task(report_app):
-    app, task, _, reads = report_app
+    app, task, _, _, _, reads = report_app
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         bad = await client.get(f"/api/tasks/{task.snapshot.task_id}/report?format=pdf")
         assert bad.status_code == 422 and not reads
@@ -157,7 +216,11 @@ async def test_report_preserves_valid_normal_or_failed_conclusion(tmp_path, resu
         },
     )
     record = TaskRecord.model_validate(task.model_dump() | {"snapshot": snapshot})
-    repo = SimpleNamespace(get_task=lambda _: record, list_calls=lambda _: ())
+    repo = SimpleNamespace(
+        get_task=lambda _: record,
+        list_calls=lambda _: (),
+        load_step=lambda _task_id, _step: None,
+    )
     app = create_app(Settings(_env_file=None, asset_root=tmp_path), repository=repo)
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         response = await client.get(f"/api/tasks/{snapshot.task_id}/report")
@@ -170,3 +233,25 @@ def test_report_contract_rejects_calls_from_another_task():
     _, unrelated_call = report_fixture()
     with pytest.raises(ValueError, match="must belong"):
         TaskReport(task=task, tool_calls=(unrelated_call,))
+
+
+def test_report_contract_rejects_cross_task_enhancement_and_review_without_result():
+    task, _ = report_fixture()
+    _, review = enhancement_fixture(task)
+    other_task, _ = report_fixture()
+    other_result, _ = enhancement_fixture(other_task)
+    with pytest.raises(ValueError, match="reported task"):
+        TaskReport(task=task, enhancement=other_result)
+    with pytest.raises(ValueError, match="requires enhancement"):
+        TaskReport(task=task, enhancement_review=review)
+
+
+def test_old_report_payload_defaults_enhancement_fields_to_null():
+    task, call = report_fixture()
+    report = TaskReport.model_validate({
+        "schema_version": "1",
+        "task": task.model_dump(mode="json"),
+        "tool_calls": [call.model_dump(mode="json")],
+    })
+    assert report.enhancement is None
+    assert report.enhancement_review is None
