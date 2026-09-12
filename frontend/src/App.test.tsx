@@ -198,6 +198,44 @@ describe("conversation-ready intake shell", () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
+  it("names adaptive enhancement selection without fetching task detail", async () => {
+    localStorage.setItem("pipe-inspector.session-id", sessionId);
+    const selecting = {
+      ...task("running"),
+      snapshot: {
+        ...task("running").snapshot,
+        stage: "tools",
+        stage_progress: 0.5,
+        overall_progress: 0.7,
+        active_tool: "enhancement_selection",
+      },
+    };
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({
+        session: { session_id: sessionId, created_at: createdAt },
+        tasks: [selecting],
+      }))
+      .mockResolvedValueOnce(jsonResponse([]));
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App pollIntervalMs={60_000} />);
+
+    expect(await screen.findByText("图片增强处理")).toBeTruthy();
+    expect(screen.getByText("按需选择图片增强")).toBeTruthy();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("offers a natural-language adaptive enhancement example", async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ session_id: sessionId, created_at: createdAt }, 201))
+      .mockResolvedValueOnce(jsonResponse([]));
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App pollIntervalMs={60_000} />);
+
+    expect(await screen.findByText(/必要时按需增强后再检查/)).toBeTruthy();
+  });
+
   it("shows a safe start failure and keeps the same task available for retry", async () => {
     localStorage.setItem("pipe-inspector.session-id", sessionId);
     const fetchMock = vi.fn()

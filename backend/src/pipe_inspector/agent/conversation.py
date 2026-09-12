@@ -76,13 +76,13 @@ class ConversationDispatcher:
             except IntentPlanningError as exc:
                 if exc.code == "enhancement_parameters_required":
                     return self._reply(
-                        "请从去雾、去模糊或局部超分中明确选择一种增强；"
+                        "请从暗光恢复、去雾、去模糊或局部超分中明确选择一种增强；"
                         "局部超分还需提供原图像素框。本次未启动检查。"
                     )
                 return self._reply(
                     "所请求的工具当前未部署或已停用，本次未启动检查。"
                     "当前可用：图片/视频五类检测、条件 VLM 复检、"
-                    "显式图片增强与证据报告。"
+                    "显式或允许后按需图片增强与证据报告。"
                 )
             asset_ref = turn.input_asset or (task.input_asset if task else None)
             if asset_ref is None:
@@ -94,13 +94,17 @@ class ConversationDispatcher:
                 instruction=turn.text,
             )
             existing = None
-            if plan.enhancement is not None:
+            if plan.enhancement is not None or plan.auto_enhancement:
                 existing = await asyncio.to_thread(
                     self.repo.find_task_by_request_id, turn.request_id
                 )
                 if existing is not None:
                     validate_existing_admission(existing, submission, parent_task_id=None)
             asset = await asyncio.to_thread(self.repo.get_asset, asset_ref)
+            if plan.auto_enhancement and (asset.kind != "image" or asset.parent is not None):
+                return self._reply(
+                    "按需增强当前仅支持原始图片，视频或派生图片尚未接入；本次未启动。"
+                )
             if plan.enhancement is not None and existing is None:
                 try:
                     self._preflight_enhancement(asset, plan.enhancement)
@@ -170,6 +174,10 @@ class ConversationDispatcher:
         return self._reply("\n".join(lines), snapshot.task_id)
 
     async def _supplement(self, turn, intent, task):
+        if intent.auto_enhancement:
+            return self._reply(
+                "按需增强当前仅支持新建图片检查；关联任务可明确指定一种增强。本次未追加工具。"
+            )
         allowed = {
             ActionKind.VERIFY,
             ActionKind.ENHANCE,
@@ -185,7 +193,7 @@ class ConversationDispatcher:
         enhancement_requested = ActionKind.ENHANCE in requested
         if enhancement_requested and intent.enhancement is None:
             return self._reply(
-                "请从去雾、去模糊或局部超分中明确选择一种追加增强；"
+                "请从暗光恢复、去雾、去模糊或局部超分中明确选择一种追加增强；"
                 "局部超分还需提供原图像素框。本次未执行。"
             )
         if task is None:

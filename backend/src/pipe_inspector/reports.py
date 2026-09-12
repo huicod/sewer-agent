@@ -26,6 +26,21 @@ REVIEWS = {
     "tentative": "候选待定",
     "rejected": "已驳回",
 }
+ENHANCEMENTS = {
+    "low_light": "低照度恢复",
+    "dehaze": "去雾",
+    "deblur": "去模糊",
+    "super_resolution": "超分辨率",
+}
+DEGRADATIONS = {
+    "low_light": "低照度",
+    "mixed_dark_noise_blur": "暗部、噪声与模糊混合",
+    "motion_blur": "运动模糊",
+    "haze": "雾化",
+    "small_detail": "细节过小",
+    "none": "未发现明确退化",
+    "unsupported": "当前工具不支持的退化",
+}
 
 
 def evidence_link(asset: AssetRef) -> str:
@@ -48,28 +63,54 @@ def _quality(label: str, quality: QualitySummary) -> str:
 
 
 def _enhancement_section(report: TaskReport) -> list[str]:
+    selection = report.enhancement_selection
     result = report.enhancement
-    if result is None:
+    if selection is None and result is None:
         return []
-    source_path = _asset_path(result.input_asset)
-    output_path = _asset_path(result.output_asset.ref)
-    roi = ", ".join(f"{coordinate:g}" for coordinate in result.source_region.bbox_xyxy)
     lines = [
         '<section class="enhancement"><h2>图片增强对照</h2>',
         "<p>增强图是从原始输入派生的辅助证据；派生图仅供辅助复核，不改写原检查结论。</p>",
-        '<div class="image-comparison">',
-        f'<figure><img src="{source_path}" alt="原始输入"><figcaption>'
-        f'<a href="{source_path}">打开原始输入</a></figcaption></figure>',
-        f'<figure><img src="{output_path}" alt="增强派生图"><figcaption>'
-        f'<a href="{output_path}">打开增强派生图</a></figcaption></figure>',
-        "</div>",
-        f"<p>原图处理范围：{result.source_region.width} × {result.source_region.height} 像素；"
-        f"ROI（原图坐标）：({roi})</p>",
-        f"<p>增强类型：{escape(result.kind.value)}；模型：{escape(result.model_id)} "
-        f"v{escape(result.model_version)}</p>",
-        _quality("增强前质量", result.quality_before),
-        _quality("增强后质量", result.quality_after),
     ]
+    if selection is not None:
+        if selection.status == "selected":
+            kind = ENHANCEMENTS[selection.options.kind.value]
+            lines.append(
+                f"<p>自动增强已选择：{kind}；理由：{escape(selection.reason)}</p>"
+            )
+        else:
+            lines.append(f"<p>自动增强已跳过；理由：{escape(selection.reason)}</p>")
+        if selection.proposal is not None:
+            proposal = selection.proposal
+            confidence = "明确" if proposal.confidence == "clear" else "不确定"
+            lines.append(
+                f"<p>退化判断：{DEGRADATIONS[proposal.degradation]}（{confidence}）；"
+                f"证据：{escape(proposal.evidence)}；对检查判读的影响："
+                f"{escape(proposal.inspection_impact)}</p>"
+            )
+    if result is None:
+        if selection is not None and selection.status == "selected":
+            lines.append("<p>增强已选择，但没有已保存的增强结果。</p>")
+        lines.append("</section>")
+        return lines
+    source_path = _asset_path(result.input_asset)
+    output_path = _asset_path(result.output_asset.ref)
+    roi = ", ".join(f"{coordinate:g}" for coordinate in result.source_region.bbox_xyxy)
+    lines.extend(
+        [
+            '<div class="image-comparison">',
+            f'<figure><img src="{source_path}" alt="原始输入"><figcaption>'
+            f'<a href="{source_path}">打开原始输入</a></figcaption></figure>',
+            f'<figure><img src="{output_path}" alt="增强派生图"><figcaption>'
+            f'<a href="{output_path}">打开增强派生图</a></figcaption></figure>',
+            "</div>",
+            f"<p>原图处理范围：{result.source_region.width} × {result.source_region.height} 像素；"
+            f"ROI（原图坐标）：({roi})</p>",
+            f"<p>增强类型：{ENHANCEMENTS[result.kind.value]}；模型：{escape(result.model_id)} "
+            f"v{escape(result.model_version)}</p>",
+            _quality("增强前质量", result.quality_before),
+            _quality("增强后质量", result.quality_after),
+        ]
+    )
     if report.enhancement_review is None:
         lines.append("<p>辅助复核尚未生成。</p>")
     else:

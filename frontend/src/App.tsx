@@ -52,6 +52,8 @@ const TASK_STAGE_TEXT: Record<string, string> = {
   tools: "图片增强处理",
 };
 const ACTIVE_TOOL_TEXT: Record<string, string> = {
+  enhancement_selection: "按需选择图片增强",
+  low_light: "低照度恢复",
   dehaze: "去雾增强",
   deblur: "去模糊增强",
   super_resolution: "超分辨率增强",
@@ -720,7 +722,8 @@ export default function App({ pollIntervalMs = 2_000 }: AppProps) {
           <span>{turns.length} 条</span>
         </div>
         <p className="conversation-note">
-          可询问已存证据、请求报告，或上传图片/视频启动检查。原图片任务可显式请求一次关联补证或图片增强；增强不会自动触发。
+          可询问已存证据、请求报告，或上传图片/视频启动检查。原图片任务可显式请求一次关联补证或图片增强；
+          也可在本次图片任务中说“必要时按需增强后再检查”，授权助手选择至多一种增强。
           附件与已有任务二选一，选择一项会清除另一项。
         </p>
         <div className="transcript" aria-live="polite">

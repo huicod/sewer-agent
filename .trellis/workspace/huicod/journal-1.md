@@ -739,3 +739,23 @@ T12-A 完成，保留五类/VLM/融合及开放补检退出在线的边界；T12
 ### Next Steps
 
 - T13提示式分割/相对深度：限定原图坐标、仅像素与相对量，不无依据输出毫米值。先读T12-B report.md及唯一DEVELOPMENT_PLAN.md；基础服务运行，产品API/worker未常驻。
+
+
+## Session 23: T12-C 按需增强与低照度恢复完成
+
+**Date**: 2026-09-13
+**Task**: T12-C 按需增强与低照度恢复完成
+
+### Summary
+
+默认不增强；本次对话许可后独立VLM有据选择一次工具或跳过，持久选择和原图证据保留。新增DarkIR在线与HVI六图对照；两次真实HTTP/Temporal样例合计7QwenAPI+1GPU。后端829/116跳过、前端69/build、真实PGTemporal31通过；修复选择失败降级原确认状态。报告 .trellis/tasks/09-13-m4-adaptive-enhancement/report.md；下一步T12-D候选与缺陷保真比较再T13，无推送。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `jj skwvwmyl` | (see git log) |
+
+### Status
+
+[OK] **Completed**

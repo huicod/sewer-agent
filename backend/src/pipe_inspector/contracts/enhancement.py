@@ -12,6 +12,7 @@ from .inspection import AdditionalAnomaly, QualitySummary
 
 
 class EnhancementKind(StrEnum):
+    LOW_LIGHT = "low_light"
     DEHAZE = "dehaze"
     DEBLUR = "deblur"
     SUPER_RESOLUTION = "super_resolution"
@@ -48,6 +49,36 @@ class EnhancementDecision(ContractModel):
     kind: EnhancementKind | None = None
     should_run: bool = False
     reason: NonEmptyStr
+
+
+class EnhancementProposal(ContractModel):
+    """Untrusted VLM suggestion, not execution authority or a defect verdict."""
+
+    options: EnhancementOptions | None = None
+    degradation: Literal[
+        "low_light", "mixed_dark_noise_blur", "motion_blur", "haze", "small_detail",
+        "none", "unsupported",
+    ]
+    confidence: Literal["clear", "uncertain"]
+    evidence: str = Field(min_length=1, max_length=1000)
+    inspection_impact: str = Field(min_length=1, max_length=1000)
+
+
+class EnhancementSelection(ContractModel):
+    status: Literal["selected", "skipped"]
+    reason: NonEmptyStr
+    proposal: EnhancementProposal | None = None
+    options: EnhancementOptions | None = None
+
+    @model_validator(mode="after")
+    def validate_selection(self):
+        if (self.status == "selected") != (self.options is not None):
+            raise ValueError("only a selected enhancement may contain executable options")
+        if self.options is not None and (
+            self.proposal is None or self.options != self.proposal.options
+        ):
+            raise ValueError("selected options must match the recorded proposal")
+        return self
 
 
 class EnhancementResult(ContractModel):
@@ -92,3 +123,4 @@ class EnhancementDetail(ContractModel):
     task_id: UUID
     result: EnhancementResult | None = None
     review: EnhancementReview | None = None
+    selection: EnhancementSelection | None = None

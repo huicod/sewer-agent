@@ -169,7 +169,34 @@ export type ImageRegion = {
   bbox_xyxy: [number, number, number, number];
 };
 
-export type EnhancementKind = "dehaze" | "deblur" | "super_resolution";
+export type EnhancementKind = "low_light" | "dehaze" | "deblur" | "super_resolution";
+
+export type EnhancementOptions = {
+  kind: EnhancementKind;
+  roi_xyxy: [number, number, number, number] | null;
+};
+
+export type EnhancementProposal = {
+  options: EnhancementOptions | null;
+  degradation:
+    | "low_light"
+    | "mixed_dark_noise_blur"
+    | "motion_blur"
+    | "haze"
+    | "small_detail"
+    | "none"
+    | "unsupported";
+  confidence: "clear" | "uncertain";
+  evidence: string;
+  inspection_impact: string;
+};
+
+export type EnhancementSelection = {
+  status: "selected" | "skipped";
+  reason: string;
+  proposal: EnhancementProposal | null;
+  options: EnhancementOptions | null;
+};
 
 export type EnhancementResult = {
   schema_version: "1";
@@ -200,6 +227,7 @@ export type EnhancementDetail = {
   task_id: string;
   result: EnhancementResult | null;
   review: EnhancementReview | null;
+  selection?: EnhancementSelection | null;
 };
 
 export type FrameLocator = {

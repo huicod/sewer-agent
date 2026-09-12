@@ -5,7 +5,7 @@ from typing import Literal
 from pydantic import model_validator
 
 from .common import ContractModel
-from .enhancement import EnhancementResult, EnhancementReview
+from .enhancement import EnhancementResult, EnhancementReview, EnhancementSelection
 from .intake import TaskRecord
 from .tools import ToolCall
 
@@ -14,6 +14,7 @@ class TaskReport(ContractModel):
     schema_version: Literal["1"] = "1"
     task: TaskRecord
     tool_calls: tuple[ToolCall, ...] = ()
+    enhancement_selection: EnhancementSelection | None = None
     enhancement: EnhancementResult | None = None
     enhancement_review: EnhancementReview | None = None
 

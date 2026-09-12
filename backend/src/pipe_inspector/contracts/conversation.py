@@ -39,9 +39,14 @@ class ConversationIntent(ContractModel):
     outputs: tuple[OutputFormat, ...] = (OutputFormat.JSON, OutputFormat.HTML)
     message: str = Field(min_length=1, max_length=2000)
     enhancement: EnhancementOptions | None = None
+    auto_enhancement: bool = False
 
     @model_validator(mode="after")
     def validate_intent(self) -> "ConversationIntent":
+        if self.auto_enhancement and (
+            self.enhancement is not None or ActionKind.ENHANCE not in self.actions
+        ):
+            raise ValueError("automatic enhancement requires enhance and no explicit options")
         if self.enhancement is not None and ActionKind.ENHANCE not in self.actions:
             raise ValueError("enhancement options require the enhance action")
         if not self.target_labels or len(set(self.target_labels)) != len(self.target_labels):

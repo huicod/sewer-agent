@@ -1,4 +1,4 @@
-"""Lazy, local-only adapters for the three approved enhancement checkpoints."""
+"""Lazy, local-only adapters for the approved enhancement checkpoints."""
 
 from __future__ import annotations
 
@@ -14,9 +14,9 @@ import torch.nn.functional as F
 from PIL import Image
 from torch import nn
 
-from pipe_inspector.vision._enhancement_vendor import MCT, Restormer, SRVGGNetCompact
+from pipe_inspector.vision._enhancement_vendor import MCT, DarkIR, Restormer, SRVGGNetCompact
 
-EnhancementKind = Literal["dehaze", "deblur", "super_resolution"]
+EnhancementKind = Literal["dehaze", "deblur", "super_resolution", "low_light"]
 MAX_INPUT_PIXELS = 1_048_576
 DEBLUR_TILE_SIZE = 512
 DEBLUR_TILE_OVERLAP = 32
@@ -47,6 +47,11 @@ _MODEL_SPECS: dict[str, _ModelSpec] = {
         scale=4,
         checkpoint_keys=("params_ema", "params"),
     ),
+    "low_light": _ModelSpec(
+        model_id="darkir-384",
+        scale=1,
+        checkpoint_keys=("params",),
+    ),
 }
 
 
@@ -75,6 +80,8 @@ def _create_model(kind: str) -> nn.Module:
             upscale=4,
             act_type="prelu",
         )
+    if kind == "low_light":
+        return DarkIR()
     raise ValueError(f"unsupported enhancement kind: {kind!r}")
 
 
@@ -116,8 +123,10 @@ class LocalEnhancementModel:
                 output = output * 0.5 + 0.5
             elif self.kind == "deblur":
                 output = self._deblur_tiled(model, tensor)
-            else:
+            elif self.kind == "super_resolution":
                 output = self._super_resolve_tiled(model, tensor)
+            else:
+                output = model(tensor)
 
         output = self._validate_output(
             output,

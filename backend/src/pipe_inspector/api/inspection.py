@@ -9,6 +9,7 @@ from pipe_inspector.contracts.enhancement import (
     EnhancementDetail,
     EnhancementResult,
     EnhancementReview,
+    EnhancementSelection,
 )
 from pipe_inspector.contracts.intake import TaskRecord
 from pipe_inspector.contracts.tools import ToolCall
@@ -16,17 +17,23 @@ from pipe_inspector.workflow.start import InspectionStartError
 
 
 def load_enhancement_detail(repository, task: TaskRecord) -> EnhancementDetail:
-    """Validate the two public enhancement checkpoints against their owning task."""
+    """Validate the public enhancement checkpoints against their owning task."""
     task_id = task.snapshot.task_id
     raw_result = repository.load_step(task_id, "enhance")
     raw_review = repository.load_step(task_id, "enhancement_review")
+    raw_selection = repository.load_step(task_id, "enhancement_selection")
     result = EnhancementResult.model_validate(raw_result) if raw_result is not None else None
     review = EnhancementReview.model_validate(raw_review) if raw_review is not None else None
+    selection = None
+    if raw_selection is not None:
+        if not isinstance(raw_selection, dict) or set(raw_selection) != {"selection"}:
+            raise ValueError("invalid enhancement selection checkpoint")
+        selection = EnhancementSelection.model_validate(raw_selection["selection"])
     if result is not None and result.input_asset != task.input_asset:
         raise ValueError("enhancement input does not belong to requested task")
     if review is not None and result is None:
         raise ValueError("enhancement review requires enhancement result")
-    return EnhancementDetail(task_id=task_id, result=result, review=review)
+    return EnhancementDetail(task_id=task_id, result=result, review=review, selection=selection)
 
 
 def inspection_router(repository, starter) -> APIRouter:

@@ -278,8 +278,8 @@ YOLO 引导复核仍仅用于实验，不替换 worker 默认策略：`scripts/g
 
 ## 图像增强工具与在线对话（T12）
 
-本地适配器支持 DehazeFormer-MCT 去雾、Restormer motion 去模糊和 Real-ESRGAN
-`realesr-general-x4v3` ROI 四倍超分。使用已有 GPU PyTorch 环境，额外依赖仅
+本地适配器支持 DarkIR-m 低照度恢复、DehazeFormer-MCT 去雾、Restormer motion 去模糊和
+Real-ESRGAN `realesr-general-x4v3` ROI 四倍超分。使用已有 GPU PyTorch 环境，额外依赖仅
 `einops==0.8.1`（`enhancement` 可选依赖组）。固定权重来源、版本及许可见
 [模型记录](../.trellis/tasks/09-12-m4-enhancement-tools/model-report.md)。推理只读取本地可信权重，不联网下载。
 
@@ -295,12 +295,17 @@ YOLO 引导复核仍仅用于实验，不替换 worker 默认策略：`scripts/g
 原图保持不变；增强资产记录父资产、模型版本、原始 ROI 坐标和前后质量摘要。
 单次输入最多 1,048,576 像素，输出最多 4,194,304 像素；超分必须提供原图坐标 ROI。
 
-自动门控目前只给建议，不执行模型：低对比不等于有雾，过暗/过曝不会自动套用这些模型。
+普通检查默认不增强。T12-C 支持本次对话明确许可后的按需选择：原图检测/VLM → 独立 VLM
+选择一种工具或跳过 → 后端校验退化/区域/固定模型 → 既有增强及双图复核。低对比不等于有雾，
+全图亮度/模糊指标只是线索，不直接执行模型。旧三工具离线评价的质量建议仍不自动执行。
 锐度、对比度提高不证明缺陷准确率提高，超分前后不同分辨率的锐度值也不能直接比较。
 增强图始终是需复核的派生证据，不可替代原图或用于无标定的真实尺寸测量。
 在线示例：上传图片后说“检查图片，并做去雾辅助复核”；或选择已完成/部分完成的原图片任务，
 说“对原图像素区域 [150,50,406,306] 追加局部超分辅助复核”。坐标必须适合实际图片；
 超分缺 ROI 会先澄清，每次仅一种增强，不支持视频增强或增强图继续增强。
+低照度示例：“新建图片检查，并做暗光恢复辅助复核”。按需示例：“新建图片检查，允许你
+根据实际画质按需选择一次增强，不需要就跳过”。未明确许可、历史许可或本次禁止增强，
+均不应生成 `auto_enhancement=true`。自动选择仅限新原始图片检查；关联补证仍需明确种类。
 
 新检查：原图检测 → 原 VLM → 保存基线 → 本地增强 → 原图/增强图辅助 VLM → 结果/人工审核。
 关联增强只复用冻结的原任务证据，不重新检测或重做原图 VLM；不修改父任务。
@@ -309,7 +314,8 @@ YOLO 引导复核仍仅用于实验，不替换 worker 默认策略：`scripts/g
 
 沿用 CPU/API worker 和串行 GPU worker（`scripts/inspection_worker.py cpu|gpu`），模型路径配置见
 `.env.example`。阶段显示增强类型和辅助复核；`GET /api/tasks/{id}/enhancement` 可读取中途/终态的
-原图、派生资产、ROI、质量和辅助建议，无结果字段为 null。页面“图片增强对照”按需加载，
+原图、派生资产、ROI、质量、辅助建议与 `selection`（选中/跳过及依据），无结果字段为 null。
+选择失败保留原复核结论但任务 partial，不把下游失败当作原 VLM 失败。页面“图片增强对照”按需加载，
 终态 JSON/HTML 报告包含相同证据。原 VLM Prompt、主检测/融合及开放补检停用策略不变。
 
 无付费恢复验收（只使用独立 schema/队列，不重启共享服务）：
@@ -317,6 +323,7 @@ YOLO 引导复核仍仅用于实验，不替换 worker 默认策略：`scripts/g
 ```bash
 SEWER_RUN_STORAGE_TEST=1 .venv/bin/pytest -q backend/tests/integration/test_enhancement_storage.py
 SEWER_RUN_ENHANCEMENT_WORKFLOW_TEST=1 .venv/bin/pytest -q backend/tests/integration/test_enhancement_workflow_live.py
+SEWER_RUN_ENHANCEMENT_WORKFLOW_TEST=1 .venv/bin/pytest -q backend/tests/integration/test_adaptive_enhancement_live.py
 ```
 
 真实对话/上传/GPU/API 示例见 [T12-B 记录](../.trellis/tasks/09-12-m4-enhancement-online/report.md)。
@@ -324,3 +331,13 @@ SEWER_RUN_ENHANCEMENT_WORKFLOW_TEST=1 .venv/bin/pytest -q backend/tests/integrat
 `SEWER_ENHANCEMENT_OUTPUT` 后运行 `backend/tests/integration/test_live_enhancement_online.py`；
 该受控测试固定示例 ROI，至多 3 次 API 和一次增强推理，结束后保留文件、删除自己的测试 schema，
 不代替人工审核。原图/模型同名文件不得原位替换；提交前崩溃仍可能重算/重复计费，不承诺 exactly-once。
+
+T12-C 同一 smoke 增加 `SEWER_LIVE_AUTO_ENHANCEMENT=1` 可验证主动分支，至多四次 API、
+一次 GPU 增强；跳过时三次 API、零次增强。新工作流固定可用模型和选择版本，已持久化选择
+不重新询问 API；增强失败/无收益不递归尝试其他模型。
+DarkIR 权重 `var/models/enhancement/darkir-384-hf-8a73ebf2.pt`；HVI-CIDNet 仅离线对照，
+来源/许可/下载版本见 [低照度记录](../.trellis/tasks/09-13-m4-adaptive-enhancement/lowlight-report.md)。
+运行 `.venv/bin/python scripts/evaluate_lowlight_models.py --output var/evaluations/lowlight-new-run`
+可复现六图比较（新输出目录；需本地两份权重；不调用 API）。既有三种增强模型保持基线，
+后续替换需逐图效果依据。当前 [T12-C 实图和在线证据](../var/evaluations/2026-09-13-adaptive-enhancement/index.html)
+证明工程可用，不代表缺陷级准确率提升。

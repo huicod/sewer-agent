@@ -10,9 +10,20 @@ type EnhancementPanelProps = {
 };
 
 const KIND_TEXT = {
+  low_light: "低照度恢复",
   dehaze: "去雾",
   deblur: "去模糊",
   super_resolution: "超分辨率",
+} as const;
+
+const DEGRADATION_TEXT = {
+  low_light: "低照度",
+  mixed_dark_noise_blur: "暗部、噪声与模糊混合",
+  motion_blur: "运动模糊",
+  haze: "雾化",
+  small_detail: "细节过小",
+  none: "未发现明确退化",
+  unsupported: "当前工具不支持的退化",
 } as const;
 
 const EFFECT_TEXT = {
@@ -87,6 +98,7 @@ export function EnhancementPanel({ taskId, snapshotRevision, runtimeStatus }: En
   const visibleExpanded = expanded && !taskChanged;
   const result = detail?.result;
   const review = detail?.review;
+  const selection = detail?.selection;
 
   function toggle() {
     if (visibleExpanded) {
@@ -117,12 +129,34 @@ export function EnhancementPanel({ taskId, snapshotRevision, runtimeStatus }: En
           <p className="truth-note">增强图是派生证据，仅供辅助复核，不改写原检查结论。</p>
           {loading ? <p className="empty-state">正在读取已存增强证据…</p> : null}
           {error ? <p className="task-error" role="alert">{error}</p> : null}
+          {!loading && detail && selection ? (
+            <section className="enhancement-selection" aria-label="按需增强选择">
+              <h4>按需增强选择</h4>
+              <p>
+                {selection.status === "selected"
+                  ? `自动增强已选择：${KIND_TEXT[selection.options!.kind]}；${selection.reason}`
+                  : `自动增强已跳过；${selection.reason}`}
+              </p>
+              {selection.proposal ? (
+                <p>
+                  退化判断：{DEGRADATION_TEXT[selection.proposal.degradation]}
+                  （{selection.proposal.confidence === "clear" ? "明确" : "不确定"}）；
+                  证据：{selection.proposal.evidence}；
+                  对检查判读的影响：{selection.proposal.inspection_impact}
+                </p>
+              ) : null}
+            </section>
+          ) : null}
           {!loading && detail && !result ? (
-            <p className="truth-note">
-              {runtimeStatus === "running"
-                ? "正在处理，暂未生成持久化增强结果。"
-                : "该任务没有已存的图片增强结果。"}
-            </p>
+            selection?.status === "skipped" ? null : (
+              <p className="truth-note">
+                {selection?.status === "selected"
+                  ? "增强结果尚未生成。"
+                  : runtimeStatus === "running"
+                    ? "正在处理，暂未生成持久化增强结果。"
+                    : "该任务没有已存的图片增强结果。"}
+              </p>
+            )
           ) : null}
           {result ? (
             <>

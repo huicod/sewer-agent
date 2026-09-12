@@ -82,11 +82,17 @@ def run_config(
         "plan": plan.model_dump(mode="json") if plan is not None else None,
     }
     if plan and any(s.action == ActionKind.ENHANCE for s in plan.steps):
-        from pipe_inspector.workflow.enhancement_config import build_enhancement_config
+        from pipe_inspector.workflow.enhancement_config import (
+            build_auto_enhancement_config,
+            build_enhancement_config,
+        )
 
-        if plan.enhancement is None:
+        if plan.auto_enhancement:
+            config["auto_enhancement"] = build_auto_enhancement_config(settings)
+        elif plan.enhancement is None:
             raise InspectionStartError("enhancement_parameters_required", "请指定增强种类", 409)
-        config["enhancement"] = build_enhancement_config(settings, plan.enhancement)
+        else:
+            config["enhancement"] = build_enhancement_config(settings, plan.enhancement)
     return config
 
 
@@ -190,6 +196,8 @@ class InspectionStarter:
                 "unsupported_media", "当前执行器只支持已接纳的图片或视频", 409
             )
         is_video = asset.kind == AssetKind.VIDEO
+        if plan and plan.auto_enhancement and (asset.kind != "image" or asset.parent is not None):
+            raise InspectionStartError("enhancement_image_only", "自动增强只支持原始图片", 409)
         if plan and plan.enhancement is not None:
             from pipe_inspector.workflow.enhancement_config import validate_enhancement_input
 

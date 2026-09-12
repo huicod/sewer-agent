@@ -1,6 +1,6 @@
 """Explicit paid smoke: uploaded CCTV -> conversation -> durable image enhancement.
 
-At most three provider calls and one enhancement inference; no automatic live opt-in.
+At most three provider calls (four in opt-in automatic mode) and one enhancement inference.
 Artifacts persist in the explicitly chosen output directory, the test DB schema does not.
 """
 
@@ -20,6 +20,7 @@ import psycopg
 import pytest
 from pipe_inspector.agent.api_client import APIClientError, OpenAICompatibleClient
 from pipe_inspector.agent.enhancement_review import EnhancementReviewer
+from pipe_inspector.agent.enhancement_selection import EnhancementSelector
 from pipe_inspector.agent.image_review import ImageReviewer
 from pipe_inspector.agent.intent import IntentParser
 from pipe_inspector.api.app import create_app
@@ -31,6 +32,7 @@ from pipe_inspector.workflow.activities import ImageActivities
 from pipe_inspector.workflow.conversation import ConversationWorkflow
 from pipe_inspector.workflow.conversation_activities import TurnActivities
 from pipe_inspector.workflow.enhancement_activities import EnhancementActivities
+from pipe_inspector.workflow.enhancement_selection import EnhancementSelectionActivities
 from pipe_inspector.workflow.human_review_activities import HumanReviewActivities
 from pipe_inspector.workflow.image import ImageInspectionWorkflow
 from psycopg import sql
@@ -48,6 +50,8 @@ pytestmark = [
 
 
 async def test_uploaded_cctv_conversation_enhancement():
+    automatic = os.getenv("SEWER_LIVE_AUTO_ENHANCEMENT") == "1"
+    api_limit = 4 if automatic else 3
     image_path = Path(os.environ["SEWER_LIVE_IMAGE"]).resolve()
     output = Path(os.environ["SEWER_ENHANCEMENT_OUTPUT"]).resolve()
     output.mkdir(parents=True, exist_ok=False)
@@ -62,10 +66,22 @@ async def test_uploaded_cctv_conversation_enhancement():
 
     class BoundedClient(OpenAICompatibleClient):
         async def generate(self, messages, response_model):
-            if len(provider_calls) >= 3:
+            if len(provider_calls) >= api_limit:
                 raise APIClientError("smoke_api_budget_exhausted", retryable=False)
             record = {"response_model": response_model.__name__, "status": "started"}
             provider_calls.append(record)
+            safe_messages = []
+            for message in messages:
+                content = message["content"]
+                if isinstance(content, list):
+                    content = [
+                        {"type": "image_url", "image_url": {"url": "[local evidence image]"}}
+                        if item.get("type") == "image_url"
+                        else item
+                        for item in content
+                    ]
+                safe_messages.append({"role": message["role"], "content": content})
+            save(f"api-{len(provider_calls)}-request.json", safe_messages)
             print("live API", len(provider_calls), record["response_model"], flush=True)
             try:
                 result = await super().generate(messages, response_model)
@@ -110,6 +126,9 @@ async def test_uploaded_cctv_conversation_enhancement():
     enhanced = EnhancementActivities(
         settings, repo, media, model_factory=model_factory, reviewer=EnhancementReviewer(api("vlm"))
     )
+    selection = EnhancementSelectionActivities(
+        settings, repo, media, selector=EnhancementSelector(api("vlm"))
+    )
     turns = TurnActivities(settings, repo, parser=IntentParser(api("llm")))
     human = HumanReviewActivities(repo)
     try:
@@ -128,6 +147,7 @@ async def test_uploaded_cctv_conversation_enhancement():
                         originals.finish_image,
                         enhanced.prepare_image_enhancement,
                         enhanced.review_image_enhancement,
+                        selection.select_image_enhancement,
                         human.apply_human_review,
                         human.cancel_human_review,
                     ],
@@ -161,6 +181,11 @@ async def test_uploaded_cctv_conversation_enhancement():
                         "text": "新建图片检查，先完成五类检测和VLM复检，再对原图像素区域"
                         "[150,50,406,306]执行局部超分，并辅助复核。不要执行其他增强。",
                     }
+                    if automatic:
+                        request["text"] = (
+                            "新建图片检查，先完成五类检测和 VLM 复检。允许你根据原图实际画质，"
+                            "在确有必要时按需选择一次图片增强；不需要就跳过，不要强制增强。"
+                        )
                     save("request.json", request)
                     response = await http.post(
                         f"/api/sessions/{session['session_id']}/turns", json=request
@@ -198,20 +223,42 @@ async def test_uploaded_cctv_conversation_enhancement():
                     assert detail.status_code == 200
                     save("enhancement.json", detail.json())
                     data = detail.json()
-                    assert data["result"] is not None and data["review"] is not None
-                    assert len(provider_calls) == 3 and len(gpu_calls) == 1
+                    chosen = not automatic or data["selection"]["status"] == "selected"
+                    if chosen:
+                        assert data["result"] is not None and data["review"] is not None
+                    else:
+                        assert data["result"] is None and data["review"] is None
+                    assert len(provider_calls) == (api_limit if chosen else api_limit - 1)
+                    assert len(gpu_calls) == int(chosen)
                     shutil.copyfile(media.path_for(asset.ref), output / "original.jpg")
-                    derived = AssetRecord.model_validate(data["result"]["output_asset"])
-                    shutil.copyfile(media.path_for(derived.ref), output / "enhanced.png")
+                    if chosen:
+                        derived = AssetRecord.model_validate(data["result"]["output_asset"])
+                        shutil.copyfile(media.path_for(derived.ref), output / "enhanced.png")
+                    heading = "Agent 按需增强" if automatic else "原图 / ROI 局部超分"
+                    derived_html = (
+                        '<img src="enhanced.png" style="width:48%;object-fit:contain">'
+                        if chosen
+                        else "<p>Agent 选择跳过增强。</p>"
+                    )
                     (output / "index.html").write_text(
                         '<!doctype html><meta charset="utf-8"><title>在线增强联调</title>'
-                        "<h1>原图 / ROI 局部超分</h1>"
+                        f"<h1>{heading}</h1>"
                         "<p>流程验证，不是准确率实验；未代替人工审核。</p>"
                         '<div style="display:flex;gap:16px">'
                         '<img src="original.jpg" style="width:48%">'
-                        '<img src="enhanced.png" style="width:48%;object-fit:contain"></div>'
-                        '<p>原图 ROI：[150,50,406,306]</p><pre style="white-space:pre-wrap">'
-                        + escape(json.dumps(data["review"], ensure_ascii=False, indent=2))
+                        + derived_html
+                        + '</div><pre style="white-space:pre-wrap">'
+                        + escape(
+                            json.dumps(
+                                {
+                                    "selection": data.get("selection"),
+                                    "roi": data["result"]["source_region"] if chosen else None,
+                                    "review": data["review"],
+                                },
+                                ensure_ascii=False,
+                                indent=2,
+                            )
+                        )
                         + "</pre>",
                         encoding="utf-8",
                     )
@@ -219,7 +266,14 @@ async def test_uploaded_cctv_conversation_enhancement():
         if task_id is not None:
             save("task.json", repo.get_task(task_id).model_dump(mode="json"))
             save("calls.json", [call.model_dump(mode="json") for call in repo.list_calls(task_id)])
-            for step in ("detect", "verify", "enhancement_source", "enhance", "enhancement_review"):
+            for step in (
+                "detect",
+                "verify",
+                "enhancement_selection",
+                "enhancement_source",
+                "enhance",
+                "enhancement_review",
+            ):
                 save(step + ".json", repo.load_step(task_id, step))
         save(
             "execution.json",

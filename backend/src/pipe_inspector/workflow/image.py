@@ -99,6 +99,26 @@ class ImageInspectionWorkflow:
                         )
             except ActivityError:
                 error = error or "open_selection_failed"
+        if "auto_enhancement" in run["config"] and error is None:
+            self.stage = "tools"
+            try:
+                selected = await workflow.execute_activity(
+                    "select_image_enhancement",
+                    run,
+                    start_to_close_timeout=timedelta(
+                        seconds=run["config"]["api_timeout_seconds"] + 30
+                    ),
+                    retry_policy=RetryPolicy(maximum_attempts=min(
+                        3, (run["config"].get("plan") or {}).get("budget", {})
+                        .get("max_transport_attempts", 3)
+                    )),
+                )
+                if selected.get("enhancement") is not None:
+                    run = run | {"config": run["config"] | {"enhancement": selected["enhancement"]}}
+            except ActivityError as exc:
+                cause = exc.cause
+                error = (cause.type if isinstance(cause, ApplicationError)
+                         else "enhancement_selection_interrupted")
         if "enhancement" in run["config"] and error is None:
             self.stage = "tools"
             try:

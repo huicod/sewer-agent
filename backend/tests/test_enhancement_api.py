@@ -74,7 +74,11 @@ def app_fixture(tmp_path, *, task=None, result=None, review=None):
     def load_step(task_id, step):
         reads.append(step)
         assert task_id == task.snapshot.task_id
-        value = {"enhance": result, "enhancement_review": review}[step]
+        value = {
+            "enhance": result,
+            "enhancement_review": review,
+            "enhancement_selection": None,
+        }[step]
         return None if value is None else value.model_dump(mode="json")
 
     repository = SimpleNamespace(get_task=get_task, load_step=load_step)
@@ -91,8 +95,9 @@ async def test_enhancement_detail_returns_null_before_any_checkpoint(tmp_path):
         "task_id": str(task.snapshot.task_id),
         "result": None,
         "review": None,
+        "selection": None,
     }
-    assert reads == ["task", "enhance", "enhancement_review"]
+    assert reads == ["task", "enhance", "enhancement_review", "enhancement_selection"]
 
 
 async def test_enhancement_detail_returns_saved_result_during_review_stage(tmp_path):

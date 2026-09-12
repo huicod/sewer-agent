@@ -16,7 +16,8 @@ from pipe_inspector.media import MediaStore
 from pipe_inspector.vision.enhancement import ENHANCEMENT_MODELS, run_enhancement
 from pipe_inspector.vision.quality import analyze_quality
 
-CHECKPOINTS = {kind: item[1] for kind, item in ENHANCEMENT_MODELS.items()}
+EVALUATION_KINDS = ("dehaze", "deblur", "super_resolution")
+CHECKPOINTS = {kind: ENHANCEMENT_MODELS[kind][1] for kind in EVALUATION_KINDS}
 NAMES = {"dehaze": "去雾", "deblur": "去模糊", "super_resolution": "ROI 超分 ×4"}
 
 

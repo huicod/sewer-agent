@@ -5,7 +5,7 @@ from uuid import uuid4
 
 from pipe_inspector.agent.enhancement_review import ENHANCEMENT_REVIEW_VERSION
 from pipe_inspector.contracts.common import ImageRegion
-from pipe_inspector.contracts.enhancement import EnhancementOptions
+from pipe_inspector.contracts.enhancement import EnhancementOptions, EnhancementSelection
 from pipe_inspector.vision.enhancement import ENHANCEMENT_MODELS
 from pipe_inspector.workflow.start import InspectionStartError
 
@@ -18,13 +18,17 @@ def build_enhancement_config(settings, options: EnhancementOptions, *, check_fil
         raise InspectionStartError(
             "enhancement_roi_required", "局部超分需要明确的原图像素框 [x1,y1,x2,y2]", 409
         )
-    model_id, filename = ENHANCEMENT_MODELS[options.kind]
+    return _model_pin(settings, options.kind, options.model_dump(mode="json"), check_files)
+
+
+def _model_pin(settings, kind, options, check_files):
+    model_id, filename = ENHANCEMENT_MODELS[kind]
     checkpoint = (settings.enhancement_models_dir / filename).resolve()
     if check_files and not checkpoint.is_file():
         raise InspectionStartError("enhancement_unavailable", "所选增强模型未部署", 409)
     return {
         "version": ENHANCEMENT_ONLINE_VERSION,
-        "options": options.model_dump(mode="json"),
+        "options": options,
         "model_id": model_id,
         "model_version": filename,
         "checkpoint": str(checkpoint),
@@ -33,6 +37,33 @@ def build_enhancement_config(settings, options: EnhancementOptions, *, check_fil
         "review_call_id": str(uuid4()),
         "review_prompt_version": ENHANCEMENT_REVIEW_VERSION,
     }
+
+
+def build_auto_enhancement_config(settings):
+    from pipe_inspector.agent.enhancement_selection import SELECTION_VERSION
+
+    models = {}
+    for kind in ENHANCEMENT_MODELS:
+        try:
+            models[kind] = _model_pin(settings, kind, None, True)
+        except InspectionStartError:
+            continue
+    return {"version": SELECTION_VERSION, "call_id": str(uuid4()), "models": models}
+
+
+def selected_enhancement_pin(config, selection):
+    """Derive execution solely from immutable candidates and a durable selection."""
+    from pipe_inspector.agent.enhancement_selection import SELECTION_VERSION
+
+    selection = EnhancementSelection.model_validate(selection)
+    auto = config["auto_enhancement"]
+    if auto["version"] != SELECTION_VERSION:
+        raise ValueError("selection version changed")
+    if selection.status != "selected":
+        return None
+    options = selection.options
+    candidate = auto["models"][options.kind]
+    return candidate | {"options": options.model_dump(mode="json")}
 
 
 def validate_enhancement_input(asset, options: EnhancementOptions) -> None:

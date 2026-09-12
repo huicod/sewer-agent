@@ -8,7 +8,11 @@ from pipe_inspector.api.app import create_app
 from pipe_inspector.config import Settings
 from pipe_inspector.contracts.assets import AssetRecord, AssetRef
 from pipe_inspector.contracts.common import ImageRegion
-from pipe_inspector.contracts.enhancement import EnhancementResult, EnhancementReview
+from pipe_inspector.contracts.enhancement import (
+    EnhancementResult,
+    EnhancementReview,
+    EnhancementSelection,
+)
 from pipe_inspector.contracts.findings import EvidenceRef, Finding
 from pipe_inspector.contracts.inspection import QualitySummary
 from pipe_inspector.contracts.intake import TaskRecord
@@ -84,8 +88,8 @@ def enhancement_fixture(task):
     result = EnhancementResult(
         input_asset=task.input_asset,
         output_asset=output,
-        kind="super_resolution",
-        model_id="swinir",
+        kind="low_light",
+        model_id="darkir",
         model_version="v1<script>",
         source_region=ImageRegion(width=640, height=480, bbox_xyxy=(10, 20, 310, 220)),
         quality_before=before,
@@ -103,6 +107,23 @@ def enhancement_fixture(task):
     return result, review
 
 
+def enhancement_selection_fixture():
+    return EnhancementSelection.model_validate(
+        {
+            "status": "selected",
+            "reason": "低照度影响判读",
+            "proposal": {
+                "options": {"kind": "low_light", "roi_xyxy": None},
+                "degradation": "low_light",
+                "confidence": "clear",
+                "evidence": "管壁暗部细节缺失",
+                "inspection_impact": "裂纹边缘难以辨认",
+            },
+            "options": {"kind": "low_light", "roi_xyxy": None},
+        }
+    )
+
+
 def test_supplement_report_links_original_without_inventing_a_detection_call():
     task, call = report_fixture()
     parent_id = uuid4()
@@ -117,6 +138,7 @@ def test_supplement_report_links_original_without_inventing_a_detection_call():
 def report_app(tmp_path):
     task, call = report_fixture()
     result, review = enhancement_fixture(task)
+    selection = enhancement_selection_fixture()
     reads = []
 
     def get_task(task_id):
@@ -135,6 +157,7 @@ def report_app(tmp_path):
         return {
             "enhance": result.model_dump(mode="json"),
             "enhancement_review": review.model_dump(mode="json"),
+            "enhancement_selection": {"selection": selection.model_dump(mode="json")},
         }[step]
 
     # No create/start/model methods: report generation must be strictly read-only.
@@ -152,9 +175,12 @@ async def test_json_report_preserves_stored_evidence_and_unresolved_result(repor
     assert payload["schema_version"] == "1"
     assert payload["task"] == task.model_dump(mode="json")
     assert payload["tool_calls"] == [call.model_dump(mode="json")]
+    assert payload["enhancement_selection"] == enhancement_selection_fixture().model_dump(
+        mode="json"
+    )
     assert payload["enhancement"] == result.model_dump(mode="json")
     assert payload["enhancement_review"] == review.model_dump(mode="json")
-    assert reads == ["task", "enhance", "enhancement_review", "calls"]
+    assert reads == ["task", "enhance", "enhancement_review", "enhancement_selection", "calls"]
 
 
 async def test_html_report_escapes_text_and_keeps_review_coverage_and_tool_failure(report_app):
@@ -176,6 +202,8 @@ async def test_html_report_escapes_text_and_keeps_review_coverage_and_tool_failu
     assert "(10, 20, 310, 220)" in response.text
     assert "v1&lt;script&gt;" in response.text
     assert "辅助复核摘要" in response.text
+    assert "自动增强已选择：低照度恢复" in response.text
+    assert "增强类型：低照度恢复" in response.text
     assert "派生图仅供辅助复核，不改写原检查结论" in response.text
     assert "default-src 'none'" in response.headers["content-security-policy"]
     assert "img-src 'self'" in response.headers["content-security-policy"]
@@ -255,3 +283,4 @@ def test_old_report_payload_defaults_enhancement_fields_to_null():
     })
     assert report.enhancement is None
     assert report.enhancement_review is None
+    assert report.enhancement_selection is None

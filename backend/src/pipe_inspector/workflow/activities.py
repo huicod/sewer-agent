@@ -277,7 +277,7 @@ class ImageActivities:
         run = payload["run"]
         task_id = UUID(run["task_id"])
         error = payload.get("error")
-        enhancement_failed = False
+        enhancement_failed = bool(error and "auto_enhancement" in run["config"])
         current = self.repo.get_task(task_id).snapshot
         if current.is_terminal:
             return current.model_dump(mode="json")
@@ -349,6 +349,12 @@ class ImageActivities:
                         task_id=task_id,
                         error=error,
                     )
+                elif enhancement_failed and saved_review is not None:
+                    from pipe_inspector.agent.enhancement_fusion import apply_enhancement_review
+
+                    # Downstream selection failure is not failure of the saved original review.
+                    baseline = self._decide(run, task, observation, review, None)
+                    decision = apply_enhancement_review(baseline, None, None, error=error)
                 else:
                     from pipe_inspector.workflow.open_scan_activities import apply_open_results
 

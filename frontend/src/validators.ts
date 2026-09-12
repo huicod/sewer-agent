@@ -429,8 +429,16 @@ const ENHANCEMENT_RESULT_FIELDS = new Set([
 const ENHANCEMENT_REVIEW_FIELDS = new Set([
   "quality_effect", "conflicting_finding_ids", "additional_anomalies", "summary",
 ]);
+const ENHANCEMENT_SELECTION_FIELDS = new Set(["status", "reason", "proposal", "options"]);
+const ENHANCEMENT_PROPOSAL_FIELDS = new Set([
+  "options", "degradation", "confidence", "evidence", "inspection_impact",
+]);
+const ENHANCEMENT_OPTIONS_FIELDS = new Set(["kind", "roi_xyxy"]);
 const ADDITIONAL_ANOMALY_FIELDS = new Set(["label", "name", "bbox_xyxy", "reason"]);
-const ENHANCEMENT_KINDS = new Set(["dehaze", "deblur", "super_resolution"]);
+const ENHANCEMENT_KINDS = new Set(["low_light", "dehaze", "deblur", "super_resolution"]);
+const DEGRADATIONS = new Set([
+  "low_light", "mixed_dark_noise_blur", "motion_blur", "haze", "small_detail", "none", "unsupported",
+]);
 const QUALITY_EFFECTS = new Set(["improved", "unchanged", "degraded", "uncertain"]);
 
 function sameAsset(left: AssetRef, right: AssetRef): boolean {
@@ -482,10 +490,59 @@ function isEnhancementReview(
   );
 }
 
+function isEnhancementOptions(value: unknown): boolean {
+  if (
+    !isRecord(value) || !hasExactFields(value, ENHANCEMENT_OPTIONS_FIELDS) ||
+    typeof value.kind !== "string" || !ENHANCEMENT_KINDS.has(value.kind)
+  ) return false;
+  if (value.roi_xyxy === null) return true;
+  if (!Array.isArray(value.roi_xyxy) || value.roi_xyxy.length !== 4 ||
+      !value.roi_xyxy.every(isNonNegativeFinite)) return false;
+  const [x1, y1, x2, y2] = value.roi_xyxy;
+  return x1 < x2 && y1 < y2;
+}
+
+function sameEnhancementOptions(left: unknown, right: unknown): boolean {
+  if (!isRecord(left) || !isRecord(right) || left.kind !== right.kind) return false;
+  if (left.roi_xyxy === null || right.roi_xyxy === null) return left.roi_xyxy === right.roi_xyxy;
+  const leftRoi = left.roi_xyxy;
+  const rightRoi = right.roi_xyxy;
+  return Array.isArray(leftRoi) && Array.isArray(rightRoi) &&
+    leftRoi.every((coordinate, index) => coordinate === rightRoi[index]);
+}
+
+function isEnhancementProposal(value: unknown): boolean {
+  return isRecord(value) && hasExactFields(value, ENHANCEMENT_PROPOSAL_FIELDS) &&
+    (value.options === null || isEnhancementOptions(value.options)) &&
+    typeof value.degradation === "string" && DEGRADATIONS.has(value.degradation) &&
+    (value.confidence === "clear" || value.confidence === "uncertain") &&
+    isNonEmptyString(value.evidence) && value.evidence.length <= 1_000 &&
+    isNonEmptyString(value.inspection_impact) && value.inspection_impact.length <= 1_000;
+}
+
+function isEnhancementSelection(value: unknown): boolean {
+  if (
+    !isRecord(value) || !hasExactFields(value, ENHANCEMENT_SELECTION_FIELDS) ||
+    (value.status !== "selected" && value.status !== "skipped") ||
+    !isNonEmptyString(value.reason) ||
+    !(value.proposal === null || isEnhancementProposal(value.proposal)) ||
+    !(value.options === null || isEnhancementOptions(value.options))
+  ) return false;
+  if ((value.status === "selected") !== (value.options !== null)) return false;
+  return value.options === null || (
+    isRecord(value.proposal) && value.proposal.options !== null &&
+    sameEnhancementOptions(value.options, value.proposal.options)
+  );
+}
+
 export function isEnhancementDetail(value: unknown): value is EnhancementDetail {
   if (
-    !isRecord(value) || !hasExactFields(value, new Set(["task_id", "result", "review"])) ||
-    !isUuid(value.task_id) || !(value.result === null || isRecord(value.result))
+    !isRecord(value) ||
+    !(hasExactFields(value, new Set(["task_id", "result", "review"])) ||
+      hasExactFields(value, new Set(["task_id", "result", "review", "selection"]))) ||
+    !isUuid(value.task_id) ||
+    !(value.result === null || isRecord(value.result)) ||
+    !(value.selection === undefined || value.selection === null || isEnhancementSelection(value.selection))
   ) return false;
   if (value.result === null) return value.review === null;
   const result = value.result;

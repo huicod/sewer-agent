@@ -29,6 +29,7 @@ def report_router(repository) -> APIRouter:
         report = TaskReport(
             task=task,
             tool_calls=repository.list_calls(task_id),
+            enhancement_selection=enhancement.selection,
             enhancement=enhancement.result,
             enhancement_review=enhancement.review,
         )

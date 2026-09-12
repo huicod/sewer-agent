@@ -197,7 +197,24 @@ class InspectionRepository(PostgresRepository):
                 ).fetchone()
                 if run_row is None:
                     raise MissingRecord
-                pin = self._enhancement_pin(run_row[1])
+                config = run_row[1]
+                if "auto_enhancement" in config:
+                    from pipe_inspector.workflow.enhancement_config import selected_enhancement_pin
+
+                    selection = connection.execute(
+                        sql.SQL(
+                            "SELECT payload FROM {} WHERE task_id = %s "
+                            "AND step = 'enhancement_selection'"
+                        ).format(self._table("sewer_step_checkpoints")), (task_id,),
+                    ).fetchone()
+                    try:
+                        pin = selected_enhancement_pin(config, selection[0]["selection"])
+                        if pin is None:
+                            raise ValueError("no selected enhancement")
+                    except (ValueError, KeyError, TypeError):
+                        raise SubmissionConflict from None
+                else:
+                    pin = self._enhancement_pin(config)
                 self._validate_enhancement_call_identity(task_id, run_row[0], pin, call)
                 if checkpoint is not None:
                     return EnhancementResult.model_validate(checkpoint[0]).model_dump(mode="json")

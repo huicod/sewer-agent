@@ -11,7 +11,7 @@ from temporalio.service import RPCError
 from pipe_inspector.contracts.turns import TurnInput, TurnSubmission
 from pipe_inspector.workflow.start import InspectionStartError
 
-CONVERSATION_VERSION = "conversation-v3-enhancement"
+CONVERSATION_VERSION = "conversation-v4-adaptive-enhancement"
 
 
 def turn_config(settings):

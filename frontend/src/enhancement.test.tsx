@@ -22,6 +22,7 @@ function detail(id = taskId): EnhancementDetail {
   const input = { asset_id: sourceAssetId, version: 1 };
   return {
     task_id: id,
+    selection: null,
     result: {
       schema_version: "1",
       input_asset: input,
@@ -117,6 +118,38 @@ describe("enhancement HTTP boundary", () => {
       message: "服务返回的数据格式无效",
     }));
   });
+
+  it("accepts an older detail response with no selection field", async () => {
+    const legacy = structuredClone(detail()) as EnhancementDetail & { selection?: unknown };
+    delete legacy.selection;
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(response(legacy)));
+
+    await expect(getEnhancement(taskId)).resolves.toEqual(legacy);
+  });
+
+  it("rejects a selection that contains private execution configuration", async () => {
+    const payload = structuredClone(detail());
+    payload.selection = {
+      status: "selected",
+      reason: "低照度影响判读",
+      proposal: {
+        options: { kind: "low_light", roi_xyxy: null },
+        degradation: "low_light",
+        confidence: "clear",
+        evidence: "管壁区域整体偏暗",
+        inspection_impact: "暗部细节难以辨认",
+      },
+      options: { kind: "low_light", roi_xyxy: null },
+    };
+    (payload.selection as unknown as Record<string, unknown>).model_path = "/srv/models/private.pt";
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(response(payload)));
+
+    await expect(getEnhancement(taskId)).rejects.toEqual(expect.objectContaining<ApiError>({
+      name: "ApiError",
+      status: 200,
+      message: "服务返回的数据格式无效",
+    }));
+  });
 });
 
 describe("enhancement comparison panel", () => {
@@ -193,5 +226,63 @@ describe("enhancement comparison panel", () => {
     await user.click(screen.getByRole("button", { name: "展开图片增强对照" }));
     await screen.findByRole("img", { name: "增强派生图" });
     expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("shows a skipped adaptive selection reason without inventing an output image", async () => {
+    const payload: EnhancementDetail = {
+      task_id: taskId,
+      selection: {
+        status: "skipped",
+        reason: "建议置信度不足，保持原图证据",
+        proposal: {
+          options: null,
+          degradation: "mixed_dark_noise_blur",
+          confidence: "uncertain",
+          evidence: "暗部与噪声同时存在",
+          inspection_impact: "无法确定单一工具能改善判读",
+        },
+        options: null,
+      },
+      result: null,
+      review: null,
+    };
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(response(payload)));
+    const user = userEvent.setup();
+    render(<EnhancementPanel taskId={taskId} snapshotRevision="2026-09-13T10:00:00Z" runtimeStatus="completed" />);
+
+    await user.click(screen.getByRole("button", { name: "展开图片增强对照" }));
+
+    expect(await screen.findByText(/自动增强已跳过.*建议置信度不足/)).toBeTruthy();
+    expect(screen.getByText(/暗部与噪声同时存在/)).toBeTruthy();
+    expect(screen.queryByRole("img", { name: "增强派生图" })).toBeNull();
+  });
+
+  it("shows a selected low-light reason while the output is still pending", async () => {
+    const payload: EnhancementDetail = {
+      task_id: taskId,
+      selection: {
+        status: "selected",
+        reason: "低照度清晰影响判读，允许执行恢复",
+        proposal: {
+          options: { kind: "low_light", roi_xyxy: null },
+          degradation: "low_light",
+          confidence: "clear",
+          evidence: "管壁暗部细节缺失",
+          inspection_impact: "裂纹边缘难以辨认",
+        },
+        options: { kind: "low_light", roi_xyxy: null },
+      },
+      result: null,
+      review: null,
+    };
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(response(payload)));
+    const user = userEvent.setup();
+    render(<EnhancementPanel taskId={taskId} snapshotRevision="2026-09-13T10:01:00Z" runtimeStatus="running" />);
+
+    await user.click(screen.getByRole("button", { name: "展开图片增强对照" }));
+
+    expect(await screen.findByText(/自动增强已选择.*低照度恢复/)).toBeTruthy();
+    expect(screen.getByText(/增强结果尚未生成/)).toBeTruthy();
+    expect(screen.queryByRole("img", { name: "增强派生图" })).toBeNull();
   });
 });

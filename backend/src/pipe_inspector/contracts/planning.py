@@ -53,10 +53,13 @@ class TaskPlan(ContractModel):
     outputs: tuple[OutputFormat, ...] = (OutputFormat.JSON, OutputFormat.HTML)
     budget: CallBudget = Field(default_factory=CallBudget)
     enhancement: EnhancementOptions | None = None
+    auto_enhancement: bool = False
 
     @model_validator(mode="after")
     def validate_plan(self) -> "TaskPlan":
-        if self.enhancement is not None and sum(
+        if self.auto_enhancement and self.enhancement is not None:
+            raise ValueError("explicit and automatic enhancement are mutually exclusive")
+        if (self.enhancement is not None or self.auto_enhancement) and sum(
             step.action == ActionKind.ENHANCE for step in self.steps
         ) != 1:
             raise ValueError("enhancement options require exactly one enhance step")
