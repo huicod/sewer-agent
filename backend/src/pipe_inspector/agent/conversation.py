@@ -19,6 +19,9 @@ AVAILABLE_ACTIONS = frozenset(
         ActionKind.DETECT,
         ActionKind.VERIFY,
         ActionKind.ENHANCE,
+        ActionKind.SEGMENT,
+        ActionKind.RELATIVE_DEPTH,
+        ActionKind.RELATIVE_MEASURE,
         ActionKind.SUMMARIZE,
         ActionKind.EXPORT_REPORT,
     }
@@ -64,6 +67,14 @@ class ConversationDispatcher:
         validate_enhancement_input(asset, options)
         build_enhancement_config(self.starter.settings, options)
 
+    def _preflight_geometry(self, asset, options, task=None):
+        from pipe_inspector.workflow.geometry_config import (
+            build_geometry_config,
+            validate_geometry_input,
+        )
+        validate_geometry_input(asset, options, task)
+        build_geometry_config(self.starter.settings, options)
+
     async def handle(self, turn, intent):
         if intent.kind in {"clarify", "refuse"}:
             return self._reply(intent.message)
@@ -74,6 +85,11 @@ class ConversationDispatcher:
             try:
                 plan = compile_inspection_plan(intent, available_actions=AVAILABLE_ACTIONS)
             except IntentPlanningError as exc:
+                if exc.code.startswith("geometry_"):
+                    return self._reply(
+                        "请明确分割、整图相对深度或相对测量；分割需要提供原图像素区域"
+                        " [x1,y1,x2,y2]。已有 finding ID 请通过追加操作引用；本次未启动。"
+                    )
                 if exc.code == "enhancement_parameters_required":
                     return self._reply(
                         "请从暗光恢复、去雾、去模糊或局部超分中明确选择一种增强；"
@@ -82,7 +98,13 @@ class ConversationDispatcher:
                 return self._reply(
                     "所请求的工具当前未部署或已停用，本次未启动检查。"
                     "当前可用：图片/视频五类检测、条件 VLM 复检、"
-                    "显式或允许后按需图片增强与证据报告。"
+                    "显式或允许后按需图片增强、分割/相对深度与证据报告。"
+                )
+            if plan.geometry is not None and turn.input_asset is None and task is not None:
+                return self._reply(
+                    "已选择已有任务，请明确请求关联几何操作，以复用冻结证据和补证额度；"
+                    "若确需新建检查，请本条重新上传或指定原图。本次未启动。",
+                    task.snapshot.task_id,
                 )
             asset_ref = turn.input_asset or (task.input_asset if task else None)
             if asset_ref is None:
@@ -94,13 +116,18 @@ class ConversationDispatcher:
                 instruction=turn.text,
             )
             existing = None
-            if plan.enhancement is not None or plan.auto_enhancement:
+            if plan.enhancement is not None or plan.auto_enhancement or plan.geometry is not None:
                 existing = await asyncio.to_thread(
                     self.repo.find_task_by_request_id, turn.request_id
                 )
                 if existing is not None:
                     validate_existing_admission(existing, submission, parent_task_id=None)
             asset = await asyncio.to_thread(self.repo.get_asset, asset_ref)
+            if plan.geometry is not None and existing is None:
+                try:
+                    self._preflight_geometry(asset, plan.geometry)
+                except InspectionStartError as exc:
+                    return self._reply(str(exc) + "；本次未创建任务或执行工具。")
             if plan.auto_enhancement and (asset.kind != "image" or asset.parent is not None):
                 return self._reply(
                     "按需增强当前仅支持原始图片，视频或派生图片尚未接入；本次未启动。"
@@ -160,7 +187,8 @@ class ConversationDispatcher:
             label = LABELS.get(finding.canonical_label, "待定")
             lines.append(
                 f"{finding.canonical_label or '待定'}（{label}）："
-                f"{REVIEWS[finding.review_status]}；证据 {len(finding.evidence)} 项。"
+                f"{REVIEWS[finding.review_status]}；证据 {len(finding.evidence)} 项；"
+                f"finding ID：{finding.finding_id}。"
             )
         if not selected:
             lines.append("关注类别中暂无已保存的候选；这不单独构成正常结论。")
@@ -171,9 +199,34 @@ class ConversationDispatcher:
             summary = verified["review"].get("summary", "")
             if isinstance(summary, str) and summary:
                 lines.append("VLM 复检说明（建议，状态以上述已保存结果为准）：" + summary[:1000])
+        for step in ("geometry_depth", "geometry_segment"):
+            saved = await asyncio.to_thread(self.repo.load_step, snapshot.task_id, step)
+            if step == "geometry_depth" and saved and saved.get("result"):
+                from pipe_inspector.contracts.geometry import RelativeDepthResult
+
+                depth = RelativeDepthResult.model_validate(saved["result"])
+                if depth.input_asset != task.input_asset:
+                    raise ValueError("geometry source mismatch")
+                lines.append(
+                    "已保存单图相对深度图（白近黑远），见几何证据面板；"
+                    "无标定，不能换算真实尺寸，也不能跨图比较数值。"
+                )
+            if saved and saved.get("measurements"):
+                from pipe_inspector.contracts.geometry import GeometryMeasurements
+
+                measured = GeometryMeasurements.model_validate(saved["measurements"])
+                if measured.input_asset != task.input_asset:
+                    raise ValueError("geometry source mismatch")
+                lines.append(f"待复核掩膜面积：{measured.area_pixels} 像素；"
+                             f"占整幅图像 {measured.image_plane_fraction:.2%}，不是管道堵塞率。"
+                             "无标定，不能换算真实尺寸；分割与相对深度图见关联任务证据面板。")
+                break
         return self._reply("\n".join(lines), snapshot.task_id)
 
     async def _supplement(self, turn, intent, task):
+        if set(intent.actions) & {ActionKind.SEGMENT, ActionKind.RELATIVE_DEPTH,
+                                  ActionKind.RELATIVE_MEASURE}:
+            return await self._geometry_supplement(turn, intent, task)
         if intent.auto_enhancement:
             return self._reply(
                 "按需增强当前仅支持新建图片检查；关联任务可明确指定一种增强。本次未追加工具。"
@@ -264,3 +317,45 @@ class ConversationDispatcher:
             "关联复检已启动，复用原图片和检测证据，不重新运行检测器；原结果保留。新的复检结果尚未完成，可在关联任务中查看进度和报告。",
             child_id,
         )
+
+    async def _geometry_supplement(self, turn, intent, task):
+        allowed = {ActionKind.SEGMENT, ActionKind.RELATIVE_DEPTH, ActionKind.RELATIVE_MEASURE,
+                   ActionKind.SUMMARIZE, ActionKind.EXPORT_REPORT}
+        if not set(intent.actions) <= allowed or intent.auto_enhancement:
+            return self._reply("本次请只选择一种几何操作包，不与增强或追加VLM混用；未执行工具。")
+        if intent.geometry is None:
+            return self._reply("请明确几何操作；分割/相对测量需提供原图区域或已有 finding ID。")
+        if task is None:
+            return self._reply("请先选择一个已完成或部分完成的原始图片任务。")
+        parent_id = task.snapshot.task_id
+        if turn.input_asset is not None and turn.input_asset != task.input_asset:
+            return self._reply("追加几何工具必须使用原任务图片；本次未执行。", parent_id)
+        submission = TaskSubmission(request_id=turn.request_id, session_id=turn.session_id,
+            input_asset=task.input_asset, instruction=turn.text)
+        existing = await asyncio.to_thread(self.repo.find_task_by_request_id, turn.request_id)
+        if existing is not None:
+            validate_existing_admission(existing, submission, parent_task_id=parent_id)
+        else:
+            asset = await asyncio.to_thread(self.repo.get_asset, task.input_asset)
+            try:
+                self._preflight_geometry(asset, intent.geometry, task)
+            except InspectionStartError as exc:
+                return self._reply(str(exc) + "；本次未执行工具。", parent_id)
+        try:
+            child = existing or await self.starter.admit_supplement(
+                parent_id, submission, geometry=intent.geometry)
+        except SupplementNotAllowed as exc:
+            reasons = {
+                "supplement_limit": "原任务的一次关联补证额度已使用，不能再次追加。",
+                "source_not_ready": "原任务尚未完成或不处于可追加状态。",
+                "image_only": "几何工具当前仅支持原始图片任务。",
+                "source_evidence_missing": "原任务缺少有效的已保存检测证据。",
+            }
+            return self._reply(reasons[exc.code] + "本次未执行工具，原结果保留。", parent_id)
+        child_id = child.snapshot.task_id
+        await asyncio.to_thread(self.repo.update_turn, turn.request_id, linked_task_id=child_id)
+        await self.starter.start(child_id)
+        if existing is not None and child.snapshot.is_terminal:
+            return self._reply("已复用已完成的几何结果，没有重复执行。", child_id)
+        return self._reply("关联几何工具已启动，复用冻结原图证据，不重跑检测器或VLM；"
+                           "像素/相对结果尚未完成，可在任务中查看进度和证据。", child_id)

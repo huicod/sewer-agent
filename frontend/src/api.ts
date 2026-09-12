@@ -1,6 +1,7 @@
 import type {
   AssetRecord,
   EnhancementDetail,
+  GeometryDetail,
   HumanReviewDetail,
   HumanReviewRecord,
   HumanReviewSubmission,
@@ -15,6 +16,7 @@ import type {
 import {
   isAssetRecord,
   isEnhancementDetail,
+  isGeometryDetail,
   isHumanReviewDetail,
   isHumanReviewRecord,
   isSessionDetail,
@@ -156,6 +158,14 @@ export function getEnhancement(taskId: string): Promise<EnhancementDetail> {
     `/api/tasks/${encodeURIComponent(taskId)}/enhancement`,
     (payload): payload is EnhancementDetail =>
       isEnhancementDetail(payload) && payload.task_id === taskId,
+  );
+}
+
+export function getGeometry(taskId: string): Promise<GeometryDetail> {
+  return requestJson<GeometryDetail>(
+    `/api/tasks/${encodeURIComponent(taskId)}/geometry`,
+    (payload): payload is GeometryDetail =>
+      isGeometryDetail(payload) && payload.task_id === taskId,
   );
 }
 

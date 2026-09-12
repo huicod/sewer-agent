@@ -10,6 +10,7 @@ from pydantic import Field, model_validator
 from pipe_inspector.contracts.common import ContractModel
 from pipe_inspector.contracts.detection import DetectionLabel
 from pipe_inspector.contracts.enhancement import EnhancementOptions
+from pipe_inspector.contracts.geometry import GeometryOptions
 from pipe_inspector.contracts.planning import ActionKind, OutputFormat
 
 
@@ -40,9 +41,14 @@ class ConversationIntent(ContractModel):
     message: str = Field(min_length=1, max_length=2000)
     enhancement: EnhancementOptions | None = None
     auto_enhancement: bool = False
+    geometry: GeometryOptions | None = None
 
     @model_validator(mode="after")
     def validate_intent(self) -> "ConversationIntent":
+        if self.geometry is not None:
+            self.geometry.validate_actions(
+                self.actions, enhancement=ActionKind.ENHANCE in self.actions
+            )
         if self.auto_enhancement and (
             self.enhancement is not None or ActionKind.ENHANCE not in self.actions
         ):

@@ -128,6 +128,79 @@ def _enhancement_section(report: TaskReport) -> list[str]:
     return lines
 
 
+def _geometry_section(report: TaskReport) -> list[str]:
+    detail = report.geometry
+    if detail is None:
+        return []
+    segmentation = detail.segmentation
+    depth = detail.depth
+    measurements = detail.measurements
+    lines = [
+        '<section class="geometry"><h2>图像几何证据</h2>',
+        "<p>结果保持在原图像素网格；像素统计和单图相对深度不是实际物理尺寸。</p>",
+    ]
+    if segmentation is None and depth is None:
+        lines.extend(
+            ["<p>几何工具没有已保存的成功结果；失败信息见工具调用记录。</p>", "</section>"]
+        )
+        return lines
+    source_path = _asset_path(report.task.input_asset)
+    lines.append(
+        f'<figure><img src="{source_path}" alt="几何工具原图"><figcaption>'
+        f'<a href="{source_path}">打开几何工具原图</a></figcaption></figure>'
+    )
+    if segmentation is not None:
+        prompt = ", ".join(f"{value:g}" for value in segmentation.prompt.bbox_xyxy)
+        mask_path = _asset_path(segmentation.mask_asset.ref)
+        overlay_path = _asset_path(segmentation.overlay_asset.ref)
+        lines.extend(
+            [
+                "<h3>提示式掩膜</h3>",
+                f"<p>原图提示框坐标：({prompt})；提示框不是掩膜真值。</p>",
+                '<div class="image-comparison">',
+                f'<figure><img src="{mask_path}" alt="二值掩膜"><figcaption>'
+                f'<a href="{mask_path}">打开二值掩膜</a></figcaption></figure>',
+                f'<figure><img src="{overlay_path}" alt="掩膜叠加图"><figcaption>'
+                f'<a href="{overlay_path}">打开掩膜叠加图</a></figcaption></figure>',
+                "</div>",
+                f"<p>模型：{escape(segmentation.model_id)} v{escape(segmentation.model_version)}；"
+                f"掩膜质量估计 {segmentation.model_score:g}，不是缺陷置信度。</p>",
+            ]
+        )
+    if depth is not None:
+        preview_path = _asset_path(depth.preview_asset.ref)
+        raw_path = _asset_path(depth.raw_asset.ref)
+        lines.extend(
+            [
+                "<h3>单图相对深度</h3>",
+                f'<figure><img src="{preview_path}" alt="相对深度预览"><figcaption>'
+                f'<a href="{preview_path}">打开深度预览</a></figcaption></figure>',
+                f'<p><a href="{raw_path}">下载 float32 NPY 相对深度数组</a></p>',
+                "<p>预览图例：白色=近，黑色=远；数值是相对模型单位，不能跨图比较。</p>",
+                f"<p>模型：{escape(depth.model_id)} v{escape(depth.model_version)}；"
+                f"本图原始范围 {depth.raw_min:g}–{depth.raw_max:g}。</p>",
+            ]
+        )
+    if measurements is not None:
+        fraction = measurements.image_plane_fraction * 100
+        lines.extend(
+            [
+                "<h3>图像平面量化</h3>",
+                f"<p>掩膜面积 {measurements.area_pixels} 像素；占全图像素 {fraction:g}%；"
+                f"掩膜边界框 {measurements.bbox_width_pixels:g} × "
+                f"{measurements.bbox_height_pixels:g} 像素。</p>",
+            ]
+        )
+        if measurements.relative_depth is not None:
+            summary = measurements.relative_depth
+            lines.append(
+                f"<p>掩膜内相对深度：q10 {summary.q10:g}；中位数 {summary.median:g}；"
+                f"q90 {summary.q90:g}；相对模型单位，不能跨图比较。</p>"
+            )
+    lines.append("</section>")
+    return lines
+
+
 def render_html(report: TaskReport) -> str:
     task, snapshot = report.task, report.task.snapshot
     coverage = snapshot.coverage
@@ -164,6 +237,7 @@ def render_html(report: TaskReport) -> str:
     if snapshot.waiting_reason:
         lines.append("<p>限制/待处理：" + escape(snapshot.waiting_reason) + "</p>")
     lines.extend(_enhancement_section(report))
+    lines.extend(_geometry_section(report))
     lines.append("<h2>检测发现</h2>")
     if not snapshot.findings:
         lines.append("<p>没有已保存的缺陷发现；是否正常以任务结论和覆盖条件为准。</p>")

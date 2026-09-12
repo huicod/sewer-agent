@@ -10,6 +10,7 @@ from pydantic import Field, model_validator
 from pipe_inspector.contracts.common import ContractModel, NonEmptyStr
 from pipe_inspector.contracts.detection import DetectionLabel
 from pipe_inspector.contracts.enhancement import EnhancementOptions
+from pipe_inspector.contracts.geometry import GeometryOptions
 
 
 class ActionKind(StrEnum):
@@ -18,6 +19,7 @@ class ActionKind(StrEnum):
     OPEN_SCAN = "open_scan"
     ENHANCE = "enhance"
     SEGMENT = "segment"
+    RELATIVE_DEPTH = "relative_depth"
     RELATIVE_MEASURE = "relative_measure"
     COMPARE = "compare"
     RETRIEVE_STANDARD = "retrieve_standard"
@@ -54,9 +56,15 @@ class TaskPlan(ContractModel):
     budget: CallBudget = Field(default_factory=CallBudget)
     enhancement: EnhancementOptions | None = None
     auto_enhancement: bool = False
+    geometry: GeometryOptions | None = None
 
     @model_validator(mode="after")
     def validate_plan(self) -> "TaskPlan":
+        if self.geometry is not None:
+            self.geometry.validate_actions(
+                [step.action for step in self.steps],
+                enhancement=any(step.action == ActionKind.ENHANCE for step in self.steps),
+            )
         if self.auto_enhancement and self.enhancement is not None:
             raise ValueError("explicit and automatic enhancement are mutually exclusive")
         if (self.enhancement is not None or self.auto_enhancement) and sum(

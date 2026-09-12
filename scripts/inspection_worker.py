@@ -15,6 +15,7 @@ from pipe_inspector.workflow.conversation import ConversationWorkflow
 from pipe_inspector.workflow.conversation_activities import TurnActivities
 from pipe_inspector.workflow.enhancement_activities import EnhancementActivities
 from pipe_inspector.workflow.enhancement_selection import EnhancementSelectionActivities
+from pipe_inspector.workflow.geometry_activities import GeometryActivities
 from pipe_inspector.workflow.human_review_activities import HumanReviewActivities
 from pipe_inspector.workflow.image import ImageInspectionWorkflow
 from pipe_inspector.workflow.retired_open_scan import RetiredOpenScanActivities
@@ -38,6 +39,7 @@ async def serve(kind: str) -> None:
     activities = ImageActivities(settings, repo, media)
     enhancements = EnhancementActivities(settings, repo, media)
     enhancement_selection = EnhancementSelectionActivities(settings, repo, media)
+    geometry = GeometryActivities(settings, repo, media)
     videos = VideoActivities(settings, repo, media, detector=activities.detector)
     # Same activity names only drain old histories; no open model is loaded or run.
     open_scans = RetiredOpenScanActivities(repo)
@@ -66,6 +68,8 @@ async def serve(kind: str) -> None:
                 videos.scan_video,
                 open_scans.scan_open_candidate,
                 enhancements.enhance_image,
+                geometry.segment_image,
+                geometry.estimate_relative_depth,
             ]
             if gpu
             else [
@@ -74,6 +78,7 @@ async def serve(kind: str) -> None:
                 activities.finish_image,
                 enhancements.prepare_image_enhancement,
                 enhancements.review_image_enhancement,
+                geometry.prepare_image_geometry,
                 enhancement_selection.select_image_enhancement,
                 open_scans.select_open_scan,
                 videos.prepare_video,

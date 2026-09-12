@@ -1,6 +1,7 @@
 """Image-plane geometry evidence, never a calibrated physical measurement."""
 
 from typing import Literal
+from uuid import UUID
 
 from pydantic import Field, FiniteFloat, model_validator
 
@@ -8,6 +9,37 @@ from .assets import AssetRecord, AssetRef
 from .common import ContractModel, ImageRegion, NonEmptyStr, Probability
 
 DepthDirection = Literal["nearer", "farther"]
+
+
+class GeometryOptions(ContractModel):
+    operation: Literal["segment", "relative_depth", "relative_measure"]
+    roi_xyxy: tuple[FiniteFloat, FiniteFloat, FiniteFloat, FiniteFloat] | None = None
+    finding_id: UUID | None = None
+
+    @model_validator(mode="after")
+    def validate_selector(self):
+        if self.roi_xyxy is not None and self.finding_id is not None:
+            raise ValueError("choose either original ROI or finding_id")
+        if self.operation == "relative_depth" and (
+            self.roi_xyxy is not None or self.finding_id is not None
+        ):
+            raise ValueError("standalone relative depth uses the whole original image")
+        if self.roi_xyxy is not None:
+            x1, y1, x2, y2 = self.roi_xyxy
+            if not (0 <= x1 < x2 and 0 <= y1 < y2):
+                raise ValueError("invalid original pixel ROI")
+        return self
+
+    def validate_actions(self, actions, *, enhancement=False):
+        requested = [str(action) for action in actions if str(action) in {
+            "segment", "relative_depth", "relative_measure"
+        }]
+        allowed = (
+            {("relative_measure",), ("segment", "relative_measure")}
+            if self.operation == "relative_measure" else {(self.operation,)}
+        )
+        if tuple(requested) not in allowed or enhancement:
+            raise ValueError("geometry actions/options mismatch or mixed enhancement")
 
 
 class SegmentationRequest(ContractModel):
@@ -107,3 +139,28 @@ class GeometryMeasurements(ContractModel):
     relative_depth: RelativeDepthSummary | None = None
     metric_status: Literal["unavailable_no_calibration"] = "unavailable_no_calibration"
     review_required: Literal[True] = True
+
+
+class GeometryDetail(ContractModel):
+    task_id: UUID
+    segmentation: SegmentationResult | None = None
+    depth: RelativeDepthResult | None = None
+    measurements: GeometryMeasurements | None = None
+
+    @model_validator(mode="after")
+    def same_source(self):
+        values = [v for v in (self.segmentation, self.depth, self.measurements) if v is not None]
+        if len({value.input_asset for value in values}) > 1:
+            raise ValueError("geometry evidence must share its original source")
+        if self.segmentation and self.depth and (
+            self.segmentation.mask_asset.width, self.segmentation.mask_asset.height
+        ) != (self.depth.raw_asset.width, self.depth.raw_asset.height):
+            raise ValueError("geometry evidence dimensions differ")
+        if self.measurements is not None:
+            if self.segmentation is None:
+                raise ValueError("measurements require a segmentation")
+            if self.measurements.area_pixels != self.segmentation.area_pixels:
+                raise ValueError("measurement area differs from mask")
+            if self.measurements.relative_depth is not None and self.depth is None:
+                raise ValueError("relative measurements require depth evidence")
+        return self

@@ -252,6 +252,11 @@ class InspectionRepository(PostgresRepository):
         except psycopg.errors.ForeignKeyViolation as error:
             raise MissingRecord from error
 
+    def save_geometry(self, task_id, step, result, call, measurements=None):
+        from pipe_inspector.storage.geometry import save_geometry
+
+        return save_geometry(self, task_id, step, result, call, measurements)
+
     @staticmethod
     def _enhancement_pin(config: dict) -> dict:
         pin = config.get("enhancement") if isinstance(config, dict) else None

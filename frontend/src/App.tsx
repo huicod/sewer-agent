@@ -25,6 +25,7 @@ import type {
 import { ReviewPanel } from "./ReviewPanel";
 import { VideoTimeline } from "./VideoTimeline";
 import { EnhancementPanel } from "./EnhancementPanel";
+import { GeometryPanel } from "./GeometryPanel";
 
 const SESSION_KEY = "pipe-inspector.session-id";
 const ACTIVE_STATUSES = new Set<RuntimeStatus>(["queued", "running", "waiting_review"]);
@@ -58,7 +59,11 @@ const ACTIVE_TOOL_TEXT: Record<string, string> = {
   deblur: "去模糊增强",
   super_resolution: "超分辨率增强",
   enhancement_review: "增强辅助复核",
+  segment: "提示式掩膜",
+  relative_depth: "单图相对深度",
+  relative_measure: "掩膜与相对深度量化",
 };
+const GEOMETRY_TOOLS = new Set(["segment", "relative_depth", "relative_measure"]);
 
 type PendingSubmission = {
   file: File;
@@ -123,6 +128,12 @@ function linkedTaskStatus(task: TaskRecord | undefined): string {
   if (task.snapshot.runtime_status === "partial") return "关联检查仅部分完成";
   if (task.snapshot.runtime_status === "failed") return "关联检查已失败";
   return "关联检查已取消";
+}
+
+function taskStageText(task: TaskRecord): string {
+  if (task.snapshot.stage === "tools" && task.snapshot.active_tool &&
+      GEOMETRY_TOOLS.has(task.snapshot.active_tool)) return "几何工具处理";
+  return TASK_STAGE_TEXT[task.snapshot.stage] ?? task.snapshot.stage;
 }
 
 type TaskCardProps = {
@@ -234,7 +245,7 @@ function TaskCard({ task, starting, cancelling, onStart, onCancel, onReviewed }:
       <dl className="task-meta">
         <div>
           <dt>阶段</dt>
-          <dd>{TASK_STAGE_TEXT[task.snapshot.stage] ?? task.snapshot.stage}</dd>
+          <dd>{taskStageText(task)}</dd>
         </div>
         <div>
           <dt>检查结论</dt>
@@ -272,6 +283,7 @@ function TaskCard({ task, starting, cancelling, onStart, onCancel, onReviewed }:
                   {finding.open_label ? ` · ${finding.open_label}` : ""}
                 </strong>
                 <span>{REVIEW_TEXT[finding.review_status]}</span>
+                <code title="对话可引用的发现 ID">{finding.finding_id}</code>
                 <span className="evidence-links">
                   {finding.evidence.map((evidence, index) => (
                     <a
@@ -309,6 +321,12 @@ function TaskCard({ task, starting, cancelling, onStart, onCancel, onReviewed }:
         taskId={task.snapshot.task_id}
         snapshotRevision={task.snapshot.updated_at}
         runtimeStatus={task.snapshot.runtime_status}
+      />
+      <GeometryPanel
+        taskId={task.snapshot.task_id}
+        snapshotRevision={task.snapshot.updated_at}
+        runtimeStatus={task.snapshot.runtime_status}
+        findingIds={task.snapshot.findings.map((finding) => finding.finding_id)}
       />
       {hasVideoLocator || mediaKind === "video" ? (
         <VideoTimeline taskId={task.snapshot.task_id} snapshotRevision={task.snapshot.updated_at} />

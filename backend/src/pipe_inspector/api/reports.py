@@ -6,7 +6,8 @@ from uuid import UUID
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import HTMLResponse, JSONResponse
 
-from pipe_inspector.api.inspection import load_enhancement_detail
+from pipe_inspector.api.inspection import load_enhancement_detail, load_geometry_detail
+from pipe_inspector.contracts.planning import ActionKind
 from pipe_inspector.contracts.reports import TaskReport
 from pipe_inspector.reports import render_html
 
@@ -26,12 +27,24 @@ def report_router(repository) -> APIRouter:
                 },
             )
         enhancement = load_enhancement_detail(repository, task)
+        calls = repository.list_calls(task_id)
+        geometry_actions = {
+            ActionKind.SEGMENT,
+            ActionKind.RELATIVE_DEPTH,
+            ActionKind.RELATIVE_MEASURE,
+        }
+        geometry = (
+            load_geometry_detail(repository, task)
+            if any(call.tool_name in geometry_actions for call in calls)
+            else None
+        )
         report = TaskReport(
             task=task,
-            tool_calls=repository.list_calls(task_id),
+            tool_calls=calls,
             enhancement_selection=enhancement.selection,
             enhancement=enhancement.result,
             enhancement_review=enhancement.review,
+            geometry=geometry,
         )
         headers = {
             "X-Content-Type-Options": "nosniff",

@@ -30,6 +30,21 @@ enhancement=null、actions 包含 enhance；由后续看图步骤选择工具或
 显式种类与 auto_enhancement 互斥；只说“增强”但未说明种类或允许按需选择时返回 clarify。
 每次仅一种增强；要求组合多种增强时返回 clarify，请用户选择一种。未请求增强填 null。
 增强对应 actions 中的 enhance，属于原图检查之后的辅助证据；不能承诺恢复真实细节。
+已开放显式原始图片几何工具，未请求时geometry=null。geometry.operation为segment（分割）、
+relative_depth（整图相对深度图）、relative_measure（分割后的像素/相对深度统计），actions包含同名动作。
+relative_measure 本身包含分割、深度和统计，是一个操作包；“分割并做相对量化/给出掩膜和深度统计”
+应选 relative_measure，不因提到这些组成步骤而澄清，也不另加 relative_depth。
+新检查在几何工具前进行检测和原图VLM是允许的，不属于混用追加verify；只有supplement不能额外verify。
+例如“检查并VLM复检，在[280,66,549,350]分割并做相对量化”应生成：
+{"kind":"inspect","actions":["verify","relative_measure"],"geometry":{"operation":"relative_measure",
+"roi_xyxy":[280,66,549,350],"finding_id":null},"message":"将检查并执行相对量化"}。
+分割/相对测量的roi_xyxy仅来自用户明确原图像素坐标，或finding_id来自用户明确引用的已有发现UUID；
+二者不能同时提供，不猜坐标/ID。缺区域返回clarify，提示先检测后选择finding ID或提供坐标。
+整图relative_depth无需框，其roi_xyxy和finding_id都填null。不使用分割框面积代替实际掩膜面积。
+新上传检查用inspect+显式ROI或整图深度；对已有任务执行几何工具用supplement，可引用finding_id。
+本次只选一种几何操作包，不能混用增强/自动增强或追加verify；组合请求返回clarify。
+要求毫米/米尺寸、真实裂缝深度/体积/管道堵塞率时返回clarify，说明无标定仅能提供像素或相对量，
+不能把真实量测请求自动改成相对量测并声称满足。已存结果查询/说明用ask，不重复执行工具。
 message 只能是提议或说明，不是已经完成检查的事实性答案。
 意图含义：inspect=新建检查；ask=仅查询或解释已存结果；report=仅获取已存报告；
 supplement=对原任务追加复检等操作；clarify=需要补充信息；refuse=拒绝越权请求。
@@ -61,6 +76,12 @@ def compile_inspection_plan(
         return None
     if ActionKind.OPEN_SCAN in intent.actions:
         raise IntentPlanningError("tool_unavailable")
+    geometry_actions = {ActionKind.SEGMENT, ActionKind.RELATIVE_DEPTH, ActionKind.RELATIVE_MEASURE}
+    if set(intent.actions) & geometry_actions:
+        if intent.geometry is None:
+            raise IntentPlanningError("geometry_parameters_required")
+        if intent.geometry.operation != "relative_depth" and intent.geometry.roi_xyxy is None:
+            raise IntentPlanningError("geometry_region_required")
     if (ActionKind.ENHANCE in intent.actions and intent.enhancement is None
             and not intent.auto_enhancement):
         raise IntentPlanningError("enhancement_parameters_required")
@@ -82,8 +103,8 @@ def compile_inspection_plan(
 
     actions = [
         ActionKind.DETECT,
-        *requested,
         ActionKind.VERIFY,
+        *requested,
         *([ActionKind.ENHANCE] if ActionKind.ENHANCE in intent.actions else []),
         ActionKind.SUMMARIZE,
         ActionKind.EXPORT_REPORT,
@@ -110,6 +131,7 @@ def compile_inspection_plan(
         outputs=intent.outputs,
         enhancement=intent.enhancement,
         auto_enhancement=intent.auto_enhancement,
+        geometry=intent.geometry,
     )
 
 

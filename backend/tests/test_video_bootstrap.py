@@ -81,6 +81,9 @@ async def test_workers_share_one_detector_and_register_video_runtime(monkeypatch
         prepare_image_enhancement=object(),
         review_image_enhancement=object(),
     )
+    geometry = SimpleNamespace(
+        prepare_image_geometry=object(), segment_image=object(), estimate_relative_depth=object()
+    )
     captured = {}
 
     monkeypatch.setattr(module, "Settings", lambda: settings)
@@ -88,6 +91,7 @@ async def test_workers_share_one_detector_and_register_video_runtime(monkeypatch
     monkeypatch.setattr(module, "MediaStore", lambda *args, **kwargs: object())
     monkeypatch.setattr(module, "ImageActivities", lambda *args, **kwargs: images)
     monkeypatch.setattr(module, "EnhancementActivities", lambda *args, **kwargs: enhancements)
+    monkeypatch.setattr(module, "GeometryActivities", lambda *args, **kwargs: geometry)
 
     def make_video(*args, **kwargs):
         assert args[1] is repo
@@ -133,11 +137,15 @@ async def test_workers_share_one_detector_and_register_video_runtime(monkeypatch
             video.scan_video,
             open_scans.scan_open_candidate,
             enhancements.enhance_image,
+            geometry.segment_image,
+            geometry.estimate_relative_depth,
         ]
+        assert captured["max_concurrent_activities"] == 1
     else:
         assert module.VideoInspectionWorkflow in captured["workflows"]
         assert open_scans.select_open_scan in captured["activities"]
         assert enhancements.prepare_image_enhancement in captured["activities"]
         assert enhancements.review_image_enhancement in captured["activities"]
+        assert geometry.prepare_image_geometry in captured["activities"]
         for activity in (video.prepare_video, video.verify_video_frame, video.finish_video):
             assert activity in captured["activities"]

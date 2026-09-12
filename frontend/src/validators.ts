@@ -4,6 +4,7 @@ import type {
   EnhancementDetail,
   Finding,
   FindingReview,
+  GeometryDetail,
   HumanReviewDetail,
   HumanReviewRecord,
   HumanReviewSubmission,
@@ -559,4 +560,116 @@ export function isEnhancementDetail(value: unknown): value is EnhancementDetail 
     result.review_required !== true
   ) return false;
   return value.review === null || isEnhancementReview(value.review, result.source_region);
+}
+
+const GEOMETRY_DETAIL_FIELDS = new Set(["task_id", "segmentation", "depth", "measurements"]);
+const SEGMENTATION_FIELDS = new Set([
+  "schema_version", "input_asset", "prompt", "mask_asset", "overlay_asset", "model_id",
+  "model_version", "model_score", "area_pixels", "mask_region", "review_required",
+]);
+const DEPTH_FIELDS = new Set([
+  "schema_version", "input_asset", "raw_asset", "preview_asset", "model_id", "model_version",
+  "larger_is", "raw_min", "raw_max", "units", "preview_mapping", "review_required",
+]);
+const MEASUREMENT_FIELDS = new Set([
+  "input_asset", "area_pixels", "image_plane_fraction", "fraction_denominator",
+  "bbox_width_pixels", "bbox_height_pixels", "relative_depth", "metric_status",
+  "review_required",
+]);
+const RELATIVE_SUMMARY_FIELDS = new Set(["q10", "median", "q90", "larger_is", "units"]);
+
+function isGeometryAsset(
+  value: unknown,
+  source: AssetRef,
+  kind: "mask" | "depth_map",
+  mediaType: string,
+): value is AssetRecord & { width: number; height: number; parent: AssetRef } {
+  return isExactAssetRecord(value) && value.kind === kind && value.media_type === mediaType &&
+    value.width !== null && value.height !== null && value.parent !== null &&
+    sameAsset(value.parent, source) && !sameAsset(value.ref, source);
+}
+
+function isSegmentation(value: unknown): boolean {
+  if (
+    !isRecord(value) || !hasExactFields(value, SEGMENTATION_FIELDS) ||
+    value.schema_version !== "1" || !isExactAssetRef(value.input_asset) ||
+    !isEnhancementRegion(value.prompt) || !isEnhancementRegion(value.mask_region) ||
+    !isGeometryAsset(value.mask_asset, value.input_asset, "mask", "image/png") ||
+    !isGeometryAsset(value.overlay_asset, value.input_asset, "mask", "image/png") ||
+    sameAsset(value.mask_asset.ref, value.overlay_asset.ref) ||
+    !isNonEmptyString(value.model_id) || !isNonEmptyString(value.model_version) ||
+    typeof value.model_score !== "number" || !Number.isFinite(value.model_score) ||
+    !Number.isInteger(value.area_pixels) || (value.area_pixels as number) <= 0 ||
+    value.review_required !== true
+  ) return false;
+  const prompt = value.prompt as ImageRegion;
+  const region = value.mask_region as ImageRegion;
+  const mask = value.mask_asset as AssetRecord;
+  const overlay = value.overlay_asset as AssetRecord;
+  return mask.width === prompt.width && mask.height === prompt.height &&
+    overlay.width === prompt.width && overlay.height === prompt.height &&
+    region.width === prompt.width && region.height === prompt.height &&
+    (value.area_pixels as number) <= prompt.width * prompt.height;
+}
+
+function isDepth(value: unknown): boolean {
+  if (
+    !isRecord(value) || !hasExactFields(value, DEPTH_FIELDS) || value.schema_version !== "1" ||
+    !isExactAssetRef(value.input_asset) ||
+    !isGeometryAsset(value.raw_asset, value.input_asset, "depth_map", "application/x-npy") ||
+    !isGeometryAsset(value.preview_asset, value.input_asset, "depth_map", "image/png") ||
+    sameAsset(value.raw_asset.ref, value.preview_asset.ref) ||
+    !isNonEmptyString(value.model_id) || !isNonEmptyString(value.model_version) ||
+    (value.larger_is !== "nearer" && value.larger_is !== "farther") ||
+    typeof value.raw_min !== "number" || !Number.isFinite(value.raw_min) ||
+    typeof value.raw_max !== "number" || !Number.isFinite(value.raw_max) ||
+    value.raw_max <= value.raw_min || value.units !== "relative_model_units" ||
+    value.preview_mapping !== "per_image_minmax_white_near" || value.review_required !== true
+  ) return false;
+  const raw = value.raw_asset as AssetRecord;
+  const preview = value.preview_asset as AssetRecord;
+  return raw.width === preview.width && raw.height === preview.height;
+}
+
+function isRelativeSummary(value: unknown): boolean {
+  if (!isRecord(value) || !hasExactFields(value, RELATIVE_SUMMARY_FIELDS)) return false;
+  const numbers = [value.q10, value.median, value.q90];
+  return numbers.every((item) => typeof item === "number" && Number.isFinite(item)) &&
+    (value.q10 as number) <= (value.median as number) &&
+    (value.median as number) <= (value.q90 as number) &&
+    (value.larger_is === "nearer" || value.larger_is === "farther") &&
+    value.units === "relative_model_units";
+}
+
+function isMeasurements(value: unknown): boolean {
+  return isRecord(value) && hasExactFields(value, MEASUREMENT_FIELDS) &&
+    isExactAssetRef(value.input_asset) && Number.isInteger(value.area_pixels) &&
+    (value.area_pixels as number) > 0 && isProgress(value.image_plane_fraction) &&
+    value.fraction_denominator === "full_image_pixels" &&
+    isPositiveFinite(value.bbox_width_pixels) && isPositiveFinite(value.bbox_height_pixels) &&
+    (value.relative_depth === null || isRelativeSummary(value.relative_depth)) &&
+    value.metric_status === "unavailable_no_calibration" && value.review_required === true;
+}
+
+export function isGeometryDetail(value: unknown): value is GeometryDetail {
+  if (
+    !isRecord(value) || !hasExactFields(value, GEOMETRY_DETAIL_FIELDS) || !isUuid(value.task_id) ||
+    !(value.segmentation === null || isSegmentation(value.segmentation)) ||
+    !(value.depth === null || isDepth(value.depth)) ||
+    !(value.measurements === null || isMeasurements(value.measurements))
+  ) return false;
+  const segmentation = value.segmentation as GeometryDetail["segmentation"];
+  const depth = value.depth as GeometryDetail["depth"];
+  const measurements = value.measurements as GeometryDetail["measurements"];
+  const sources = [segmentation?.input_asset, depth?.input_asset, measurements?.input_asset]
+    .filter((item): item is AssetRef => item !== undefined);
+  if (sources.some((item) => !sameAsset(item, sources[0]))) return false;
+  if (segmentation && depth && (
+    segmentation.mask_asset.width !== depth.raw_asset.width ||
+    segmentation.mask_asset.height !== depth.raw_asset.height
+  )) return false;
+  if (measurements && (!segmentation || measurements.area_pixels !== segmentation.area_pixels)) {
+    return false;
+  }
+  return !measurements?.relative_depth || depth !== null;
 }

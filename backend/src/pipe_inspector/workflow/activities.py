@@ -277,12 +277,25 @@ class ImageActivities:
         run = payload["run"]
         task_id = UUID(run["task_id"])
         error = payload.get("error")
+        geometry_error = payload.get("geometry_error")
         enhancement_failed = bool(error and "auto_enhancement" in run["config"])
         current = self.repo.get_task(task_id).snapshot
         if current.is_terminal:
             return current.model_dump(mode="json")
+        geometry = run["config"].get("geometry")
+        if geometry is not None and geometry_error is None:
+            operation = (geometry.get("options") or {}).get("operation")
+            required_steps = ["geometry_source"]
+            if operation in {"segment", "relative_measure"}:
+                required_steps.append("geometry_segment")
+            if operation in {"relative_depth", "relative_measure"}:
+                required_steps.append("geometry_depth")
+            if any(self.repo.load_step(task_id, step) is None for step in required_steps):
+                geometry_error = "geometry_not_run"
         self.publish_stage({"run": run, "stage": "reporting"})
-        self._mark_running_calls_uncertain(task_id, error or "activity_interrupted")
+        self._mark_running_calls_uncertain(
+            task_id, geometry_error or error or "activity_interrupted"
+        )
         cached = self.repo.load_step(task_id, "final")
         if cached is not None:
             self.repo.update_snapshot(TaskSnapshot.model_validate(cached))
@@ -330,7 +343,16 @@ class ImageActivities:
                     if saved_review and saved_review.get("review")
                     else None
                 )
-                if "enhancement" in run["config"]:
+                if "geometry" in run["config"]:
+                    from pipe_inspector.workflow.geometry_activities import geometry_baseline
+
+                    source = self.repo.load_step(task_id, "geometry_source")
+                    decision = (
+                        self._decide(run, task, observation, review, error)
+                        if source is None and error
+                        else geometry_baseline(self.repo, run, task, observation, review)
+                    )
+                elif "enhancement" in run["config"]:
                     from pipe_inspector.agent.enhancement_fusion import apply_enhancement_review
                     from pipe_inspector.contracts.enhancement import (
                         EnhancementResult,
@@ -362,12 +384,15 @@ class ImageActivities:
                     decision = apply_open_results(self.repo, run, decision)
                 partial = (
                     bool(error)
+                    or bool(geometry_error)
                     or decision.needs_review
                     or decision.inspection_result == "inconclusive"
                 )
                 waiting_reasons = list(decision.reasons)
                 if error:
                     waiting_reasons.append(f"review_error:{error}")
+                if geometry_error:
+                    waiting_reasons.append(f"tool_error:{geometry_error}")
                 values.update(
                     runtime_status="partial" if partial else "completed",
                     inspection_result=decision.inspection_result,
@@ -380,6 +405,7 @@ class ImageActivities:
             run["config"].get("human_review_version") == "human-review-v1"
             and values["runtime_status"] == "partial"
             and not enhancement_failed
+            and not geometry_error
         ):
             values.update(
                 runtime_status="waiting_review",

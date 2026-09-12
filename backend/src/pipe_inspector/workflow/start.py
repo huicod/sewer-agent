@@ -93,6 +93,17 @@ def run_config(
             raise InspectionStartError("enhancement_parameters_required", "请指定增强种类", 409)
         else:
             config["enhancement"] = build_enhancement_config(settings, plan.enhancement)
+    if plan and any(
+        s.action in {ActionKind.SEGMENT, ActionKind.RELATIVE_DEPTH, ActionKind.RELATIVE_MEASURE}
+        for s in plan.steps
+    ):
+        from pipe_inspector.workflow.geometry_config import build_geometry_config
+
+        if plan.geometry is None:
+            raise InspectionStartError(
+                "geometry_parameters_required", "请明确几何工具及原图区域", 409
+            )
+        config["geometry"] = build_geometry_config(settings, plan.geometry)
     return config
 
 
@@ -103,6 +114,11 @@ def video_run_config(
     force_review: bool = False,
     plan: TaskPlan | None = None,
 ) -> dict:
+    if plan and (plan.geometry is not None or any(
+        s.action in {ActionKind.SEGMENT, ActionKind.RELATIVE_DEPTH, ActionKind.RELATIVE_MEASURE}
+        for s in plan.steps
+    )):
+        raise InspectionStartError("geometry_image_only", "视频几何工具尚未接入", 409)
     if plan and any(s.action == ActionKind.ENHANCE for s in plan.steps):
         raise InspectionStartError("enhancement_image_only", "视频增强尚未接入", 409)
     config = run_config(settings, detector=detector, force_review=force_review, plan=plan) | {
@@ -151,9 +167,11 @@ class InspectionStarter:
         self.settings, self.repo, self.connect = settings, repository, connect
 
     async def admit_supplement(
-        self, parent_task_id: UUID, submission: TaskSubmission, *, enhancement=None
+        self, parent_task_id: UUID, submission: TaskSubmission, *, enhancement=None, geometry=None
     ):
-        if enhancement is not None:
+        if enhancement is not None and geometry is not None:
+            raise InspectionStartError("geometry_combination_invalid", "几何与增强请分开请求", 409)
+        if enhancement is not None or geometry is not None:
             existing = await asyncio.to_thread(
                 self.repo.find_task_by_request_id, submission.request_id
             )
@@ -181,6 +199,15 @@ class InspectionStarter:
             asset = await asyncio.to_thread(self.repo.get_asset, submission.input_asset)
             validate_enhancement_input(asset, enhancement)
             config["enhancement"] = build_enhancement_config(self.settings, enhancement)
+        if geometry is not None:
+            from pipe_inspector.workflow.geometry_config import (
+                build_geometry_config,
+                validate_geometry_input,
+            )
+            asset = await asyncio.to_thread(self.repo.get_asset, submission.input_asset)
+            parent = await asyncio.to_thread(self.repo.get_task, parent_task_id)
+            validate_geometry_input(asset, geometry, parent)
+            config["geometry"] = build_geometry_config(self.settings, geometry)
         return await asyncio.to_thread(
             self.repo.admit_supplement, parent_task_id, submission, config
         )
@@ -196,6 +223,9 @@ class InspectionStarter:
                 "unsupported_media", "当前执行器只支持已接纳的图片或视频", 409
             )
         is_video = asset.kind == AssetKind.VIDEO
+        if plan and plan.geometry is not None:
+            from pipe_inspector.workflow.geometry_config import validate_geometry_input
+            validate_geometry_input(asset, plan.geometry)
         if plan and plan.auto_enhancement and (asset.kind != "image" or asset.parent is not None):
             raise InspectionStartError("enhancement_image_only", "自动增强只支持原始图片", 409)
         if plan and plan.enhancement is not None:

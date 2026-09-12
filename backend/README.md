@@ -388,5 +388,38 @@ RealESR-general-x4v3/HAT-L。候选仅由离线 factory 创建，不进入 Agent
 不是管道真实堵塞率；同一源图才可合并掩膜与深度，分割质量分数也不是缺陷正确率。
 空掩膜、常数/非有限深度会报告失败，不生成替代结果。
 
-T13-A 是可复用工具及离线验证入口；对话调用、Temporal/数据库事务、网页面板在 T13-B 接入。
-本轮不会让现有 Agent 提前承诺尚未开放的工具，也不改变原检测/VLM/融合或增强策略。
+### 在线几何工具（T13-B）
+
+图片几何是显式可选工具，不是默认检查步骤。上传原图后可说：
+“检查这张图片，在原图像素框 [280,66,549,350] 做分割和相对量化。”
+坐标只是示例，必须适合实际图片。新检查先完成原图检测/条件 VLM，再串行执行几何工具。
+只要深度图可说“检查图片，并生成整图相对深度图”，不需要分割框。
+
+选择已完成或部分完成的原始图片任务后，可说“按 finding ID <实际 UUID> 追加分割”，
+或提供原图框追加 `relative_measure`。页面发现列表/几何证据面板及对话结果显示 finding ID。
+关联操作冻结父任务证据，不重跑检测器或 VLM，不改父任务；与已有复检/增强共享一次补证额度。
+若只选择已有任务而本条没有上传/指定原图，却被解析成新建几何检查，服务端先澄清，不绕过关联额度。
+缺框、无效 finding、视频/派生图、未部署权重会拒绝或澄清，不猜框。
+首轮每次仅一个几何操作包，不和增强、自动增强或额外 VLM 补证混用。
+
+`segment` 保存掩膜、叠加及像素统计；`relative_depth` 保存整图相对深度；
+`relative_measure` 依次分割、深度并统计掩膜内分位数。几何结果始终是待复核附加证据，
+不提高或降低五类结论/置信度/覆盖；必需工具失败保留原结论但任务为 partial，记录工具错误。
+无标定不能测毫米尺寸、实际裂缝深度、体积或堵塞率，不能将这类要求默默降级成已完成的相对量测。
+
+沿用 `scripts/inspection_worker.py cpu|gpu`、Temporal 和串行 GPU 队列；配置见 `.env.example`。
+模型每次加载/卸载，pin 固定版本和路径；结果资产、工具调用、checkpoint 同事务提交。
+已提交结果恢复时直接复用；提交前故障仍可能重算，不承诺物理推理 exactly-once。
+`GET /api/tasks/{id}/geometry` 支持处理中或终态查询；旧任务返回 null 字段。
+网页“几何证据”显示原图框/真实掩膜/叠加/白近黑远深度与 NPY 下载；终态 JSON/HTML 报告包含相同证据。
+
+```bash
+SEWER_RUN_STORAGE_TEST=1 .venv/bin/pytest -q backend/tests/integration/test_geometry_storage.py
+SEWER_RUN_GEOMETRY_WORKFLOW_TEST=1 .venv/bin/pytest -q backend/tests/integration/test_geometry_workflow_live.py
+```
+
+付费真实联调入口 `backend/tests/integration/test_live_geometry_online.py` 需显式设置
+`SEWER_RUN_LIVE_GEOMETRY=1`、`SEWER_LIVE_IMAGE`、不存在的 `SEWER_GEOMETRY_OUTPUT`。
+固定示例 ROI [280,66,549,350]；上限两次 API、一次原检测、一次分割与一次深度。
+使用隔离 schema/队列，结束后只删除自己的测试 schema，保留文件；不伪造人工决策。
+它是流程测试，不是精度实验，不改变已验收原检测/VLM/融合或增强策略。

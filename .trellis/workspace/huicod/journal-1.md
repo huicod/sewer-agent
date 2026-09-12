@@ -828,3 +828,37 @@ T12-A 完成，保留五类/VLM/融合及开放补检退出在线的边界；T12
 ### Next Steps
 
 - T13-B：显式对话工具准入、原图框选择、串行GPU Activities、资产/调用原子检查点、进度和UI报告；验证常驻worker重复调用资源稳定性。主检测/VLM/融合与增强策略不变，开放补检停用，首版未整体完成；无推送。
+
+
+## Session 26: T13-B 对话几何工具持久闭环完成
+
+**Date**: 2026-09-13
+**Task**: T13-B 对话几何工具持久闭环完成
+
+### Summary
+
+显式分割/相对深度接入对话、原子检查点、串行GPU与页面报告；下一步T14。
+
+### Main Changes
+
+- 恢复入口 .trellis/tasks/09-13-m4-geometry-online/report.md；原五类/VLM/融合不变，几何只作待复核证据。新检查在原图复检后执行；关联冻结父证据、不重跑检测/VLM、共享一次补证额度。
+- 真实图册 var/evaluations/2026-09-13-geometry-online/live-0022-v2/index.html；成功链路26.43秒，两次QwenAPI及YOLO/SAM/Depth。首次意图误澄清已修复并保留失败记录，两轮共3API。无训练、新依赖、哈希或推送。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `jj qllqnxks` | (see git log) |
+
+### Testing
+
+- [OK] 最终后端967 passed/126 skipped（22.34s），前端78及build、Ruff和diff通过。独立审查两项边界与主审缺工具审核绕过问题均有回归修复。
+- [OK] 真实PG/Temporal9 passed（13.28s）：掩膜回执丢失后复用、GPU worker替换后继续深度，保留空白图导致的人工等待，不伪造正常。6次同进程模型调用分配稳定约72MiB，非长期压力验收。
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- T14历史比较、版本化规范检索与报告完善；规范版本/条款待明确。T15整体/UI验收和T16部署待续，首版未整体完成。

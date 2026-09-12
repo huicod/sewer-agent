@@ -7,6 +7,7 @@ from temporalio.common import RetryPolicy
 from temporalio.exceptions import ActivityError, ApplicationError
 
 from pipe_inspector.workflow.enhancement import run_image_enhancement
+from pipe_inspector.workflow.geometry import run_image_geometry
 from pipe_inspector.workflow.human_review import HUMAN_REVIEW_VERSION, HumanReviewGate
 
 
@@ -27,9 +28,13 @@ class ImageSupplementWorkflow:
     @workflow.run
     async def run(self, run: dict) -> dict:
         error = None
+        geometry_error = None
         self.stage = "verifying"
         try:
-            if "enhancement" in run["config"]:
+            if "geometry" in run["config"]:
+                self.stage = "tools"
+                await run_image_geometry(run)
+            elif "enhancement" in run["config"]:
                 self.stage = "tools"
                 await run_image_enhancement(run)
             else:
@@ -47,11 +52,15 @@ class ImageSupplementWorkflow:
                 )
         except ActivityError as exc:
             cause = exc.cause
-            error = cause.type if isinstance(cause, ApplicationError) else "activity_interrupted"
+            caught = cause.type if isinstance(cause, ApplicationError) else "activity_interrupted"
+            if "geometry" in run["config"]:
+                geometry_error = caught
+            else:
+                error = caught
         self.stage = "reporting"
         result = await workflow.execute_activity(
             "finish_image_supplement",
-            {"run": run, "error": error},
+            {"run": run, "error": error, "geometry_error": geometry_error},
             start_to_close_timeout=timedelta(seconds=20),
             retry_policy=RetryPolicy(
                 maximum_attempts=0,

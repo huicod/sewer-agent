@@ -6,6 +6,7 @@ from pydantic import model_validator
 
 from .common import ContractModel
 from .enhancement import EnhancementResult, EnhancementReview, EnhancementSelection
+from .geometry import GeometryDetail
 from .intake import TaskRecord
 from .tools import ToolCall
 
@@ -17,6 +18,7 @@ class TaskReport(ContractModel):
     enhancement_selection: EnhancementSelection | None = None
     enhancement: EnhancementResult | None = None
     enhancement_review: EnhancementReview | None = None
+    geometry: GeometryDetail | None = None
 
     @model_validator(mode="after")
     def validate_source(self):
@@ -28,4 +30,17 @@ class TaskReport(ContractModel):
             raise ValueError("enhancement input must belong to the reported task")
         if self.enhancement_review is not None and self.enhancement is None:
             raise ValueError("enhancement review requires enhancement result")
+        if self.geometry is not None:
+            if self.geometry.task_id != self.task.snapshot.task_id:
+                raise ValueError("report geometry must belong to the reported task")
+            values = (
+                self.geometry.segmentation,
+                self.geometry.depth,
+                self.geometry.measurements,
+            )
+            if any(
+                value is not None and value.input_asset != self.task.input_asset
+                for value in values
+            ):
+                raise ValueError("report geometry source must belong to the reported task")
         return self

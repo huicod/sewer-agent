@@ -230,6 +230,62 @@ export type EnhancementDetail = {
   selection?: EnhancementSelection | null;
 };
 
+export type SegmentationResult = {
+  schema_version: "1";
+  input_asset: AssetRef;
+  prompt: ImageRegion;
+  mask_asset: AssetRecord & { kind: "mask"; width: number; height: number; parent: AssetRef };
+  overlay_asset: AssetRecord & { kind: "mask"; width: number; height: number; parent: AssetRef };
+  model_id: string;
+  model_version: string;
+  model_score: number;
+  area_pixels: number;
+  mask_region: ImageRegion;
+  review_required: true;
+};
+
+export type RelativeDepthResult = {
+  schema_version: "1";
+  input_asset: AssetRef;
+  raw_asset: AssetRecord & { kind: "depth_map"; width: number; height: number; parent: AssetRef };
+  preview_asset: AssetRecord & { kind: "depth_map"; width: number; height: number; parent: AssetRef };
+  model_id: string;
+  model_version: string;
+  larger_is: "nearer" | "farther";
+  raw_min: number;
+  raw_max: number;
+  units: "relative_model_units";
+  preview_mapping: "per_image_minmax_white_near";
+  review_required: true;
+};
+
+export type RelativeDepthSummary = {
+  q10: number;
+  median: number;
+  q90: number;
+  larger_is: "nearer" | "farther";
+  units: "relative_model_units";
+};
+
+export type GeometryMeasurements = {
+  input_asset: AssetRef;
+  area_pixels: number;
+  image_plane_fraction: number;
+  fraction_denominator: "full_image_pixels";
+  bbox_width_pixels: number;
+  bbox_height_pixels: number;
+  relative_depth: RelativeDepthSummary | null;
+  metric_status: "unavailable_no_calibration";
+  review_required: true;
+};
+
+export type GeometryDetail = {
+  task_id: string;
+  segmentation: SegmentationResult | null;
+  depth: RelativeDepthResult | null;
+  measurements: GeometryMeasurements | null;
+};
+
 export type FrameLocator = {
   frame_index: number;
   timestamp_seconds: number;

@@ -130,7 +130,7 @@ async def test_unavailable_tool_is_rejected_before_any_task_is_created():
     turn = TurnRecord.model_validate(store.turn.model_dump() | {"input_asset": store.asset})
     starter = SimpleNamespace(start=AsyncMock())
     result = await ConversationDispatcher(store, starter).handle(
-        turn, ConversationIntent(kind="inspect", actions=("segment",), message="分割")
+        turn, ConversationIntent(kind="inspect", actions=("compare",), message="比较")
     )
     assert "未部署" in result["reply"]
     assert not store.created and starter.start.call_count == 0

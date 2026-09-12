@@ -11,6 +11,12 @@ from pipe_inspector.contracts.enhancement import (
     EnhancementReview,
     EnhancementSelection,
 )
+from pipe_inspector.contracts.geometry import (
+    GeometryDetail,
+    GeometryMeasurements,
+    RelativeDepthResult,
+    SegmentationResult,
+)
 from pipe_inspector.contracts.intake import TaskRecord
 from pipe_inspector.contracts.tools import ToolCall
 from pipe_inspector.workflow.start import InspectionStartError
@@ -34,6 +40,46 @@ def load_enhancement_detail(repository, task: TaskRecord) -> EnhancementDetail:
     if review is not None and result is None:
         raise ValueError("enhancement review requires enhancement result")
     return EnhancementDetail(task_id=task_id, result=result, review=review, selection=selection)
+
+
+def _geometry_checkpoint(raw, result_type, label):
+    if raw is None:
+        return None, None
+    if not isinstance(raw, dict) or set(raw) != {"result", "measurements"}:
+        raise ValueError(f"invalid {label} geometry checkpoint")
+    result = result_type.model_validate(raw["result"])
+    measurements = (
+        GeometryMeasurements.model_validate(raw["measurements"])
+        if raw["measurements"] is not None
+        else None
+    )
+    if measurements is not None and measurements.input_asset != result.input_asset:
+        raise ValueError(f"{label} geometry measurement source differs from its result")
+    return result, measurements
+
+
+def load_geometry_detail(repository, task: TaskRecord) -> GeometryDetail:
+    """Load only validated public geometry evidence owned by the requested task."""
+    task_id = task.snapshot.task_id
+    segmentation, segment_measurements = _geometry_checkpoint(
+        repository.load_step(task_id, "geometry_segment"),
+        SegmentationResult,
+        "segment",
+    )
+    depth, depth_measurements = _geometry_checkpoint(
+        repository.load_step(task_id, "geometry_depth"),
+        RelativeDepthResult,
+        "depth",
+    )
+    for value in (segmentation, segment_measurements, depth, depth_measurements):
+        if value is not None and value.input_asset != task.input_asset:
+            raise ValueError("geometry input does not belong to requested task")
+    return GeometryDetail(
+        task_id=task_id,
+        segmentation=segmentation,
+        depth=depth,
+        measurements=depth_measurements or segment_measurements,
+    )
 
 
 def inspection_router(repository, starter) -> APIRouter:
@@ -63,6 +109,11 @@ def inspection_router(repository, starter) -> APIRouter:
     def enhancement_detail(task_id: UUID):
         task = repository.get_task(task_id)
         return load_enhancement_detail(repository, task)
+
+    @router.get("/{task_id}/geometry", response_model=GeometryDetail)
+    def geometry_detail(task_id: UUID):
+        task = repository.get_task(task_id)
+        return load_geometry_detail(repository, task)
 
     @router.get("/{task_id}/calls", response_model=tuple[ToolCall, ...])
     def tool_calls(task_id: UUID):

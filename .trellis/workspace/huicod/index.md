@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 25
+- **Total Sessions**: 26
 - **Last Active**: 2026-09-13
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~830 | Active |
+| `journal-1.md` | ~864 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 26 | 2026-09-13 | T13-B 对话几何工具持久闭环完成 | jj qllqnxks | `-` |
 | 25 | 2026-09-13 | T13-A 分割与相对深度工具及六图实测完成 | jj kwvrmtsk | `-` |
 | 24 | 2026-09-13 | T12-D 增强候选实图比较完成，暂不替换在线模型 | jj lmuslmlo | `-` |
 | 23 | 2026-09-13 | T12-C 按需增强与低照度恢复完成 | jj skwvwmyl | `-` |
@@ -60,7 +61,7 @@
 
 ## Notes
 
-- 恢复先读最新 Session 25 与 `.trellis/tasks/09-13-m4-geometry-tools/report.md`。T13-A 原图分割/相对深度工具及六图实测已交付，jj `kwvrmtsk`；后端918通过116跳过，6分割+6深度成功但无精度真值，图册存 var/evaluations/2026-09-13-geometry-tools/verified/index.html。下一步 T13-B 对话/持久检查点/UI，验证常驻GPU资源稳定性；首版未整体完成。原检测/VLM/融合与T12-C增强未改，T12-D候选不替换，开放补检保持退出。视频/自动关联增强和浏览器人工验收未完成；无API/推送。
+- 恢复先读最新 Session 26 与 `.trellis/tasks/09-13-m4-geometry-online/report.md`。T13-A/B 已交付原图分割/相对深度及显式对话、持久检查点、页面报告，jj `qllqnxks`；后端967通过126跳过、前端78/build、真实PG/Temporal9通过。真实图册 var/evaluations/2026-09-13-geometry-online/live-0022-v2/index.html，两轮共3QwenAPI；worker替换后复用掩膜并完成深度，仍保留画质不足的人工等待。下一步T14历史比较/规范检索/报告；规范版本待明确，T15/T16及浏览器人工验收待续。无标定不可真实量测，短序列显存稳定不等于长期压力验收。原检测/VLM/融合/T12-C增强不变，开放补检停用；无推送。
 
 - Sessions are appended to journal files
 - New journal file created when current exceeds 2000 lines

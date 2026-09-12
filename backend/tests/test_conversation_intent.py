@@ -92,17 +92,19 @@ def test_conversation_intent_rejects_invalid_or_executable_payloads(
 
 
 def test_compile_inspection_plan_injects_safe_serial_dependencies_and_existing_budget() -> None:
-    intent = ConversationIntent.model_validate(intent_payload())
+    intent = ConversationIntent.model_validate(intent_payload(
+        actions=["relative_measure"], enhancement=None,
+        geometry={"operation": "relative_measure", "roi_xyxy": [2, 1, 7, 5]},
+    ))
 
     plan = compile_inspection_plan(intent, available_actions=set(ActionKind))
 
     assert plan is not None
     assert [step.action for step in plan.steps] == [
         ActionKind.DETECT,
+        ActionKind.VERIFY,
         ActionKind.SEGMENT,
         ActionKind.RELATIVE_MEASURE,
-        ActionKind.VERIFY,
-        ActionKind.ENHANCE,
         ActionKind.SUMMARIZE,
         ActionKind.EXPORT_REPORT,
     ]
@@ -114,8 +116,8 @@ def test_compile_inspection_plan_injects_safe_serial_dependencies_and_existing_b
     assert all(step.required for step in plan.steps)
     assert plan.target_labels == (DetectionLabel.PL,)
     assert plan.outputs == (OutputFormat.JSON,)
-    assert plan.enhancement is not None
-    assert plan.enhancement.kind == "dehaze"
+    assert plan.geometry.operation == "relative_measure"
+    assert plan.enhancement is None
     assert plan.budget.max_tool_calls == 32
     assert plan.budget.max_transport_attempts == 3
 
