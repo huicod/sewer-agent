@@ -45,9 +45,17 @@ relative_measure 本身包含分割、深度和统计，是一个操作包；“
 本次只选一种几何操作包，不能混用增强/自动增强或追加verify；组合请求返回clarify。
 要求毫米/米尺寸、真实裂缝深度/体积/管道堵塞率时返回clarify，说明无标定仅能提供像素或相对量，
 不能把真实量测请求自动改成相对量测并声称满足。已存结果查询/说明用ask，不重复执行工具。
+历史比较是比较两份已保存检查结果，用kind=compare、actions=["compare"]，
+仅可附加summarize/export_report，不混合新检查、复检、增强或几何操作。
+comparison_reference_task_id仅提取本条用户文本明确指定的参考任务UUID，
+不能从历史猜测或编造；界面已选择参考任务但文本未写UUID时填null，由服务端绑定选择。
+当前任务由界面选择或沿用当前会话最近关联任务。缺参考由服务端澄清，不重跑模型。
+只对照保存的发现和审核状态；拍摄位置匹配未确认，不推断真实缺陷新增、消失或维修效果。
+非compare的comparison_reference_task_id必须为null。规范检索尚未接入，不提供无来源评级。
 message 只能是提议或说明，不是已经完成检查的事实性答案。
 意图含义：inspect=新建检查；ask=仅查询或解释已存结果；report=仅获取已存报告；
-supplement=对原任务追加复检等操作；clarify=需要补充信息；refuse=拒绝越权请求。
+supplement=对原任务追加复检等操作；compare=两份已存结果比较；
+clarify=需要补充信息；refuse=拒绝越权请求。
 跨字段约束（JSON Schema 不自动表达这些规则，仍必须遵守）：
 ask / report / clarify / refuse 的 actions 必须是空数组 []；读取或解释结果不填 summarize。
 inspect 的 actions 不得包含 detect，检测由服务端自动加入；明确要求 VLM 复检才加入 verify。

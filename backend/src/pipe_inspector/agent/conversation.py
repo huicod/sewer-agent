@@ -75,9 +75,24 @@ class ConversationDispatcher:
         validate_geometry_input(asset, options, task)
         build_geometry_config(self.starter.settings, options)
 
-    async def handle(self, turn, intent):
+    async def handle(self, turn, intent, *, attempt=1):
         if intent.kind in {"clarify", "refuse"}:
             return self._reply(intent.message)
+        if turn.reference_task_id is not None and intent.kind != "compare":
+            return self._reply(
+                "已选择比较参考任务，但本条没有明确解析为比较请求；本次未执行工具。"
+                "请明确比较两份检查，或清除比较参考后发送其他操作。"
+            )
+        if intent.kind == "compare":
+            from pipe_inspector.agent.comparison import compare_saved_tasks
+            from pipe_inspector.contracts.comparison import ComparisonResult
+
+            cached = await asyncio.to_thread(
+                self.repo.load_turn_step, turn.request_id, "comparison"
+            )
+            task = (ComparisonResult.model_validate(cached).current
+                    if cached is not None else await self._target(turn))
+            return await compare_saved_tasks(self.repo, turn, intent, task, attempt=attempt)
         task = await self._target(turn)
         if intent.kind == "supplement":
             return await self._supplement(turn, intent, task)

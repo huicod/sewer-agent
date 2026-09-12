@@ -26,6 +26,7 @@ import { ReviewPanel } from "./ReviewPanel";
 import { VideoTimeline } from "./VideoTimeline";
 import { EnhancementPanel } from "./EnhancementPanel";
 import { GeometryPanel } from "./GeometryPanel";
+import { ComparisonPanel } from "./ComparisonPanel";
 
 const SESSION_KEY = "pipe-inspector.session-id";
 const ACTIVE_STATUSES = new Set<RuntimeStatus>(["queued", "running", "waiting_review"]);
@@ -352,12 +353,13 @@ function TaskCard({ task, starting, cancelling, onStart, onCancel, onReviewed }:
 
 type TurnCardProps = {
   turn: TurnRecord;
+  sessionId: string;
   linkedTask: TaskRecord | undefined;
   resending: boolean;
   onResend: (turn: TurnRecord) => void;
 };
 
-function TurnCard({ turn, linkedTask, resending, onResend }: TurnCardProps) {
+function TurnCard({ turn, sessionId, linkedTask, resending, onResend }: TurnCardProps) {
   return (
     <article className="turn-card">
       <div className="turn-message turn-message--user">
@@ -378,6 +380,9 @@ function TurnCard({ turn, linkedTask, resending, onResend }: TurnCardProps) {
         {turn.status === "completed" && turn.linked_task_id ? (
           <p className="linked-status">{linkedTaskStatus(linkedTask)}</p>
         ) : null}
+        {turn.status === "completed" ? (
+          <ComparisonPanel sessionId={sessionId} requestId={turn.request_id} />
+        ) : null}
       </div>
     </article>
   );
@@ -391,6 +396,7 @@ export default function App({ pollIntervalMs = 2_000 }: AppProps) {
   const [conversationText, setConversationText] = useState("");
   const [conversationFile, setConversationFile] = useState<File | null>(null);
   const [selectedTaskId, setSelectedTaskId] = useState("");
+  const [selectedReferenceTaskId, setSelectedReferenceTaskId] = useState("");
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [turnSubmitting, setTurnSubmitting] = useState(false);
@@ -414,6 +420,9 @@ export default function App({ pollIntervalMs = 2_000 }: AppProps) {
       setSession(next);
       setTasks([]);
       setTurns([]);
+      setConversationFile(null);
+      setSelectedTaskId("");
+      setSelectedReferenceTaskId("");
       pendingTurn.current = null;
     } catch (nextError) {
       setError(formatError(nextError));
@@ -639,12 +648,16 @@ export default function App({ pollIntervalMs = 2_000 }: AppProps) {
         text: submission.text,
         input_asset: submission.input_asset,
         task_id: submission.task_id,
+        ...(submission.reference_task_id
+          ? { reference_task_id: submission.reference_task_id }
+          : {}),
       });
       setTurns((current) => upsertTurn(current, created));
       pendingTurn.current = null;
       setConversationText("");
       setConversationFile(null);
       setSelectedTaskId("");
+      setSelectedReferenceTaskId("");
       conversationForm.current?.reset();
     } catch (nextError) {
       const message = formatError(nextError);
@@ -667,10 +680,16 @@ export default function App({ pollIntervalMs = 2_000 }: AppProps) {
       return;
     }
     const taskId = selectedTaskId || null;
+    const referenceTaskId = selectedReferenceTaskId || null;
+    if (referenceTaskId && conversationFile) {
+      setConversationError("保存结果对比不能同时上传新附件");
+      return;
+    }
     let pending = pendingTurn.current;
     const sameIntent = Boolean(
       pending && pending.sessionId === session.session_id && pending.text === cleanText &&
-      pending.task_id === taskId && pending.file === conversationFile,
+      pending.task_id === taskId && pending.file === conversationFile &&
+      pending.reference_task_id === referenceTaskId,
     );
     if (!sameIntent) {
       setTurnSubmitting(true);
@@ -684,6 +703,7 @@ export default function App({ pollIntervalMs = 2_000 }: AppProps) {
           text: cleanText,
           input_asset: inputAsset,
           task_id: taskId,
+          reference_task_id: referenceTaskId,
           file: conversationFile,
         };
         pendingTurn.current = pending;
@@ -703,6 +723,7 @@ export default function App({ pollIntervalMs = 2_000 }: AppProps) {
     pendingTurn.current.sessionId === session?.session_id &&
     pendingTurn.current.text === conversationText.trim() &&
     pendingTurn.current.task_id === (selectedTaskId || null) &&
+    pendingTurn.current.reference_task_id === (selectedReferenceTaskId || null) &&
     pendingTurn.current.file === conversationFile,
   );
 
@@ -750,6 +771,7 @@ export default function App({ pollIntervalMs = 2_000 }: AppProps) {
             <TurnCard
               key={turn.request_id}
               turn={turn}
+              sessionId={session?.session_id ?? turn.session_id}
               linkedTask={tasks.find((task) => task.snapshot.task_id === turn.linked_task_id)}
               resending={turnSubmitting}
               onResend={(nextTurn) => void postTurn(nextTurn)}
@@ -779,7 +801,10 @@ export default function App({ pollIntervalMs = 2_000 }: AppProps) {
                 onChange={(event) => {
                   const nextFile = event.target.files?.[0] ?? null;
                   setConversationFile(nextFile);
-                  if (nextFile) setSelectedTaskId("");
+                  if (nextFile) {
+                    setSelectedTaskId("");
+                    setSelectedReferenceTaskId("");
+                  }
                 }}
                 disabled={!session || turnSubmitting || hasActiveTurn}
               />
@@ -790,6 +815,7 @@ export default function App({ pollIntervalMs = 2_000 }: AppProps) {
                 value={selectedTaskId}
                 onChange={(event) => {
                   setSelectedTaskId(event.target.value);
+                  setSelectedReferenceTaskId("");
                   if (event.target.value) {
                     setConversationFile(null);
                     if (conversationFileInput.current) conversationFileInput.current.value = "";
@@ -799,6 +825,27 @@ export default function App({ pollIntervalMs = 2_000 }: AppProps) {
               >
                 <option value="">不关联任务</option>
                 {tasks.map((task) => (
+                  <option key={task.snapshot.task_id} value={task.snapshot.task_id}>
+                    {task.snapshot.task_id.slice(0, 8)} · {task.instruction}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="field">
+              <span>对比参考任务（可选）</span>
+              <select
+                value={selectedReferenceTaskId}
+                onChange={(event) => {
+                  setSelectedReferenceTaskId(event.target.value);
+                  if (event.target.value) {
+                    setConversationFile(null);
+                    if (conversationFileInput.current) conversationFileInput.current.value = "";
+                  }
+                }}
+                disabled={!session || turnSubmitting || hasActiveTurn || !selectedTaskId}
+              >
+                <option value="">不对比</option>
+                {tasks.filter((task) => task.snapshot.task_id !== selectedTaskId).map((task) => (
                   <option key={task.snapshot.task_id} value={task.snapshot.task_id}>
                     {task.snapshot.task_id.slice(0, 8)} · {task.instruction}
                   </option>

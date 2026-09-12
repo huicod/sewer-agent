@@ -1,5 +1,6 @@
 import type {
   AssetRecord,
+  ComparisonResult,
   EnhancementDetail,
   GeometryDetail,
   HumanReviewDetail,
@@ -15,6 +16,7 @@ import type {
 } from "./types";
 import {
   isAssetRecord,
+  isComparisonResult,
   isEnhancementDetail,
   isGeometryDetail,
   isHumanReviewDetail,
@@ -185,5 +187,15 @@ export function getTurn(sessionId: string, requestId: string): Promise<TurnRecor
   return requestJson<TurnRecord>(
     `/api/sessions/${encodeURIComponent(sessionId)}/turns/${encodeURIComponent(requestId)}`,
     isTurnRecord,
+  );
+}
+
+export function getComparison(sessionId: string, requestId: string): Promise<ComparisonResult | null> {
+  return requestJson<ComparisonResult | null>(
+    `/api/sessions/${encodeURIComponent(sessionId)}/turns/${encodeURIComponent(requestId)}/comparison`,
+    (payload): payload is ComparisonResult | null => payload === null || (
+      isComparisonResult(payload) && payload.request_id === requestId &&
+      payload.reference.session_id === sessionId && payload.current.session_id === sessionId
+    ),
   );
 }

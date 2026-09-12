@@ -107,6 +107,7 @@ export type TurnSubmission = {
   text: string;
   input_asset: AssetRef | null;
   task_id: string | null;
+  reference_task_id?: string | null;
 };
 
 export type TurnRecord = TurnSubmission & {
@@ -119,6 +120,38 @@ export type TurnRecord = TurnSubmission & {
   linked_task_id: string | null;
   error_code: string | null;
   attempts: number;
+};
+
+export type ComparisonLabel = DetectionLabel | "UNLABELED";
+
+export type StatusCounts = {
+  confirmed: number;
+  tentative: number;
+  needs_review: number;
+  rejected: number;
+};
+
+export type ComparisonRow = {
+  label: ComparisonLabel;
+  reference: StatusCounts;
+  current: StatusCounts;
+  confirmed_delta: number;
+};
+
+export type ComparisonResult = {
+  schema_version: "1";
+  tool_name: "compare";
+  tool_version: "saved-comparison-v1";
+  request_id: string;
+  created_at: string;
+  attempt: number;
+  reference: TaskRecord;
+  current: TaskRecord;
+  reference_media: AssetRecord;
+  current_media: AssetRecord;
+  rows: ComparisonRow[];
+  matching_status: "unverified";
+  scope: "saved_findings";
 };
 
 export type FindingReviewAction = "confirm" | "reject" | "relabel";

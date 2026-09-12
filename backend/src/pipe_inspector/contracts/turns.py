@@ -17,6 +17,7 @@ class TurnInput(ContractModel):
     text: str = Field(min_length=1, max_length=4000)
     input_asset: AssetRef | None = None
     task_id: UUID | None = None
+    reference_task_id: UUID | None = None
 
 
 class TurnSubmission(TurnInput):

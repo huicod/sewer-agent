@@ -862,3 +862,37 @@ T12-A 完成，保留五类/VLM/融合及开放补检退出在线的边界；T12
 ### Next Steps
 
 - T14历史比较、版本化规范检索与报告完善；规范版本/条款待明确。T15整体/UI验收和T16部署待续，首版未整体完成。
+
+
+## Session 27: T14-A 历史证据比较与报告完成
+
+**Date**: 2026-09-13
+**Task**: T14-A 历史证据比较与报告完成
+
+### Summary
+
+冻结两份已存检查，对话/页面/报告接通；真实PG/Temporal恢复及Qwen意图已验证，下一步规范输入。
+
+### Main Changes
+
+- 恢复入口 .trellis/tasks/09-13-m4-comparison/report.md。同会话已结束同媒体类型检查比较，七类逐审核状态计数；不重跑检测/VLM，不改源任务或预算，不推断真实缺陷变化。
+- 证据 var/evaluations/2026-09-13-comparison/live-smoke；合成检查AJ确认1→2、另驳回1，实际Qwen意图与真实PG/Temporal worker替换通过。无新表/包/模型/哈希/推送。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `jj prpustlr` | (see git log) |
+
+### Testing
+
+- [OK] 后端1013 passed/137 skipped（24.66s），前端84和构建、Ruff及diff通过；一次独立审查无剩余Critical/Important。
+- [OK] 真实PG存储20 passed（8.52s）；PG/Temporal比较及原对话恢复3 passed/1 deselected（10.65s）；实际Qwen比较冒烟1 passed（7.47s），冻结快照复用且源任务不变。
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- T14-B待用户提供规范编号/版本及PDF或官方来源，不自行评级；随后T15整体/UI/故障验收、T16部署交付。首版未整体完成；原检测/VLM/融合/增强几何不变，开放补检停用。

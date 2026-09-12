@@ -340,6 +340,7 @@ select {
 .video-timeline__content,
 .enhancement-panel__content,
 .geometry-panel__content { margin-top: 1rem; border: 1px solid #315148; border-radius: 0.7rem; padding: 1rem; background: #081713; }
+.comparison-panel__content { margin-top: 1rem; border: 1px solid #315148; border-radius: 0.7rem; padding: 1rem; background: #081713; }
 .review-panel > h3,
 .video-timeline__content > h3,
 .enhancement-panel__content > h3 { margin-bottom: 0.35rem; }
@@ -374,6 +375,18 @@ select {
 .geometry-grid rect { fill: rgba(255, 201, 92, 0.12); stroke: #ffd06d; stroke-width: 3; vector-effect: non-scaling-stroke; }
 .geometry-grid figcaption { margin-top: 0.4rem; }
 .geometry-panel a { color: #71e5bd; }
+.comparison-panel a { color: #71e5bd; }
+.comparison-sources { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr)); gap: 0.8rem; }
+.comparison-source { border: 1px solid #29473e; border-radius: 0.55rem; padding: 0.8rem; }
+.comparison-source ul { display: grid; gap: 0.55rem; margin: 0.6rem 0 0; padding-left: 1.2rem; }
+.comparison-source li { overflow-wrap: anywhere; }
+.comparison-source .evidence-links { margin-top: 0.25rem; }
+.comparison-table-wrap { overflow-x: auto; margin-top: 1rem; }
+.comparison-table-wrap table { width: 100%; border-collapse: collapse; font-size: 0.78rem; }
+.comparison-table-wrap caption { margin-bottom: 0.5rem; text-align: left; font-weight: 750; }
+.comparison-table-wrap th,
+.comparison-table-wrap td { border: 1px solid #29473e; padding: 0.45rem; text-align: right; white-space: nowrap; }
+.comparison-table-wrap th:first-child { text-align: left; }
 .geometry-finding-ids { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; }
 .geometry-finding-ids code,
 .findings code { color: #bcebdd; font-size: 0.75rem; overflow-wrap: anywhere; }

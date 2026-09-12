@@ -206,6 +206,34 @@ SEWER_RUN_STORAGE_TEST=1 .venv/bin/python -m pytest backend/tests/integration/te
 
 关联复检的本地 PG/Temporal 验证：`SEWER_RUN_CONVERSATION_TEST=1 .venv/bin/pytest -q backend/tests/integration/test_image_supplement_integration.py`；无需 GPU 或付费 API，覆盖限流重试、重复分派、保留 OTHER、Worker 替换及最终写库失败恢复。
 
+## 历史证据比较（T14-A）
+
+在同一会话选择“已有任务”和“比较参考任务”，发送“比较这两份已保存检查，给出比较报告”。
+也可在本条文本写明参考任务 UUID；当前任务未选时沿用最近已完成对话的关联任务。
+两项必须不同、已结束（completed/partial），且同为原始图片或同为视频的检查；新上传媒体需先检查。
+`POST /api/sessions/{session_id}/turns` 新增可选 `reference_task_id`，与 request_id 一起绑定重试身份。
+
+比较按五类＋OTHER＋未定类分别展示已确认、待定、待人工复核、已驳回数量，同时保留源快照、
+覆盖限制和证据链接。两图没有自动配准，视频没有逐事件物理匹配；计数差异不是缺陷真实新增、
+消失或维修效果，也不能靠“零发现”判正常。比较不重跑检测/VLM，不修改源任务或占用补证额度；
+意图解析仍使用一次 LLM。比较快照保存在现有对话检查点，恢复复用首次结果。
+
+- `GET /api/sessions/{session_id}/turns/{request_id}/comparison`：保存的比较或 null。
+- 同路径加 `/report?format=json|html`：导出比较报告；未生成返回 409，与原任务报告分开。
+- 页面在已完成对话下展开读取。HTML 仍引用服务器资产接口，不是离线媒体打包。
+
+本次无需新表/包；使用前重启 API、CPU worker并更新前端，不混用旧版本。
+规范检索 T14-B 尚待指定规范编号/版本及真实文档，当前不提供无来源评级。
+
+```bash
+SEWER_RUN_STORAGE_TEST=1 .venv/bin/pytest -q backend/tests/integration/test_comparison_storage.py
+SEWER_RUN_CONVERSATION_TEST=1 .venv/bin/pytest -q backend/tests/integration/test_comparison_live.py
+```
+
+第二条使用真实 PostgreSQL/Temporal、合成已存检查，不启动 GPU/VLM；覆盖完成响应丢失和 worker
+替换。额外设置 `SEWER_RUN_LIVE_COMPARISON=1` 才调用真实付费意图 API；可设置一个尚不存在的
+`SEWER_COMPARISON_OUTPUT` 目录保存请求、快照和报告。这是功能测试，不是准确率实验。
+
 ## 人工审核与事件证据（T09）
 
 - 升级时先运行 `scripts/init_storage.py` 新增审核表，再重启 API 和 CPU worker；旧数据不重写。新入场任务固定 `human_review_version=human-review-v1`，已有旧任务不追加入场或重新打开。

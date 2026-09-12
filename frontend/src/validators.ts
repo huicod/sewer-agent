@@ -1,6 +1,7 @@
 import type {
   AssetRecord,
   AssetRef,
+  ComparisonResult,
   EnhancementDetail,
   Finding,
   FindingReview,
@@ -44,6 +45,7 @@ const TURN_FIELDS = new Set([
   "request_id", "session_id", "text", "input_asset", "task_id", "created_at", "updated_at",
   "status", "stage", "reply", "linked_task_id", "error_code", "attempts",
 ]);
+const TURN_FIELDS_WITH_REFERENCE = new Set([...TURN_FIELDS, "reference_task_id"]);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -236,14 +238,15 @@ export function isSessionDetail(value: unknown): value is SessionDetail {
 export function isTurnRecord(value: unknown): value is TurnRecord {
   return (
     isRecord(value) &&
-    Object.keys(value).length === TURN_FIELDS.size &&
-    Object.keys(value).every((key) => TURN_FIELDS.has(key)) &&
+    (hasExactFields(value, TURN_FIELDS) || hasExactFields(value, TURN_FIELDS_WITH_REFERENCE)) &&
     isUuid(value.request_id) &&
     isUuid(value.session_id) &&
     typeof value.text === "string" &&
     value.text.length >= 1 && value.text.length <= 4_000 &&
     (value.input_asset === null || isAssetRef(value.input_asset)) &&
     (value.task_id === null || isUuid(value.task_id)) &&
+    (value.reference_task_id === undefined || value.reference_task_id === null ||
+      isUuid(value.reference_task_id)) &&
     isTimestamp(value.created_at) &&
     isTimestamp(value.updated_at) &&
     typeof value.status === "string" && TURN_STATUSES.has(value.status as TurnStatus) &&
@@ -672,4 +675,111 @@ export function isGeometryDetail(value: unknown): value is GeometryDetail {
     return false;
   }
   return !measurements?.relative_depth || depth !== null;
+}
+
+const COMPARISON_LABELS = ["AJ", "BX", "FS", "PL", "BLOCK", "OTHER", "UNLABELED"] as const;
+const REVIEW_STATUSES = ["confirmed", "tentative", "needs_review", "rejected"] as const;
+const COMPARISON_FIELDS = new Set([
+  "schema_version", "tool_name", "tool_version", "request_id", "created_at", "attempt",
+  "reference", "current", "reference_media", "current_media", "rows", "matching_status", "scope",
+]);
+const COMPARISON_ROW_FIELDS = new Set(["label", "reference", "current", "confirmed_delta"]);
+const STATUS_COUNT_FIELDS = new Set(REVIEW_STATUSES);
+const TASK_FIELDS = new Set([
+  "request_id", "session_id", "input_asset", "instruction", "created_at", "snapshot",
+]);
+const TASK_FIELDS_WITH_PARENT = new Set([...TASK_FIELDS, "parent_task_id"]);
+const SNAPSHOT_FIELDS = new Set([
+  "schema_version", "task_id", "runtime_status", "inspection_result", "stage", "stage_progress",
+  "overall_progress", "processed_frames", "processed_chunks", "active_tool", "retry_count",
+  "waiting_reason", "updated_at", "findings", "coverage",
+]);
+const SNAPSHOT_FIELDS_WITH_CANCEL = new Set([...SNAPSHOT_FIELDS, "can_cancel"]);
+const COVERAGE_FIELDS = new Set([
+  "sufficient_coverage", "sufficient_quality", "negative_audit_complete",
+]);
+const FINDING_FIELDS = new Set([
+  "finding_id", "task_id", "canonical_label", "open_label", "review_status", "source", "score",
+  "evidence", "confirmed_by",
+]);
+const EVIDENCE_FIELDS = new Set(["asset", "region", "frame_index", "timestamp_seconds"]);
+
+function isExactComparisonTask(value: unknown): value is TaskRecord {
+  if (
+    !isRecord(value) ||
+    !(hasExactFields(value, TASK_FIELDS) || hasExactFields(value, TASK_FIELDS_WITH_PARENT)) ||
+    !isTaskRecord(value) || !isRecord(value.snapshot)
+  ) return false;
+  const snapshot = value.snapshot;
+  if (
+    !(hasExactFields(snapshot, SNAPSHOT_FIELDS) || hasExactFields(snapshot, SNAPSHOT_FIELDS_WITH_CANCEL)) ||
+    !isRecord(snapshot.coverage) || !hasExactFields(snapshot.coverage, COVERAGE_FIELDS) ||
+    !Array.isArray(snapshot.findings)
+  ) return false;
+  return snapshot.findings.every((finding) =>
+    isRecord(finding) && hasExactFields(finding, FINDING_FIELDS) &&
+    Array.isArray(finding.evidence) && finding.evidence.every((evidence) =>
+      isRecord(evidence) && hasExactFields(evidence, EVIDENCE_FIELDS) &&
+      isExactAssetRef(evidence.asset) &&
+      (evidence.region === null ||
+        (isRecord(evidence.region) && hasExactFields(evidence.region, REGION_FIELDS))),
+    ),
+  );
+}
+
+function comparisonCounts(task: TaskRecord, label: string): Record<string, number> {
+  const counts: Record<string, number> = {
+    confirmed: 0, tentative: 0, needs_review: 0, rejected: 0,
+  };
+  for (const finding of task.snapshot.findings) {
+    const findingLabel = finding.canonical_label ?? "UNLABELED";
+    if (findingLabel === label) counts[finding.review_status] += 1;
+  }
+  return counts;
+}
+
+function isStatusCounts(value: unknown, expected: Record<string, number>): boolean {
+  return isRecord(value) && hasExactFields(value, STATUS_COUNT_FIELDS) &&
+    REVIEW_STATUSES.every((status) => isNonNegativeInteger(value[status]) && value[status] === expected[status]);
+}
+
+export function isComparisonResult(value: unknown): value is ComparisonResult {
+  if (
+    !isRecord(value) || !hasExactFields(value, COMPARISON_FIELDS) ||
+    value.schema_version !== "1" || value.tool_name !== "compare" ||
+    value.tool_version !== "saved-comparison-v1" || !isUuid(value.request_id) ||
+    !isAwareTimestamp(value.created_at) || !Number.isInteger(value.attempt) ||
+    (value.attempt as number) < 1 || !isExactComparisonTask(value.reference) ||
+    !isExactComparisonTask(value.current) || !isExactAssetRecord(value.reference_media) ||
+    !isExactAssetRecord(value.current_media) || !Array.isArray(value.rows) ||
+    value.rows.length !== COMPARISON_LABELS.length || value.matching_status !== "unverified" ||
+    value.scope !== "saved_findings"
+  ) return false;
+  const reference = value.reference;
+  const current = value.current;
+  const referenceMedia = value.reference_media;
+  const currentMedia = value.current_media;
+  if (
+    reference.session_id !== current.session_id ||
+    reference.snapshot.task_id === current.snapshot.task_id ||
+    !sameAsset(reference.input_asset, referenceMedia.ref) ||
+    !sameAsset(current.input_asset, currentMedia.ref) ||
+    referenceMedia.parent !== null || currentMedia.parent !== null ||
+    (referenceMedia.kind !== "image" && referenceMedia.kind !== "video") ||
+    currentMedia.kind !== referenceMedia.kind ||
+    !["completed", "partial"].includes(reference.snapshot.runtime_status) ||
+    !["completed", "partial"].includes(current.snapshot.runtime_status) ||
+    reference.snapshot.findings.some((finding) => finding.task_id !== reference.snapshot.task_id) ||
+    current.snapshot.findings.some((finding) => finding.task_id !== current.snapshot.task_id)
+  ) return false;
+  return value.rows.every((row, index) => {
+    if (!isRecord(row) || !hasExactFields(row, COMPARISON_ROW_FIELDS) ||
+        row.label !== COMPARISON_LABELS[index]) return false;
+    const referenceCounts = comparisonCounts(reference, row.label as string);
+    const currentCounts = comparisonCounts(current, row.label as string);
+    return isStatusCounts(row.reference, referenceCounts) &&
+      isStatusCounts(row.current, currentCounts) &&
+      Number.isInteger(row.confirmed_delta) &&
+      row.confirmed_delta === currentCounts.confirmed - referenceCounts.confirmed;
+  });
 }

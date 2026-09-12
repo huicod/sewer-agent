@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from enum import StrEnum
 from typing import Literal
+from uuid import UUID
 
 from pydantic import Field, model_validator
 
@@ -19,6 +20,7 @@ class ConversationIntentKind(StrEnum):
     ASK = "ask"
     REPORT = "report"
     SUPPLEMENT = "supplement"
+    COMPARE = "compare"
     CLARIFY = "clarify"
     REFUSE = "refuse"
 
@@ -42,9 +44,18 @@ class ConversationIntent(ContractModel):
     enhancement: EnhancementOptions | None = None
     auto_enhancement: bool = False
     geometry: GeometryOptions | None = None
+    comparison_reference_task_id: UUID | None = None
 
     @model_validator(mode="after")
     def validate_intent(self) -> "ConversationIntent":
+        if self.comparison_reference_task_id is not None and self.kind != "compare":
+            raise ValueError("comparison reference requires compare intent")
+        if self.kind == "compare":
+            allowed = {ActionKind.COMPARE, ActionKind.SUMMARIZE, ActionKind.EXPORT_REPORT}
+            if ActionKind.COMPARE not in self.actions or set(self.actions) - allowed:
+                raise ValueError("compare requires compare and only optional report actions")
+            if self.geometry is not None or self.enhancement is not None or self.auto_enhancement:
+                raise ValueError("compare cannot run image tools")
         if self.geometry is not None:
             self.geometry.validate_actions(
                 self.actions, enhancement=ActionKind.ENHANCE in self.actions

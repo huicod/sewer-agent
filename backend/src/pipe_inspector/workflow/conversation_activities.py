@@ -93,7 +93,7 @@ class TurnActivities:
         raw = await asyncio.to_thread(self.repo.load_turn_step, request_id, "intent")
         intent = ConversationIntent.model_validate(raw)
         try:
-            result = await self.dispatcher.handle(turn, intent)
+            result = await self.dispatcher.handle(turn, intent, attempt=activity.info().attempt)
         except (MissingRecord, SubmissionConflict):
             raise ApplicationError(
                 "invalid_reference", type="invalid_reference", non_retryable=True

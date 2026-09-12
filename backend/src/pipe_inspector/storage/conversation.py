@@ -84,21 +84,23 @@ class ConversationRepository(InspectionRepository):
             if foreign_owner is not None:
                 raise SubmissionConflict
 
-        if submission.task_id is None:
-            return
-        task_row = connection.execute(
-            sql.SQL("SELECT record FROM {} WHERE task_id = %s").format(
-                self._table("sewer_tasks")
-            ),
-            (submission.task_id,),
-        ).fetchone()
-        if task_row is None:
-            raise MissingRecord
-        task = TaskRecord.model_validate(task_row[0])
-        if task.session_id != submission.session_id:
-            raise SubmissionConflict
-        if asset is not None and task.input_asset != asset.ref:
-            raise SubmissionConflict
+        for task_id in (submission.task_id, submission.reference_task_id):
+            if task_id is None:
+                continue
+            task_row = connection.execute(
+                sql.SQL("SELECT record FROM {} WHERE task_id = %s").format(
+                    self._table("sewer_tasks")
+                ),
+                (task_id,),
+            ).fetchone()
+            if task_row is None:
+                raise MissingRecord
+            task = TaskRecord.model_validate(task_row[0])
+            if task.session_id != submission.session_id:
+                raise SubmissionConflict
+            if (task_id == submission.task_id and asset is not None
+                    and task.input_asset != asset.ref):
+                raise SubmissionConflict
 
     def admit_turn(self, submission: TurnSubmission, config: dict) -> TurnRecord:
         created_at = datetime.now(timezone.utc)
@@ -263,6 +265,24 @@ class ConversationRepository(InspectionRepository):
                 (Jsonb(checkpoints), request_id),
             )
         return payload
+
+    def save_comparison(
+        self,
+        request_id: UUID,
+        reference_task_id: UUID,
+        current_task_id: UUID,
+        *,
+        attempt: int = 1,
+    ) -> dict:
+        from pipe_inspector.storage.comparison import save_comparison
+
+        return save_comparison(
+            self,
+            request_id,
+            reference_task_id,
+            current_task_id,
+            attempt=attempt,
+        )
 
     def update_turn(self, request_id: UUID, **changes) -> TurnRecord:
         unsupported = set(changes) - self._UPDATABLE_FIELDS
