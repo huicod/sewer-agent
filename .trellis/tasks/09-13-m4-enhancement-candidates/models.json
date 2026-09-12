@@ -1,0 +1,32 @@
+[
+  {
+    "kind": "deblur",
+    "model_id": "restormer-motion-deblurring",
+    "checkpoint": "/root/autodl-tmp/server/var/models/enhancement/restormer-motion-v1.0.pth"
+  },
+  {
+    "kind": "deblur",
+    "model_id": "concertormer-realblur-j",
+    "checkpoint": "/root/autodl-tmp/server/var/models/enhancement/concertormer-realblur-j.pth"
+  },
+  {
+    "kind": "dehaze",
+    "model_id": "dehazeformer-mct",
+    "checkpoint": "/root/autodl-tmp/server/var/models/enhancement/dehazeformer-mct-8e0b26c7.pth"
+  },
+  {
+    "kind": "dehaze",
+    "model_id": "convir-l-haze4k",
+    "checkpoint": "/root/autodl-tmp/server/var/models/enhancement/convir-l-haze4k-05dcbffa.pkl"
+  },
+  {
+    "kind": "super_resolution",
+    "model_id": "realesr-general-x4v3",
+    "checkpoint": "/root/autodl-tmp/server/var/models/enhancement/realesr-general-x4v3-v0.2.5.0.pth"
+  },
+  {
+    "kind": "super_resolution",
+    "model_id": "hat-l-x4-imagenet",
+    "checkpoint": "/root/autodl-tmp/server/var/models/enhancement/hat-l-x4-imagenet-1638a9a8.pth"
+  }
+]

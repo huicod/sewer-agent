@@ -759,3 +759,38 @@ T12-A 完成，保留五类/VLM/融合及开放补检退出在线的边界；T12
 ### Status
 
 [OK] **Completed**
+
+
+## Session 24: T12-D 增强候选实图比较完成，暂不替换在线模型
+
+**Date**: 2026-09-13
+**Task**: T12-D 增强候选实图比较完成，暂不替换在线模型
+
+### Summary
+
+八图六模型比较已交付；48 次增强、72 次检测、40 张对齐局部图。无候选获得在线替换依据，下一步回到 T13。
+
+### Main Changes
+
+- 新增离线 Concertormer RealBlur-J、ConvIR-L Haze4K、HAT-L x4 及分组图册，保留原图、模型输出、真实检测框/JSON、耗时显存。原 VLM/融合、检测器及 T12-C opt-in 在线策略不变。
+- ConvIR 在暗光 sample-0025 严重失真，官方代码与同一权重定点复现；HAT 在 sample-0003 局部未检出 PL。未将执行成功或检测分数当成缺陷恢复成功，不替换默认模型。
+- 恢复入口 .trellis/tasks/09-13-m4-enhancement-candidates/report.md；图册 var/evaluations/2026-09-13-restoration-candidates/index.html；模型仅存 var/models/enhancement，不推送媒体或权重。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `jj lmuslmlo` | (see git log) |
+
+### Testing
+
+- [OK] 最终后端 866 passed / 116 skipped（20.80s），Ruff backend/scripts 与 diff 检查通过；10 个 HTML 本地链接有效。一次独立审查及针对性测试修复匹配/局部图/卸载错误呈现。
+- [OK] 固定实验全部本地 GPU：48 次增强及 72 次检测成功，0 执行/卸载失败；另做三候选 smoke 和两次 ConvIR 定点前向。无 API、新依赖、训练或哈希校验。前端及服务集成未重复运行。
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- 按 project_management/DEVELOPMENT_PLAN.md 启动 T13 提示式分割与相对深度；保留视频/自动关联增强和浏览器人工验收未完成状态，不宣称第一版完工。

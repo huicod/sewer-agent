@@ -341,3 +341,24 @@ DarkIR 权重 `var/models/enhancement/darkir-384-hf-8a73ebf2.pt`；HVI-CIDNet �
 可复现六图比较（新输出目录；需本地两份权重；不调用 API）。既有三种增强模型保持基线，
 后续替换需逐图效果依据。当前 [T12-C 实图和在线证据](../var/evaluations/2026-09-13-adaptive-enhancement/index.html)
 证明工程可用，不代表缺陷级准确率提升。
+
+### 离线增强候选对照（T12-D）
+
+`evaluation.restoration` 比较三组固定模型：Restormer/Concertormer、DehazeFormer-MCT/ConvIR-L、
+RealESR-general-x4v3/HAT-L。候选仅由离线 factory 创建，不进入 Agent 在线白名单，也不修改
+已验收 VLM 或融合。需本地权重，最多 12 张图、每类恰好两模型，必须用不存在的新输出目录：
+
+```bash
+.venv/bin/python -m pipe_inspector.evaluation.restoration \
+  --manifest .trellis/tasks/09-13-m4-enhancement-candidates/samples.json \
+  --models .trellis/tasks/09-13-m4-enhancement-candidates/models.json \
+  --output var/evaluations/restoration-new-run \
+  --detector-checkpoint yolov26/experiments/sewer2403_5class_yolo26s_img960_e100/weights/best.pt \
+  --device cuda:0
+```
+
+图册含完整原图、共同分析图、固定 ROI、bicubic 控制、增强输出、对齐局部、检测框/JSON、
+时间/显存/失败。框保留不是真值，ROI 不混入全图 P/R，无 API 调用。
+[已完成的八图对照](../var/evaluations/2026-09-13-restoration-candidates/index.html)
+没有提供替换现有模型的充分依据；ConvIR 的暗光失真保留为失败证据。
+来源、许可证及结果限制见 [T12-D 报告](../.trellis/tasks/09-13-m4-enhancement-candidates/report.md)。

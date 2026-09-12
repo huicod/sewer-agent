@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 23
+- **Total Sessions**: 24
 - **Last Active**: 2026-09-13
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~761 | Active |
+| `journal-1.md` | ~796 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 24 | 2026-09-13 | T12-D 增强候选实图比较完成，暂不替换在线模型 | jj lmuslmlo | `-` |
 | 23 | 2026-09-13 | T12-C 按需增强与低照度恢复完成 | jj skwvwmyl | `-` |
 | 22 | 2026-09-12 | T12-B 图片增强对话与持久闭环完成 | jj vxkrkvwz | `-` |
 | 21 | 2026-09-12 | 恢复 T12：三种增强工具与原图对照完成，在线集成待续 | jj nnvxzzxz | `-` |
@@ -58,7 +59,7 @@
 
 ## Notes
 
-- 恢复先读最新 Session 22 与 `.trellis/tasks/09-12-m4-enhancement-online/report.md`。T12-A/B 图片增强已交付，对话/持久恢复/对照/辅助复核已接通；自动与视频增强未启用，首版仍有 T13–T16。jj `vxkrkvwz`；后端797通过113跳过、前端63通过及构建通过、服务集成33通过、真实3API+1增强通过。基础 PG/Temporal 本机运行，产品 API/worker 不常驻。三个开放补检继续退出在线，主检测/原VLM/原融合未改；不推送。
+- 恢复先读最新 Session 24 与 `.trellis/tasks/09-13-m4-enhancement-candidates/report.md`。T12-A/B/C 按需图片增强已交付；T12-D 八图六模型离线比较完成，暂不替换在线模型。jj `lmuslmlo`；后端866通过116跳过，48次增强/72次检测执行成功但含明确视觉失真反例，无API。线上仍为用户本次 opt-in 选择一种工具或跳过；视频/自动关联增强和浏览器人工验收未完成。下一步 T13 分割/相对深度，首版仍有 T13–T16。主检测/原VLM/融合未改，开放补检保持退出；不推送。
 
 - Sessions are appended to journal files
 - New journal file created when current exceeds 2000 lines

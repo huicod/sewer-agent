@@ -1,0 +1,175 @@
+[
+  {
+    "sample_id": "sample-0003",
+    "image": "/root/autodl-tmp/server/var/evaluations/2026-09-11-guided/paired/gallery/sample-0003/original.jpg",
+    "roi": [
+      160,
+      160,
+      480,
+      480
+    ],
+    "ground_truth": [
+      {
+        "label": "PL",
+        "bbox_xyxy": [
+          274.0,
+          113.0,
+          341.0,
+          437.0
+        ],
+        "score": 1.0
+      }
+    ],
+    "reason": "PL thin longitudinal trace; low-resolution texture and illumination gradient"
+  },
+  {
+    "sample_id": "sample-0007",
+    "image": "/root/autodl-tmp/server/var/evaluations/2026-09-11-guided/paired/gallery/sample-0007/original.jpg",
+    "roi": [
+      1050,
+      530,
+      1370,
+      850
+    ],
+    "ground_truth": [
+      {
+        "label": "BX",
+        "bbox_xyxy": [
+          328.0,
+          179.0,
+          1436.0,
+          1025.0
+        ],
+        "score": 1.0
+      }
+    ],
+    "reason": "Previously discussed high-confidence BX; corrugated wall and droplets, unnecessary-enhancement control"
+  },
+  {
+    "sample_id": "sample-0011",
+    "image": "/root/autodl-tmp/server/var/evaluations/2026-09-11-guided/paired/gallery/sample-0011/original.jpg",
+    "roi": [
+      1120,
+      490,
+      1440,
+      810
+    ],
+    "ground_truth": [
+      {
+        "label": "BX",
+        "bbox_xyxy": [
+          426.0,
+          402.0,
+          1557.0,
+          1052.0
+        ],
+        "score": 1.0
+      }
+    ],
+    "reason": "Previously discussed high-confidence BX; bright repetitive ridges and shape preservation"
+  },
+  {
+    "sample_id": "sample-0015",
+    "image": "/root/autodl-tmp/server/var/evaluations/2026-09-11-guided/paired/gallery/sample-0015/original.jpg",
+    "roi": [
+      1240,
+      250,
+      1560,
+      570
+    ],
+    "ground_truth": [
+      {
+        "label": "FS",
+        "bbox_xyxy": [
+          1354.0,
+          271.0,
+          1427.0,
+          567.0
+        ],
+        "score": 1.0
+      }
+    ],
+    "reason": "FS narrow side-wall trace with low contrast; inspect detail suppression"
+  },
+  {
+    "sample_id": "sample-0017",
+    "image": "/root/autodl-tmp/server/var/evaluations/2026-09-11-guided/paired/gallery/sample-0017/original.jpg",
+    "roi": [
+      880,
+      20,
+      1200,
+      340
+    ],
+    "ground_truth": [
+      {
+        "label": "FS",
+        "bbox_xyxy": [
+          904.0,
+          128.0,
+          1180.0,
+          194.0
+        ],
+        "score": 1.0
+      }
+    ],
+    "reason": "Previously discussed FS under caption; text/texture false-alarm stress case"
+  },
+  {
+    "sample_id": "sample-0022",
+    "image": "/root/autodl-tmp/server/var/evaluations/2026-09-11-guided/paired/gallery/sample-0022/original.jpg",
+    "roi": [
+      235,
+      50,
+      555,
+      370
+    ],
+    "ground_truth": [
+      {
+        "label": "AJ",
+        "bbox_xyxy": [
+          268.0,
+          73.0,
+          544.0,
+          354.0
+        ],
+        "score": 1.0
+      }
+    ],
+    "reason": "Previously discussed high-confidence AJ; opening boundary and texture fidelity"
+  },
+  {
+    "sample_id": "sample-0025",
+    "image": "/root/autodl-tmp/server/var/evaluations/2026-09-11-guided/paired/gallery/sample-0025/original.jpg",
+    "roi": [
+      175,
+      260,
+      495,
+      580
+    ],
+    "ground_truth": [
+      {
+        "label": "BLOCK",
+        "bbox_xyxy": [
+          181.0,
+          275.0,
+          532.0,
+          581.0
+        ],
+        "score": 1.0
+      }
+    ],
+    "reason": "Dark BLOCK example; wrong-tool low-light control rather than confirmed haze"
+  },
+  {
+    "sample_id": "sample-0033",
+    "image": "/root/autodl-tmp/server/var/evaluations/2026-09-11-guided/paired/gallery/sample-0033/original.jpg",
+    "roi": [
+      530,
+      330,
+      850,
+      650
+    ],
+    "ground_truth": [],
+    "reason": "Visibly blurred real CCTV with reflections and water; no five-class GT is not normal"
+  }
+]
