@@ -794,3 +794,37 @@ T12-A 完成，保留五类/VLM/融合及开放补检退出在线的边界；T12
 ### Next Steps
 
 - 按 project_management/DEVELOPMENT_PLAN.md 启动 T13 提示式分割与相对深度；保留视频/自动关联增强和浏览器人工验收未完成状态，不宣称第一版完工。
+
+
+## Session 25: T13-A 分割与相对深度工具及六图实测完成
+
+**Date**: 2026-09-13
+**Task**: T13-A 分割与相对深度工具及六图实测完成
+
+### Summary
+
+可复用原图框分割、相对深度和像素统计完成；六图12次工具成功，未接在线，下一步T13-B。
+
+### Main Changes
+
+- 新增SAM 2.1 Hiera Large与Depth Anything V2 Small本地适配器；本地官方权重、严格加载、单GPU串行，无API/新安装包/训练/哈希。
+- 图册var/evaluations/2026-09-13-geometry-tools/verified/index.html；6张原图及提示框、掩膜/叠加、深度NPY/预览、实际JSON全部保留。恢复先读.trellis/tasks/09-13-m4-geometry-tools/report.md。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `jj kwvrmtsk` | (see git log) |
+
+### Testing
+
+- [OK] 最终后端918 passed/116 skipped（22.03s），Ruff backend/scripts及diff检查通过；独立核心审查两项问题已有失败用例后修复。
+- [OK] 6分割+6深度全部成功，累计工具调用16.13s，另两次单模型smoke；逐张检查掩膜与深度，保留管口不等于缺陷面积、深度细节不足/遮挡伪影等限制，不宣称准确率提升。
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- T13-B：显式对话工具准入、原图框选择、串行GPU Activities、资产/调用原子检查点、进度和UI报告；验证常驻worker重复调用资源稳定性。主检测/VLM/融合与增强策略不变，开放补检停用，首版未整体完成；无推送。

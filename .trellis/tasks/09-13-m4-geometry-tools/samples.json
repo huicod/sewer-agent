@@ -1,0 +1,38 @@
+[
+  {
+    "sample_id": "sample-0003",
+    "image": "/root/autodl-tmp/server/var/evaluations/2026-09-11-guided/paired/gallery/sample-0003/original.jpg",
+    "prompt_xyxy": [244.7540740966797, 103.50726318359375, 348.4525146484375, 436.01214599609375],
+    "prompt_source": "该原图同目录 record.json 的 observation.detection 最高分原始 YOLO 框：PL 0.7093；检查细线是否被分割为裂纹而非背景，框不是掩膜真值。"
+  },
+  {
+    "sample_id": "sample-0007",
+    "image": "/root/autodl-tmp/server/var/evaluations/2026-09-11-guided/paired/gallery/sample-0007/original.jpg",
+    "prompt_xyxy": [318.036376953125, 187.38760375976562, 1444.5328369140625, 1037.1953125],
+    "prompt_source": "该原图同目录 record.json 的 observation.detection 最高分原始 YOLO 框：BX 0.9434；大范围管壁形变不一定有可分离物体掩膜，保留这种工具适用性反例。"
+  },
+  {
+    "sample_id": "sample-0015",
+    "image": "/root/autodl-tmp/server/var/evaluations/2026-09-11-guided/paired/gallery/sample-0015/original.jpg",
+    "prompt_xyxy": [1350.108154296875, 260.9419250488281, 1421.3687744140625, 572.7047119140625],
+    "prompt_source": "该原图同目录 record.json 的 observation.detection 最高分原始 YOLO 框：FS 0.8411；窄侧壁纹理，检查掩膜是否只跟随亮线/污渍。"
+  },
+  {
+    "sample_id": "sample-0022",
+    "image": "/root/autodl-tmp/server/var/evaluations/2026-09-11-guided/paired/gallery/sample-0022/original.jpg",
+    "prompt_xyxy": [280.334228515625, 66.48868560791016, 549.1298828125, 350.4391174316406],
+    "prompt_source": "该原图同目录 record.json 的 observation.detection 最高分原始 YOLO 框：AJ 0.9409；检查开口边界与相对远近。"
+  },
+  {
+    "sample_id": "sample-0025",
+    "image": "/root/autodl-tmp/server/var/evaluations/2026-09-11-guided/paired/gallery/sample-0025/original.jpg",
+    "prompt_xyxy": [184.66885375976562, 277.2685546875, 489.98577880859375, 582.312744140625],
+    "prompt_source": "该原图同目录 record.json 的 observation.detection 最高分原始 YOLO 框：BLOCK 0.8947；仅用未增强暗光原图，图像掩膜占比不是管道堵塞率。"
+  },
+  {
+    "sample_id": "sample-0033",
+    "image": "/root/autodl-tmp/server/var/evaluations/2026-09-11-guided/paired/gallery/sample-0033/original.jpg",
+    "prompt_xyxy": [400, 220, 1140, 940],
+    "prompt_source": "Agent 在推理前显式指定可见洞口区域，展示无检测候选时的区域分割调用；原 YOLO 无五类框，不是新增缺陷/真值。模糊、反光和水面为困难例。"
+  }
+]

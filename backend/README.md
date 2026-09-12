@@ -362,3 +362,31 @@ RealESR-general-x4v3/HAT-L。候选仅由离线 factory 创建，不进入 Agent
 [已完成的八图对照](../var/evaluations/2026-09-13-restoration-candidates/index.html)
 没有提供替换现有模型的充分依据；ConvIR 的暗光失真保留为失败证据。
 来源、许可证及结果限制见 [T12-D 报告](../.trellis/tasks/09-13-m4-enhancement-candidates/report.md)。
+
+## 分割与相对深度工具（T13-A）
+
+本地工具入口为 `vision.geometry.run_segmentation`、`run_relative_depth` 和 `measure_geometry`。
+分割接收显式原图坐标框，不自行检测类别；深度使用同一原图。只接受原始 image/frame，
+最多 4,194,304 像素，不用增强图量测。当前模型为 SAM 2.1 Hiera Large 和 Depth Anything V2 Small，
+通过既有 Transformers 4.57.6 加载本地 safetensors；依赖声明在 `geometry` extra。
+权重来源/固定版本见 [选型记录](../.trellis/tasks/09-13-m4-geometry-tools/research/models.md)。
+六图实测与效果限制见 [T13-A 交接](../.trellis/tasks/09-13-m4-geometry-tools/report.md)；
+[原图/掩膜/深度图册](../var/evaluations/2026-09-13-geometry-tools/verified/index.html) 保存实际输出。
+
+```bash
+.venv/bin/python -m pipe_inspector.evaluation.geometry \
+  --manifest .trellis/tasks/09-13-m4-geometry-tools/samples.json \
+  --segmentation-checkpoint var/models/geometry/sam2.1-hiera-large \
+  --depth-checkpoint var/models/geometry/depth-anything-v2-small \
+  --output var/evaluations/geometry-new-run \
+  --device cuda:0
+```
+
+必须使用新的输出目录。结果包括原图、提示框、二值 mask/叠加 PNG、float32 相对深度 NPY、
+深度预览和 JSON/HTML。深度预览按单图归一化，白近黑远；原始 NPY 用
+`np.load(path, allow_pickle=False)` 读取，不是米或毫米。面积占比分母为整幅图像，
+不是管道真实堵塞率；同一源图才可合并掩膜与深度，分割质量分数也不是缺陷正确率。
+空掩膜、常数/非有限深度会报告失败，不生成替代结果。
+
+T13-A 是可复用工具及离线验证入口；对话调用、Temporal/数据库事务、网页面板在 T13-B 接入。
+本轮不会让现有 Agent 提前承诺尚未开放的工具，也不改变原检测/VLM/融合或增强策略。

@@ -35,6 +35,8 @@ qwen-sdk = ["openai==3.11.0", "dashscope==1.27.4"]
 open-scan-hf = ["transformers==4.57.6"]
 # Local restoration architectures; use the existing GPU torch environment.
 enhancement = ["einops==0.8.1"]
+# Prompted masks / relative depth; official local safetensors are provisioned separately.
+geometry = ["transformers==4.57.6"]
 
 [tool.setuptools.packages.find]
 where = ["backend/src"]
