@@ -896,3 +896,37 @@ T12-A 完成，保留五类/VLM/融合及开放补检退出在线的边界；T12
 ### Next Steps
 
 - T14-B待用户提供规范编号/版本及PDF或官方来源，不自行评级；随后T15整体/UI/故障验收、T16部署交付。首版未整体完成；原检测/VLM/融合/增强几何不变，开放补检停用。
+
+
+## Session 28: T15-A 核心链路与浏览器验收完成
+
+**Date**: 2026-09-13
+**Task**: T15-A 核心链路与浏览器验收完成
+
+### Summary
+
+真实Chromium上传对话、审核与报告通过；合成模型不计作准确率，下一步剩余整体验收和部署。
+
+### Main Changes
+
+- 恢复入口 .trellis/tasks/09-13-m5-core-acceptance/report.md；新增开发用Playwright和隔离测试服务，无生产业务代码或模型策略变更。图片/1.2秒视频合成夹具，真实HTTP/PG/Temporal/FFmpeg，0付费API。
+- 证据 var/evaluations/browser/run-1789248229831-265724：5张截图、3任务报告、比较JSON及持久记录。Trellis为唯一生命周期，未推送/重启共享服务；测试schema已清理，文件保留。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `jj myszupvl` | (see git log) |
+
+### Testing
+
+- [OK] 后端1023 passed/137 skipped（23.81s），前端84及build、Ruff和diff通过；真实浏览器1 passed（23.9s），既有图片/视频/人工等待真实服务恢复8 passed（17.26s）。
+- [OK] 一次独立审查发现清理时派发竞态及外层宽限不足；正常/异常退出两项失败回归后修复，夹具10项转绿，最终浏览器再跑通过。自动表单审核不代表用户对真实缺陷的审核。
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- T14-B仍待用户指定规范编号/版本及PDF或官方来源；推进T15剩余真实模型/UI、故障与资源/API成本验收及T16一体化交付。浏览器替身验收不证明准确率或长视频吞吐，首版未整体完成。

@@ -1,0 +1,109 @@
+import { expect, test, type Locator, type Page } from "@playwright/test";
+import { mkdir, writeFile } from "node:fs/promises";
+import path from "node:path";
+
+// Synthetic media + model adapters; HTTP, browser, storage and workflows are real.
+const output = process.env.SEWER_BROWSER_OUTPUT!;
+
+async function inspect(page: Page, file: string, instruction: string): Promise<string> {
+  await page.getByLabel("对话附件（可选）").setInputFiles(path.join(output, "service/fixtures", file));
+  await page.getByLabel("对话内容", { exact: true }).fill(instruction);
+  const submitted = page.waitForResponse((response) =>
+    /\/api\/sessions\/[^/]+\/turns$/.test(response.url()) && response.request().method() === "POST",
+  );
+  await page.getByRole("button", { name: "发送消息", exact: true }).click();
+  const admitted = await submitted;
+  expect(admitted.status()).toBe(202);
+  const turn = await admitted.json();
+  let taskId = "";
+  await expect.poll(async () => {
+    const response = await page.request.get(`/api/sessions/${turn.session_id}/turns/${turn.request_id}`);
+    const saved = await response.json();
+    expect(saved.status).not.toBe("failed");
+    taskId = saved.linked_task_id ?? "";
+    return saved.status;
+  }).toBe("completed");
+  expect(taskId).toMatch(/^[0-9a-f-]{36}$/);
+  return taskId;
+}
+
+function card(page: Page, taskId: string): Locator {
+  return page.locator(".task-card").filter({ has: page.locator(`[title="${taskId}"]`) });
+}
+
+async function review(page: Page, taskId: string): Promise<void> {
+  const task = card(page, taskId);
+  await expect(task.getByRole("button", { name: "开始人工复核" })).toBeVisible();
+  const stored = await (await page.request.get(`/api/tasks/${taskId}`)).json();
+  expect(stored.snapshot.runtime_status).toBe("waiting_review");
+  await task.getByRole("button", { name: "开始人工复核" }).click();
+  await expect(task.getByRole("heading", { name: "人工复核", exact: true })).toBeVisible();
+  await task.getByLabel("审核人（自报身份）").fill("browser-fixture-reviewer");
+  const findings = task.locator(".review-finding");
+  await expect(findings).toHaveCount(1);
+  await findings.getByRole("radio", { name: "确认", exact: true }).check();
+  await findings.getByLabel("处理理由").fill("受控合成夹具的软件验收，不代表真实缺陷人工判定");
+  await task.getByRole("button", { name: "提交完整复核" }).click();
+  await expect(task.getByRole("link", { name: "JSON 报告", exact: true })).toBeVisible();
+  const report = await (await page.request.get(`/api/tasks/${taskId}/report?format=json`)).json();
+  expect(report.task.snapshot.runtime_status).toBe("completed");
+  expect(report.task.snapshot.findings).toHaveLength(1);
+  expect(report.task.snapshot.findings[0]).toMatchObject({
+    canonical_label: "AJ", review_status: "confirmed", confirmed_by: "human",
+  });
+  await writeFile(path.join(output, `${taskId}-report.json`), JSON.stringify(report, null, 2));
+}
+
+test("image/video dialogue, durable review, evidence reports and saved comparison", async ({ page }) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await mkdir(path.join(output, "screenshots"), { recursive: true });
+  await page.goto("/");
+  await expect(page.getByRole("heading", { name: "管道影像检查" })).toBeVisible();
+  const first = await inspect(page, "image.png", "浏览器验收图片一：请检查并复核");
+  await expect(card(page, first).getByRole("button", { name: "开始人工复核" })).toBeVisible();
+  await page.reload();
+  await expect(card(page, first).getByRole("button", { name: "开始人工复核" })).toBeVisible();
+  await page.screenshot({ path: path.join(output, "screenshots/01-image-waiting.png"), fullPage: true });
+  await review(page, first);
+  await page.screenshot({ path: path.join(output, "screenshots/02-image-reviewed.png"), fullPage: true });
+
+  const video = await inspect(page, "video.mp4", "浏览器验收短视频：请检查并复核");
+  await review(page, video);
+  const videoCard = card(page, video);
+  await videoCard.getByRole("button", { name: "展开视频候选时间线" }).click();
+  await expect(videoCard.getByText("解码完整", { exact: true })).toBeVisible();
+  await expect(videoCard.locator(".timeline-events > li")).toHaveCount(1);
+  await expect(videoCard.getByText(/帧 0–5 · 6 次观测/)).toBeVisible();
+  await expect(videoCard.getByRole("link", { name: /证据帧/ }).first()).toBeVisible();
+  await page.screenshot({ path: path.join(output, "screenshots/03-video-evidence.png"), fullPage: true });
+
+  const second = await inspect(page, "image.png", "浏览器验收图片二：请检查并复核");
+  await review(page, second);
+  await page.getByLabel("关联已有任务（可选）").selectOption(second);
+  await page.getByLabel("对比参考任务（可选）").selectOption(first);
+  await page.getByLabel("对话内容", { exact: true }).fill("比较这两份已保存检查结果并导出报告");
+  await page.getByRole("button", { name: "发送消息", exact: true }).click();
+  const comparisonTurn = page.locator(".turn-card").filter({ hasText: "比较这两份已保存检查结果并导出报告" });
+  await comparisonTurn.getByRole("button", { name: "展开保存结果对比" }).click();
+  await expect(comparisonTurn.getByText("AJ · 支管暗接")).toBeVisible();
+  const jsonLink = comparisonTurn.getByRole("link", { name: "JSON 对比报告" });
+  const comparison = await (await page.request.get((await jsonLink.getAttribute("href"))!)).json();
+  expect(comparison.reference.snapshot.task_id).toBe(first);
+  expect(comparison.current.snapshot.task_id).toBe(second);
+  expect(comparison.rows[0]).toMatchObject({
+    label: "AJ", reference: { confirmed: 1 }, current: { confirmed: 1 }, confirmed_delta: 0,
+  });
+  await writeFile(path.join(output, "comparison.json"), JSON.stringify(comparison, null, 2));
+  await page.screenshot({ path: path.join(output, "screenshots/04-comparison.png"), fullPage: true });
+  const popupPromise = page.waitForEvent("popup");
+  await comparisonTurn.getByRole("link", { name: "HTML 对比报告" }).click();
+  const popup = await popupPromise;
+  await expect(popup.getByRole("heading", { name: "已保存检查结果对比", exact: true })).toBeVisible();
+  await popup.screenshot({ path: path.join(output, "screenshots/05-html-report.png"), fullPage: true });
+  expect(errors).toEqual([]);
+  await writeFile(path.join(output, "browser-evidence.json"), JSON.stringify({
+    image_tasks: [first, second], video_task: video, synthetic_models: true,
+    page_errors: errors, real_browser_http_postgres_temporal: true,
+  }, null, 2));
+});

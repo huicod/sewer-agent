@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 27
+- **Total Sessions**: 28
 - **Last Active**: 2026-09-13
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~898 | Active |
+| `journal-1.md` | ~932 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 28 | 2026-09-13 | T15-A 核心链路与浏览器验收完成 | jj myszupvl | `-` |
 | 27 | 2026-09-13 | T14-A 历史证据比较与报告完成 | jj prpustlr | `-` |
 | 26 | 2026-09-13 | T13-B 对话几何工具持久闭环完成 | jj qllqnxks | `-` |
 | 25 | 2026-09-13 | T13-A 分割与相对深度工具及六图实测完成 | jj kwvrmtsk | `-` |
@@ -62,7 +63,7 @@
 
 ## Notes
 
-- 恢复先读最新 Session 26 与 `.trellis/tasks/09-13-m4-geometry-online/report.md`。T13-A/B 已交付原图分割/相对深度及显式对话、持久检查点、页面报告，jj `qllqnxks`；后端967通过126跳过、前端78/build、真实PG/Temporal9通过。真实图册 var/evaluations/2026-09-13-geometry-online/live-0022-v2/index.html，两轮共3QwenAPI；worker替换后复用掩膜并完成深度，仍保留画质不足的人工等待。下一步T14历史比较/规范检索/报告；规范版本待明确，T15/T16及浏览器人工验收待续。无标定不可真实量测，短序列显存稳定不等于长期压力验收。原检测/VLM/融合/T12-C增强不变，开放补检停用；无推送。
+- 恢复先读 Session 28 与 `.trellis/tasks/09-13-m5-core-acceptance/report.md`。T15-A 核心浏览器验收已完成，jj `myszupvl`：真实HTTP/PG/Temporal上的图片/短视频对话上传、待审刷新、表单审核、报告/时间线/比较通过，模型与媒体明确为合成替身，0付费API。证据 var/evaluations/browser/run-1789248229831-265724；后端1023通过137跳过、前端84/build、浏览器1和既有真实恢复8通过。T14-A保存比较已完成；T14-B缺规范文档，T15剩余真实模型/UI、故障及成本验收和T16部署待续。首版未整体交付；原检测/VLM/融合/增强/几何不变，开放补检停用，无推送。
 
 - Sessions are appended to journal files
 - New journal file created when current exceeds 2000 lines

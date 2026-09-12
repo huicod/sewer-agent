@@ -22,6 +22,31 @@
 
 `GET /health` 仅表示 API 进程存活，不代表检测器/API 供应商/数据库已就绪。T04 的会话、上传和任务接口见下节。
 
+### 浏览器核心验收（T15-A）
+
+在本机 PostgreSQL/Temporal 已就绪、18080/18081 空闲时，从项目根目录运行：
+
+```bash
+export PATH="$PWD/.tools/node/bin:$PATH"
+npm --prefix frontend ci
+PLAYWRIGHT_BROWSERS_PATH="$PWD/.tools/playwright" frontend/node_modules/.bin/playwright install chromium --only-shell
+npm --prefix frontend run test:e2e
+```
+
+仅新增固定版本 Playwright 开发依赖；首次下载浏览器，后续直接运行最后一行即可。
+服务器无中文字体时，可将 [Noto CJK 官方字体](https://github.com/notofonts/noto-cjk/tree/Sans2.004/Sans/OTF/SimplifiedChinese)
+`NotoSansCJKsc-Regular.otf` 放入忽略入库的 `.tools/fonts/`。测试通过独立 Fontconfig/XDG 设置读取，
+不改系统字体或业务前端；本机已配置。浏览器安装说明见 [Playwright 文档](https://playwright.dev/docs/intro)。
+
+测试自动启停自己的 API、worker 与 Vite，使用真实 HTTP/PG/Temporal/FFmpeg，但图片、1.2秒视频和
+模型输出是明确标记的合成夹具，不调用真实 GPU 或付费 API。人工审核表单由浏览器自动填写，
+不是用户对真实缺陷的审核。覆盖上传对话、待审核刷新、审核完成、视频时间线及保存结果比较。
+默认证据在 `var/evaluations/browser/run-*/`：`screenshots/`、三份任务 JSON、比较 JSON、
+`browser-results.json`、`service/service-summary.json`；失败另保留 trace。
+可用 `SEWER_BROWSER_OUTPUT` 指定新的绝对目录，不复用旧运行目录。
+结束仅删除本轮 schema、终止本轮未完成 workflow，保留文件；不会重启共享持久服务。
+历史结果及未验项目见 [T15-A 记录](../.trellis/tasks/09-13-m5-core-acceptance/report.md)。
+
 ## 本机持久化服务
 
 本服务器已完成初始化；日常只需 `start` / `status`。`init` 会管理固定的项目数据库和角色，不应在已有同名业务库的其他服务器上盲目执行。

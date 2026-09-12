@@ -32,7 +32,7 @@ scp -P <端口> -r .\server root@<服务器IP>:/root/autodl-tmp/
 
 ## 3. 使用入口
 
-- 总体开发计划与阶段验收：[DEVELOPMENT_PLAN.md](project_management/DEVELOPMENT_PLAN.md)；当前开发已推进至 T12 图片增强在线闭环，操作与验证见 [后端入口](backend/README.md)。开放补检已停用，整体首版仍在开发。
+- 总体开发计划与阶段验收：[DEVELOPMENT_PLAN.md](project_management/DEVELOPMENT_PLAN.md)；已完成 T14-A 保存结果比较及 T15-A 核心浏览器验收，操作与验证见 [后端入口](backend/README.md)。T14-B 等待规范文档，整体首版仍在开发；开放补检已停用。
 - 当前视频运行与恢复证据：[T08 runtime report](.trellis/tasks/09-10-m2-video-workflow/runtime-report.md)；复检实测结果：[paired pilot](.trellis/tasks/09-10-m2-video-workflow/data-report.md)。工程闭环可用不代表准确率已提升。
 - 当前图片召回与复检结论：[召回保护及独立扫描实测](.trellis/tasks/09-11-image-recall/report.md)。默认保留候选复核并防止原检测丢失；独立扫描因误报回退仅供实验，不代表整体准确率已提高。
 - 开发规则：[AGENTS.md](AGENTS.md)
