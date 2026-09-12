@@ -59,12 +59,7 @@ def run_config(
         settings.detector_path, device=settings.detector_device
     )
     independent = settings.image_review_mode == "independent_discovery"
-    if (
-        plan
-        and (plan.open_anomaly_audit or any(s.action == ActionKind.OPEN_SCAN for s in plan.steps))
-        and not settings.open_scan_config
-    ):
-        raise InspectionStartError("tool_unavailable", "开放候选模型尚未配置", 409)
+    _reject_retired_plan(plan)
     return {
         "detector_id": detector.detector_id,
         "model_version": detector.model_version,
@@ -85,7 +80,6 @@ def run_config(
         "gpu_queue": settings.task_queue + "-gpu",
         "force_review": force_review,
         "plan": plan.model_dump(mode="json") if plan is not None else None,
-        **({"open_scan": settings.open_scan_config} if settings.open_scan_config else {}),
     }
 
 
@@ -107,12 +101,6 @@ def video_run_config(
         "video_chunk_size": 8,
         "video_review_budget": 32,
     }
-    if config.get("open_scan"):
-        total = plan.budget.max_tool_calls if plan else 32
-        reserve = min(settings.open_scan_max_frames, max(0, total - 1))
-        if plan and plan.budget.per_event_open_scan == 0:
-            reserve = 0
-        config["video_review_budget"] = min(32, max(0, total - 1 - reserve))
     return config
 
 
@@ -120,6 +108,13 @@ class InspectionStartError(Exception):
     def __init__(self, code: str, message: str, status_code: int = 503):
         self.code, self.status_code = code, status_code
         super().__init__(message)
+
+
+def _reject_retired_plan(plan: TaskPlan | None) -> None:
+    if plan and (
+        plan.open_anomaly_audit or any(s.action == ActionKind.OPEN_SCAN for s in plan.steps)
+    ):
+        raise InspectionStartError("tool_unavailable", "开放候选补检已停用，请使用 VLM 复检", 409)
 
 
 class InspectionStarter:
@@ -133,7 +128,6 @@ class InspectionStarter:
         except ValidationError:
             raise SupplementNotAllowed("source_evidence_missing") from None
         config = run_config(self.settings, detector=observation.detection, force_review=True)
-        config.pop("open_scan", None)  # Child task is a bounded VLM-only follow-up.
         config.update(
             operation="supplement_review",
             parent_task_id=str(parent_task_id),
@@ -146,6 +140,7 @@ class InspectionStarter:
     async def start(
         self, task_id: UUID, *, force_review: bool = False, plan: TaskPlan | None = None
     ):
+        _reject_retired_plan(plan)
         record = await asyncio.to_thread(self.repo.get_task, task_id)
         asset = await asyncio.to_thread(self.repo.get_asset, record.input_asset)
         if asset.kind not in {AssetKind.IMAGE, AssetKind.VIDEO}:

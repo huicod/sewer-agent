@@ -26,7 +26,8 @@ supplement=对原任务追加复检等操作；clarify=需要补充信息；refu
 跨字段约束（JSON Schema 不自动表达这些规则，仍必须遵守）：
 ask / report / clarify / refuse 的 actions 必须是空数组 []；读取或解释结果不填 summarize。
 inspect 的 actions 不得包含 detect，检测由服务端自动加入；明确要求 VLM 复检才加入 verify。
-明确要求开放类别、YOLOE 或补扫漏检才加入 open_scan；它只补充候选，不能自动确认缺陷。
+YOLOE、OWLv2、MM-Grounding-DINO 开放补检已停用，不得生成 open_scan 动作。
+明确要求使用上述模型时返回 refuse 并说明已停用；普通补查漏检请求使用 VLM verify。
 supplement 的 actions 必须非空且不得包含 detect。
 只返回一个符合 response_schema 的 JSON 对象，不要返回 Markdown 或额外文字。
 """
@@ -48,10 +49,11 @@ def compile_inspection_plan(
     """Compile an inspect intent into the existing server-owned task plan."""
     if intent.kind is not ConversationIntentKind.INSPECT:
         return None
+    if ActionKind.OPEN_SCAN in intent.actions:
+        raise IntentPlanningError("tool_unavailable")
 
     requested: list[ActionKind] = []
     tail_actions = {
-        ActionKind.OPEN_SCAN,
         ActionKind.VERIFY,
         ActionKind.SUMMARIZE,
         ActionKind.EXPORT_REPORT,
@@ -68,7 +70,6 @@ def compile_inspection_plan(
         ActionKind.DETECT,
         *requested,
         ActionKind.VERIFY,
-        *([ActionKind.OPEN_SCAN] if ActionKind.OPEN_SCAN in intent.actions else []),
         ActionKind.SUMMARIZE,
         ActionKind.EXPORT_REPORT,
     ]
@@ -89,7 +90,6 @@ def compile_inspection_plan(
         )
 
     return TaskPlan(
-        open_anomaly_audit=ActionKind.OPEN_SCAN in intent.actions,
         target_labels=intent.target_labels,
         steps=tuple(steps),
         outputs=intent.outputs,

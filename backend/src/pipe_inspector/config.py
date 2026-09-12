@@ -55,6 +55,7 @@ class Settings(BaseSettings):
 
     @property
     def open_scan_config(self) -> dict | None:
+        """Legacy experiment pins only; never enable supplementation in new online runs."""
         if self.open_detector_path is None:
             return None
         from pipe_inspector.contracts.open_scan import OPEN_SCAN_VERSION, OPEN_VOCABULARY_VERSION

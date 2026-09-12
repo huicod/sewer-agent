@@ -51,15 +51,11 @@ class ConversationDispatcher:
             return await self._supplement(turn, intent, task)
         if intent.kind == "inspect":
             try:
-                settings = getattr(self.starter, "settings", None)
-                available = AVAILABLE_ACTIONS
-                if settings is not None and settings.open_scan_config:
-                    available = available | {ActionKind.OPEN_SCAN}
-                plan = compile_inspection_plan(intent, available_actions=available)
+                plan = compile_inspection_plan(intent, available_actions=AVAILABLE_ACTIONS)
             except IntentPlanningError:
                 return self._reply(
-                    "所请求的工具当前未部署，本次未启动检查。"
-                    "当前可用：图片五类检测、条件 VLM 复检、证据报告。"
+                    "所请求的工具当前未部署或已停用，本次未启动检查。"
+                    "当前可用：图片/视频五类检测、条件 VLM 复检、证据报告。"
                 )
             asset_ref = turn.input_asset or (task.input_asset if task else None)
             if asset_ref is None:

@@ -231,7 +231,10 @@ async def test_image_open_candidate_checkpoint_survives_lost_ack_and_waits_for_h
         open_detector=open_detector,
     )
     reviews = HumanReviewActivities(case.repo)
-    run = case.repo.ensure_run(task_id, run_config(case.settings, primary))
+    # Exercise the archived implementation with explicit pre-retirement pins.
+    run = case.repo.ensure_run(
+        task_id, run_config(case.settings, primary) | {"open_scan": case.settings.open_scan_config}
+    )
     attempts = []
 
     @activity.defn(name="scan_open_candidate")
@@ -327,7 +330,11 @@ async def _prepare_video(case, *, plan=None):
     activities = VideoActivities(
         case.settings, case.repo, case.media, detector=primary, reviewer=reviewer
     )
-    config = video_run_config(case.settings, primary, plan=plan)
+    config = video_run_config(case.settings, primary) | {
+        "open_scan": case.settings.open_scan_config,
+        "plan": plan.model_dump(mode="json") if plan else None,
+        "video_review_budget": 2 if plan else 23,
+    }
     config["video_chunk_size"] = 2
     run = case.repo.ensure_run(task.snapshot.task_id, config)
     env = ActivityEnvironment()

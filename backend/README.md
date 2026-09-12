@@ -1,6 +1,6 @@
 # 后端开发入口
 
-当前已接通对话＋附件、图片/视频检测与复检、报告、关联复检、人工审核等待/恢复和视频证据时间轴，并新增 T10 条件式开放候选扫描（默认关闭）。用户接受的图片实验融合未切为 worker 默认。总范围见 [总体开发计划](../project_management/DEVELOPMENT_PLAN.md)，当前交接见 [T10 记录](../.trellis/tasks/09-11-m3-open-candidates/report.md)。
+当前已接通对话＋附件、图片/视频检测与复检、报告、关联复检、人工审核等待/恢复和视频证据时间轴。2026-09-12 起开放补检退出在线调用，保留五类主检测＋VLM 主链路；用户接受的图片实验融合未切为 worker 默认，本次也不改动。总范围见 [总体开发计划](../project_management/DEVELOPMENT_PLAN.md)，当前交接见 [停用记录](../.trellis/tasks/09-12-retire-open-detectors/report.md)。
 
 ## 本服务器环境
 
@@ -67,9 +67,9 @@ SEWER_RUN_LIVE_API=1 SEWER_LIVE_IMAGE=var/fixtures/sewer2403-sample.jpg \
 
 用户已知情确认加载现有可信 `best.pt`；单图检出 AJ，score=0.93179，记录在忽略入库的 `var/fixtures/detector-smoke.json`。这只证明兼容，不代表精度验收。使用 `scripts/detector_smoke.py --help` 查看显式入口，不自动下载替代权重。
 
-## 条件式开放候选（T10）
+## 开放候选历史实现（T10，已退出在线）
 
-YOLOE 只作为 `OpenDetectorAdapter` 的首个实现，不替换五类检测器。运行顺序是检测 → VLM → 条件选择 → 开放候选 → 融合/人工审核。图片仅在显式 `open_scan`、画质足够的无框结果或 VLM 疑似漏报时补扫；视频复用保存的证据帧，每事件最多一次，默认最多 8 帧。配置缺省时不新增调用，显式请求会被拒绝，不假装已执行。
+YOLOE / OWLv2 / MM-Grounding-DINO 在本次管网对照中未表现出足够的有效补检收益，用户决定弃用额外补检分支。当前在线顺序为主检测 → 条件 VLM → 规则融合/人工审核 → 报告。VLM 的复检、全图审计与其他异常待审能力保留；不改主模型、VLM 或融合策略。
 
 本服务器已准备以下官方资产（均不入 Git）：
 
@@ -77,18 +77,18 @@ YOLOE 只作为 `OpenDetectorAdapter` 的首个实现，不替换五类检测器
 - `var/models/yoloe/mobileclip2_b.ts`：[官方文本编码器](https://github.com/ultralytics/assets/releases/download/v8.4.0/mobileclip2_b.ts)。
 - `.venv` 已安装固定 revision 的 Ultralytics CLIP、ftfy 6.3.1、regex 2026.9.3；可选依赖组为 `.[gpu,open-scan]`，现有 torch/torchvision/Ultralytics 未升级。
 
-要启用，在现有 `.env` 中同时配置 `.env.example` 的 `SEWER_OPEN_DETECTOR_PATH`、`SEWER_OPEN_TEXT_ENCODER_PATH`，然后重启 API/CPU/GPU worker；本次未替你修改 `.env` 或启动产品进程。推理只用本地文件，缺失包/模型会明确失败，不在请求期间自动安装下载。模型文件替换应使用新文件名/版本，不能原位覆盖同名资产伪装成同一版本。
+新任务不携带 `open_scan` 配置，对话与直接启动均拒绝显式开放补检。遗留 `SEWER_OPEN_*` 配置不能启用在线调用；这些字段仅保留给历史实现/实验兼容。部署本次变更需重启 API、CPU/GPU worker，不能混用旧执行器。本次不改真实 `.env`，不自动启动产品服务。
 
-所有新增候选均为待审核，`OTHER` 必须人工确认；同源同帧同类重叠去重，原 finding 不被覆盖。视频与 VLM 共享总工具预算：缺省 32 次中预留主扫描 1 次、开放扫描最多 8 次，VLM 最多 23 帧；达到预算或缺少所需证据会报告审计不完整，不能输出正常。视频处理仍是稀疏证据补扫，不保证发现所有瞬时缺陷。
+旧结果、`open_detector` 来源和报告仍可读。正式 worker 注册的是只读兼容 activities：已有检查点直接返回，未完成补检以非重试 `tool_retired` 失败，并保留不完整结果，不能伪装正常。保留旧 workflow 命令顺序用于历史重放；不改写旧 run pins。新视频不再为开放扫描预留预算，恢复原 VLM 选帧上限 32。
 
-选择、跳过理由、调用版本和结果存入现有检查点/工具记录；Activity 响应丢失时复用成功检查点。实际计算崩溃窗口仍为 at-least-once，不宣称 exactly-once。GPU worker 仍串行，主模型卸载后才加载开放模型，开放扫描后释放模型。关联复检子任务保持 VLM-only；要显式使用 `open_scan`，应发起新检查。
+模型权重、适配器与实验脚本均保留，不再是正式系统可选工具。以下仅为显式运行的历史实现回归和离线冒烟，不代表生产调用：
 
 ```bash
 SEWER_RUN_OPEN_SCAN_TEST=1 .venv/bin/pytest backend/tests/integration/test_open_scan_workflow.py -q --tb=short
 .venv/bin/python .trellis/tasks/09-11-m3-open-candidates/smoke.py
 ```
 
-第二条只在本服务器运行两张固定原图的 GPU 冒烟，生成原图坐标框和原始 JSON，不调用 API。零样本 YOLOE 的管网准确率未通过验收，默认仍关闭；T11 固定集增量对比见下文，不用候选数量替代准确率。
+第二条只在本服务器运行两张固定原图的 GPU 冒烟，生成原图坐标框和原始 JSON，不调用 API。T11 固定集增量对比见下文；保留证据，不以候选数量替代准确率，也不继续自动寻找替代补检模型。
 
 ## 固定集增量评估（T11）
 

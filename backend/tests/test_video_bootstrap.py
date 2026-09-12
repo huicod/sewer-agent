@@ -89,7 +89,7 @@ async def test_workers_share_one_detector_and_register_video_runtime(monkeypatch
         return video
 
     monkeypatch.setattr(module, "VideoActivities", make_video)
-    monkeypatch.setattr(module, "OpenScanActivities", lambda *args, **kwargs: open_scans)
+    monkeypatch.setattr(module, "RetiredOpenScanActivities", lambda *args, **kwargs: open_scans)
     monkeypatch.setattr(
         module,
         "SupplementActivities",

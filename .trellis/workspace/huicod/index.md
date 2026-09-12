@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 19
-- **Last Active**: 2026-09-11
+- **Total Sessions**: 20
+- **Last Active**: 2026-09-12
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~639 | Active |
+| `journal-1.md` | ~673 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 20 | 2026-09-12 | 开放补检退出在线，保留VLM主链路及历史证据 | jj oprqxzlv | `-` |
 | 19 | 2026-09-11 | 开放补检替代模型实测完成，VLM保持不变 | jj nzqxsnsw | `-` |
 | 18 | 2026-09-11 | T11 固定集增量评测与实图交付 | jj yvnxyszk | `-` |
 | 17 | 2026-09-11 | T10 条件式开放候选与真实 GPU 验证 | jj prnozqso | `-` |
@@ -54,7 +55,7 @@
 
 ## Notes
 
-- 恢复先读 journal-1.md 的 Session 18 与 `.trellis/tasks/09-11-m3-incremental-evaluation/report.md`、`review-resolution.md`。T01–T11 工程交付完成；下一任务 T12 图像增强/质量门控。T11 固定 48 图 + 8 实帧，开放模型 32 成功/24 跳过/13 待审，未增加原标注召回；YOLOE 仍关闭，原实验融合未切生产默认。T11 本地 jj change `yvnxyszk`；结果在 var/evaluations/2026-09-11-incremental/verified，667 后端与 3 真实集成测试通过；未改 .env、新增 API 调用、依赖、产品进程或推送。效果验收仍待人工真值。
+- 恢复先读 Session 20 与 `.trellis/tasks/09-12-retire-open-detectors/report.md`。按用户决定，三个开放补检模型退出在线，保留离线代码、权重和实验；不整仓回退，主检测/VLM/融合未改。本地 jj `oprqxzlv`，711 后端测试通过、84 跳过，Ruff 通过；一次独立审查 P2 已修复。持久服务及产品进程当前未启动，未重跑真实恢复测试。T12 尚未开发，后续不重新启用开放补检；原实验融合也未切生产默认。
 
 - Sessions are appended to journal files
 - New journal file created when current exceeds 2000 lines

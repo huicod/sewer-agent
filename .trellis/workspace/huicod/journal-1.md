@@ -637,3 +637,37 @@ MM-GDINO Base与OWLv2 Large完成固定48图本地对比；模型效果未获替
 ### Next Steps
 
 - 先读09-11-open-detector-alternatives/report.md并人工查看sample-0042、0004、0022；不自动启用补检或恢复T12。
+
+
+## Session 20: 开放补检退出在线，保留VLM主链路及历史证据
+
+**Date**: 2026-09-12
+**Task**: 开放补检退出在线，保留VLM主链路及历史证据
+
+### Summary
+
+用户决定弃用YOLOE/OWLv2/MM-GDINO额外补检；保留代码及实验，不整仓回退。
+
+### Main Changes
+
+- 新任务/对话拒绝开放补检，正式worker仅保留旧检查点读取；主检测器、VLM和融合未改。
+- 主方案及唯一总体计划同步收敛，详情见09-12-retire-open-detectors/report.md。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `jj oprqxzlv` | (see git log) |
+
+### Testing
+
+- [OK] 后端711 passed/84 skipped；Ruff通过；一次独立审查发现的旧计划入口P2已用四例红绿测试修复。
+- [OK] 真实PG/Temporal恢复测试未重跑，服务当前停止；没有新GPU推理、API请求、删除或推送。
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- T12尚未开发；继续原计划时不要重新启用开放补检。部署需统一新版API/CPU/GPU worker。

@@ -15,7 +15,7 @@ from pipe_inspector.workflow.conversation import ConversationWorkflow
 from pipe_inspector.workflow.conversation_activities import TurnActivities
 from pipe_inspector.workflow.human_review_activities import HumanReviewActivities
 from pipe_inspector.workflow.image import ImageInspectionWorkflow
-from pipe_inspector.workflow.open_scan_activities import OpenScanActivities
+from pipe_inspector.workflow.retired_open_scan import RetiredOpenScanActivities
 from pipe_inspector.workflow.supplement import ImageSupplementWorkflow
 from pipe_inspector.workflow.supplement_activities import SupplementActivities
 from pipe_inspector.workflow.video import VideoInspectionWorkflow
@@ -35,7 +35,8 @@ async def serve(kind: str) -> None:
     )
     activities = ImageActivities(settings, repo, media)
     videos = VideoActivities(settings, repo, media, detector=activities.detector)
-    open_scans = OpenScanActivities(settings, repo, media, detector=activities.detector)
+    # Same activity names only drain old histories; no open model is loaded or run.
+    open_scans = RetiredOpenScanActivities(repo)
     supplements = SupplementActivities(settings, repo, media)
     turns = TurnActivities(settings, repo)
     human_reviews = HumanReviewActivities(repo)

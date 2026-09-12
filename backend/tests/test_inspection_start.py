@@ -86,6 +86,50 @@ async def test_video_pins_video_policy_and_starts_video_workflow():
     assert client.start_workflow.call_args.args == ("VideoInspectionWorkflow", store.run)
 
 
+@pytest.mark.parametrize("kind", ["image", "video"])
+@pytest.mark.parametrize("terminal", [False, True])
+async def test_explicit_retired_plan_is_rejected_even_when_persisted_but_resume_remains(
+    kind, terminal
+):
+    from pipe_inspector.contracts.planning import PlanStep, TaskPlan
+
+    settings = Settings(_env_file=None)
+    store = MemoryStore(kind)
+    task_id = store.task.snapshot.task_id
+    plan = TaskPlan(
+        open_anomaly_audit=True,
+        steps=(
+            PlanStep(step_id="detect", action="detect"),
+            PlanStep(step_id="verify", action="verify", depends_on=("detect",)),
+            PlanStep(step_id="open", action="open_scan", depends_on=("verify",)),
+        ),
+    )
+    config = (video_run_config if kind == "video" else run_config)(settings) | {
+        "plan": plan.model_dump(mode="json"),
+        "open_scan": {"version": "open-scan-v1"},
+    }
+    saved_run = store.ensure_run(task_id, config)
+    if terminal:
+        store.task.snapshot = TaskSnapshot.model_validate(
+            store.task.snapshot.model_dump() | {"runtime_status": "cancelled"}
+        )
+    client = SimpleNamespace(start_workflow=AsyncMock())
+    connect = AsyncMock(return_value=client)
+    starter = InspectionStarter(settings, store, connect=connect)
+    with pytest.raises(InspectionStartError) as error:
+        await starter.start(task_id, plan=plan)
+    assert error.value.code == "tool_unavailable"
+    assert error.value.status_code == 409
+    connect.assert_not_awaited()
+    assert store.run == saved_run
+    assert await starter.start(task_id) == store.task
+    assert store.run == saved_run
+    if terminal:
+        connect.assert_not_awaited()
+    else:
+        assert client.start_workflow.call_args.args[1] == saved_run
+
+
 def test_video_configuration_extends_existing_safe_run_pins():
     detector = SimpleNamespace(
         detector_id="fixture-detector",

@@ -105,7 +105,8 @@ def case():
     run = {
         "task_id": str(repo.task_id),
         "run_id": str(uuid4()),
-        "config": run_config(settings, detector),
+        # Archived activities are exercised with historical pins, not new admission.
+        "config": run_config(settings, detector) | {"open_scan": settings.open_scan_config},
     }
     activities = OpenScanActivities(
         settings,
@@ -117,7 +118,7 @@ def case():
     return activities, repo, run, adapter, detector, observation
 
 
-def test_new_config_opt_in_and_legacy_no_pins():
+def test_new_config_has_no_open_pins_and_legacy_paths_remain_paired():
     assert "open_scan" not in run_config(Settings(_env_file=None))
     with pytest.raises(ValueError):
         Settings(_env_file=None, open_detector_path="open.pt")
@@ -160,6 +161,34 @@ def test_confident_primary_no_suspicion_skips(case):
     adapter.predict_image.assert_not_called()
     assert repo.calls[-1].status == "skipped"
     assert repo.calls[-1].skip_reason == "not_triggered"
+
+
+@pytest.mark.parametrize("selection_saved", [False, True])
+def test_retired_unfinished_scan_cannot_turn_a_clear_vlm_result_into_normal(case, selection_saved):
+    from pipe_inspector.agent.recall_policy import decide_image_recall
+    from pipe_inspector.workflow.retired_open_scan import RetiredOpenScanActivities
+
+    _, repo, run, adapter, _, observation = case
+    retired = RetiredOpenScanActivities(repo)
+    if selection_saved:
+        repo.steps["open_plan"] = {"selected": [{}], "incomplete": False}
+    with pytest.raises(ApplicationError) as error:
+        if selection_saved:
+            ActivityEnvironment().run(retired.scan_open_candidate, {"run": run, "index": 0})
+        else:
+            ActivityEnvironment().run(retired.select_open_scan, run)
+    assert error.value.type == "tool_retired" and error.value.non_retryable
+    base = decide_image_recall(
+        repo.task_id,
+        repo.task.input_asset,
+        observation,
+        ImageReview.model_validate(repo.steps["verify"]["review"]),
+    )
+    assert base.inspection_result == "normal"
+    result = apply_open_results(repo, run, base)
+    assert result.inspection_result == "inconclusive"
+    assert not result.coverage.negative_audit_complete
+    adapter.predict_image.assert_not_called()
 
 
 def test_selection_is_immutable_and_budget_gap_blocks_normal(case):
