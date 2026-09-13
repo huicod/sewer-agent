@@ -5,6 +5,7 @@ import asyncio
 import contextlib
 import json
 import logging
+import os
 import signal
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
@@ -52,13 +53,22 @@ class _ManagedServer(uvicorn.Server):
         yield
 
 
-def _settings(output: Path, token: str) -> Settings:
+def _settings(output: Path, token: str, *, live: bool = False) -> Settings:
     base = Settings()
     temporal_host = base.temporal_address.rsplit(":", 1)[0].strip("[]")
     database_host = conninfo_to_dict(base.database_dsn.get_secret_value()).get("host", "")
     local_hosts = {"", "127.0.0.1", "localhost", "::1"}
     if temporal_host not in local_hosts or database_host not in local_hosts:
         raise RuntimeError("browser acceptance requires local PostgreSQL and Temporal")
+    if live:
+        values = base.model_dump()
+        values.update(
+            asset_root=output / "assets",
+            task_queue=f"browser-acceptance-{token}",
+            open_detector_path=None,
+            open_text_encoder_path=None,
+        )
+        return Settings(_env_file=None, **values)
     return Settings(
         _env_file=None,
         database_dsn=base.database_dsn,
@@ -133,6 +143,7 @@ def _write_snapshot(
     *,
     started_at: datetime,
     terminated_workflows: int,
+    kind: str = "synthetic_browser_acceptance",
 ) -> None:
     with repository._connect() as connection:
         tasks = [
@@ -161,13 +172,13 @@ def _write_snapshot(
         ]
     ended_at = datetime.now(timezone.utc)
     payload = {
-        "kind": "synthetic_browser_acceptance",
+        "kind": kind,
         "started_at": started_at.isoformat(),
         "ended_at": ended_at.isoformat(),
         "elapsed_seconds": (ended_at - started_at).total_seconds(),
-        "detector_calls": detector.calls,
-        "reviewer_calls": reviewer.calls,
-        "intent_calls": parser.calls,
+        "detector_calls": getattr(detector, "calls", None),
+        "reviewer_calls": getattr(reviewer, "calls", None),
+        "intent_calls": getattr(parser, "calls", None),
         "terminated_workflows": terminated_workflows,
         "tasks": tasks,
         "turns": turns,
@@ -183,6 +194,9 @@ async def _serve(
     repository: HumanReviewRepository,
     output: Path,
     started_at: datetime,
+    *,
+    live_components=None,
+    source_metadata=None,
 ) -> None:
     client = await Client.connect(
         settings.temporal_address, namespace=settings.temporal_namespace
@@ -193,22 +207,31 @@ async def _serve(
         max_pixels=settings.max_media_pixels,
         probe_timeout_seconds=settings.media_probe_timeout_seconds,
     )
-    detector = BrowserDetector()
-    reviewer = BrowserReviewer()
-    parser = BrowserIntentParser()
-    starter = BrowserInspectionStarter(settings, repository, detector)
-    turns = TurnActivities(
-        settings,
-        repository,
-        parser=parser,
-        dispatcher=ConversationDispatcher(repository, starter),
-    )
-    images = ImageActivities(
-        settings, repository, media, detector=detector, reviewer=reviewer
-    )
-    videos = VideoActivities(
-        settings, repository, media, detector=detector, reviewer=reviewer
-    )
+    if live_components is None:
+        detector = BrowserDetector()
+        reviewer = BrowserReviewer()
+        parser = BrowserIntentParser()
+        starter = BrowserInspectionStarter(settings, repository, detector)
+        turns = TurnActivities(
+            settings,
+            repository,
+            parser=parser,
+            dispatcher=ConversationDispatcher(repository, starter),
+        )
+        images = ImageActivities(
+            settings, repository, media, detector=detector, reviewer=reviewer
+        )
+        videos = VideoActivities(
+            settings, repository, media, detector=detector, reviewer=reviewer
+        )
+    else:
+        detector = live_components.detector
+        reviewer = live_components.reviewer
+        parser = live_components.parser
+        starter = live_components.starter
+        turns = live_components.turns
+        images = live_components.images
+        videos = live_components.videos
     reviews = HumanReviewActivities(repository)
     app = create_app(settings, repository=repository, starter=starter)
     server = _ManagedServer(
@@ -228,35 +251,58 @@ async def _serve(
             ThreadPoolExecutor(max_workers=4) as cpu_executor,
             ThreadPoolExecutor(max_workers=1) as gpu_executor,
         ):
+            workflows = [
+                ConversationWorkflow,
+                ImageInspectionWorkflow,
+                VideoInspectionWorkflow,
+            ]
+            cpu_activities = [
+                turns.parse_turn,
+                turns.dispatch_turn,
+                turns.finish_turn,
+                images.publish_stage,
+                images.verify_image,
+                images.finish_image,
+                videos.prepare_video,
+                videos.verify_video_frame,
+                videos.finish_video,
+                reviews.apply_human_review,
+                reviews.cancel_human_review,
+            ]
+            gpu_activities = [images.detect_image, videos.scan_video]
+            if live_components is not None:
+                from pipe_inspector.workflow.supplement import ImageSupplementWorkflow
+
+                workflows.append(ImageSupplementWorkflow)
+                cpu_activities.extend(
+                    [
+                        live_components.enhancements.prepare_image_enhancement,
+                        live_components.enhancements.review_image_enhancement,
+                        live_components.geometry.prepare_image_geometry,
+                        live_components.enhancement_selection.select_image_enhancement,
+                        live_components.supplements.finish_supplement,
+                    ]
+                )
+                gpu_activities.extend(
+                    [
+                        live_components.enhancements.enhance_image,
+                        live_components.geometry.segment_image,
+                        live_components.geometry.estimate_relative_depth,
+                    ]
+                )
             async with (
                 Worker(
                     client,
                     task_queue=settings.task_queue,
-                    workflows=[
-                        ConversationWorkflow,
-                        ImageInspectionWorkflow,
-                        VideoInspectionWorkflow,
-                    ],
-                    activities=[
-                        turns.parse_turn,
-                        turns.dispatch_turn,
-                        turns.finish_turn,
-                        images.publish_stage,
-                        images.verify_image,
-                        images.finish_image,
-                        videos.prepare_video,
-                        videos.verify_video_frame,
-                        videos.finish_video,
-                        reviews.apply_human_review,
-                        reviews.cancel_human_review,
-                    ],
+                    workflows=workflows,
+                    activities=cpu_activities,
                     activity_executor=cpu_executor,
                     max_concurrent_activities=4,
                 ),
                 Worker(
                     client,
                     task_queue=settings.task_queue + "-gpu",
-                    activities=[images.detect_image, videos.scan_video],
+                    activities=gpu_activities,
                     activity_executor=gpu_executor,
                     max_concurrent_activities=1,
                 ),
@@ -277,23 +323,48 @@ async def _serve(
         finally:
             for handled_signal in (signal.SIGINT, signal.SIGTERM):
                 loop.remove_signal_handler(handled_signal)
-            _write_snapshot(
-                output,
-                repository,
-                detector,
-                reviewer,
-                parser,
-                started_at=started_at,
-                terminated_workflows=terminated,
-            )
+            try:
+                _write_snapshot(
+                    output,
+                    repository,
+                    detector,
+                    reviewer,
+                    parser,
+                    started_at=started_at,
+                    terminated_workflows=terminated,
+                    kind=(
+                        "live_browser_acceptance"
+                        if live_components is not None
+                        else "synthetic_browser_acceptance"
+                    ),
+                )
+            finally:
+                if live_components is not None:
+                    from browser_live import write_live_execution
+
+                    write_live_execution(
+                        output,
+                        repository,
+                        live_components,
+                        source=source_metadata or {},
+                    )
 
 
 async def main() -> None:
     started_at = datetime.now(timezone.utc)
+    from browser_live import (
+        build_live_components,
+        copy_live_fixture,
+        load_live_admission,
+    )
+
+    live = load_live_admission(os.environ)
     output = prepare_output()
-    create_media_fixtures(output)
+    source_metadata = (
+        create_media_fixtures(output) if live is None else copy_live_fixture(live.source, output)
+    )
     token = uuid4().hex
-    settings = _settings(output, token)
+    settings = _settings(output, token, live=live is not None)
     schema = "browser_acceptance_" + token
     created = False
     try:
@@ -301,7 +372,28 @@ async def main() -> None:
         created = True
         repository = HumanReviewRepository(settings.database_dsn, schema=schema)
         repository.initialize()
-        await _serve(settings, repository, output, started_at)
+        live_components = (
+            None
+            if live is None
+            else build_live_components(
+                settings,
+                repository,
+                MediaStore(
+                    settings.asset_root,
+                    max_upload_bytes=settings.max_upload_bytes,
+                    max_pixels=settings.max_media_pixels,
+                    probe_timeout_seconds=settings.media_probe_timeout_seconds,
+                ),
+            )
+        )
+        await _serve(
+            settings,
+            repository,
+            output,
+            started_at,
+            live_components=live_components,
+            source_metadata=source_metadata if isinstance(source_metadata, dict) else None,
+        )
     finally:
         if created:
             with psycopg.connect(

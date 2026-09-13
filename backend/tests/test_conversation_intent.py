@@ -222,6 +222,8 @@ async def test_parser_sends_validated_history_schema_and_requests_json_once() ->
     assert "ask / report / clarify / refuse 的 actions 必须是空数组 []" in system_prompt
     assert "inspect 的 actions 不得包含 detect" in system_prompt
     assert "supplement 的 actions 必须非空且不得包含 detect" in system_prompt
+    assert "新上传检查允许 inspect 的 actions 同时包含 verify 和 enhance" in system_prompt
+    assert "仅当请求 geometry 时" in system_prompt
     assert json.dumps(
         ConversationIntent.model_json_schema(), ensure_ascii=False, separators=(",", ":")
     ) in system_prompt

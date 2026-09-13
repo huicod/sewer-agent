@@ -930,3 +930,38 @@ T12-A 完成，保留五类/VLM/融合及开放补检退出在线的边界；T12
 ### Next Steps
 
 - T14-B仍待用户指定规范编号/版本及PDF或官方来源；推进T15剩余真实模型/UI、故障与资源/API成本验收及T16一体化交付。浏览器替身验收不证明准确率或长视频吞吐，首版未整体完成。
+
+
+## Session 29: T15-B 真实图片浏览器联调与资源记录完成
+
+**Date**: 2026-09-13
+**Task**: T15-B 真实图片浏览器联调与资源记录完成
+**Branch**: `-`
+
+### Summary
+
+真实YOLO/Qwen/分割深度/ROI超分经浏览器运行，保存失败与补跑；下一步T16。
+
+### Main Changes
+
+- 恢复先读 .trellis/tasks/09-13-m5-live-browser/report.md 与 var/evaluations/2026-09-13-live-browser/index.html。同一Sewer2403 sample-0022两真实任务；几何首跑成功，增强意图误澄清后仅补跑通过，未整组重跑。
+- 仅修复IntentParser几何限制作用域，inspect允许verify+enhance；图像复检Prompt/融合/权重不改，candidate_review默认不变，开放补检停用。测试新增双开关、8请求预算、脱敏usage/显存记录与E2E类型检查；两个真实任务均待审，无人工提交。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `jj ztuwslnm` | (see git log) |
+
+### Testing
+
+- [OK] 最终后端1031 passed/137 skipped，前端84及build、Ruff通过；默认浏览器1 passed，真实首跑失败保留trace，增强筛选补跑1 passed。独立审查无剩余must-fix；未重复长视频或故障全矩阵。
+- [OK] 6次实际Qwen请求，usage总15957tokens，标价估计约0.18元而非实际扣费；GPU分配峰值1.324GiB。两个任务工具前冻结发现与最终完全一致。测试schema已清理、GPU空闲，PG/Temporal保留运行；无远端推送。
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- T16一体化运行入口/交付说明，并核对T15剩余全项/故障/视频成本验收；T14-B等待用户规范编号、版本和来源。视频增强/几何、自动关联增强和用户最终界面验收限制仍在，首版未整体交付。

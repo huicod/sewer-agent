@@ -3,6 +3,10 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
+const live = process.env.SEWER_RUN_BROWSER_LIVE === "1";
+if (live && (process.env.SEWER_RUN_LIVE_API !== "1" || !path.isAbsolute(process.env.SEWER_LIVE_IMAGE ?? ""))) {
+  throw new Error("Live browser acceptance requires SEWER_RUN_LIVE_API=1 and an absolute SEWER_LIVE_IMAGE");
+}
 const output = process.env.SEWER_BROWSER_OUTPUT ?? path.join(
   root, "var/evaluations/browser", `run-${Date.now()}-${process.pid}`,
 );
@@ -14,9 +18,10 @@ process.env.XDG_CACHE_HOME = path.join(root, ".tools/cache");
 
 export default defineConfig({
   testDir: "./e2e",
+  testMatch: live ? "**/live.spec.ts" : "**/core.spec.ts",
   workers: 1,
   retries: 0,
-  timeout: 120_000,
+  timeout: live ? 600_000 : 120_000,
   expect: { timeout: 20_000 },
   outputDir: path.join(output, "test-results"),
   reporter: [["list"], ["json", { outputFile: path.join(output, "browser-results.json") }]],
@@ -27,7 +32,12 @@ export default defineConfig({
       command: ".venv/bin/python backend/tests/browser_server.py",
       cwd: root,
       url: "http://127.0.0.1:18080/health",
-      env: { SEWER_RUN_BROWSER_TEST: "1", SEWER_BROWSER_OUTPUT: path.join(output, "service") },
+      env: {
+        SEWER_RUN_BROWSER_TEST: "1", SEWER_BROWSER_OUTPUT: path.join(output, "service"),
+        SEWER_RUN_BROWSER_LIVE: live ? "1" : "0",
+        SEWER_RUN_LIVE_API: process.env.SEWER_RUN_LIVE_API ?? "0",
+        SEWER_LIVE_IMAGE: process.env.SEWER_LIVE_IMAGE ?? "",
+      },
       reuseExistingServer: false,
       gracefulShutdown: { signal: "SIGTERM", timeout: 30_000 },
       timeout: 30_000,

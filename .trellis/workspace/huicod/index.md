@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 28
+- **Total Sessions**: 29
 - **Last Active**: 2026-09-13
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~932 | Active |
+| `journal-1.md` | ~967 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 29 | 2026-09-13 | T15-B 真实图片浏览器联调与资源记录完成 | jj ztuwslnm | `-` |
 | 28 | 2026-09-13 | T15-A 核心链路与浏览器验收完成 | jj myszupvl | `-` |
 | 27 | 2026-09-13 | T14-A 历史证据比较与报告完成 | jj prpustlr | `-` |
 | 26 | 2026-09-13 | T13-B 对话几何工具持久闭环完成 | jj qllqnxks | `-` |
@@ -63,7 +64,7 @@
 
 ## Notes
 
-- 恢复先读 Session 28 与 `.trellis/tasks/09-13-m5-core-acceptance/report.md`。T15-A 核心浏览器验收已完成，jj `myszupvl`：真实HTTP/PG/Temporal上的图片/短视频对话上传、待审刷新、表单审核、报告/时间线/比较通过，模型与媒体明确为合成替身，0付费API。证据 var/evaluations/browser/run-1789248229831-265724；后端1023通过137跳过、前端84/build、浏览器1和既有真实恢复8通过。T14-A保存比较已完成；T14-B缺规范文档，T15剩余真实模型/UI、故障及成本验收和T16部署待续。首版未整体交付；原检测/VLM/融合/增强/几何不变，开放补检停用，无推送。
+- 恢复先读 Session 29 与 `.trellis/tasks/09-13-m5-live-browser/report.md`。T15-B完成，jj `ztuwslnm`；实图汇总 var/evaluations/2026-09-13-live-browser/index.html。Sewer2403同图两真实任务，首跑几何成功/增强意图误澄清，修正意图说明后仅增强补跑通过，不能写成整组重跑。6次Qwen约0.18元标价估计、GPU分配峰值1.324GiB；两任务保留待审，无人工提交。最终后端1031/137跳过、前端84/build、默认浏览器1及增强筛选1通过。检测/VLM复检/融合及模型不改，开放补检停用，无推送。下一步T16运行交付与T15剩余全项验收，T14-B仍等规范输入；首版未整体交付。
 
 - Sessions are appended to journal files
 - New journal file created when current exceeds 2000 lines

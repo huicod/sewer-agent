@@ -47,6 +47,28 @@ npm --prefix frontend run test:e2e
 结束仅删除本轮 schema、终止本轮未完成 workflow，保留文件；不会重启共享持久服务。
 历史结果及未验项目见 [T15-A 记录](../.trellis/tasks/09-13-m5-core-acceptance/report.md)。
 
+### 真实模型浏览器联调（T15-B，显式付费）
+
+沿用上面的浏览器环境，使用已有 `.env` 中的 Qwen 配置和本地 YOLO、SAM、深度、超分权重。
+下面的固定场景使用已授权的 Sewer2403 sample-0022，同一张720×576图片创建两项检查：
+分割/相对量化与局部超分，ROI已固定，不是任意新图片的自动验收脚本。
+
+```bash
+SEWER_RUN_BROWSER_LIVE=1 SEWER_RUN_LIVE_API=1 \
+SEWER_LIVE_IMAGE="$PWD/var/evaluations/2026-09-11-guided/paired/gallery/sample-0022/original.jpg" \
+npm --prefix frontend run test:e2e
+```
+
+默认 `test:e2e` 仍只运行无付费的 core 场景；执行前会类型检查浏览器脚本。
+真实模式预计5次API请求，单服务运行最多8次（失败也消耗额度）；重新运行命令会产生新的预算与费用。
+两个场景可用 `-- --grep 'geometry'` 或 `-- --grep 'ROI enhancement'` 单独选择，
+失败后先检查保存结果，不自动重复整组付费测试。
+输出目录另保存 `service/live-execution.json` 的安全请求/结果、usage、耗时与GPU记录，
+以及原图、掩膜、深度、增强图、页面截图和持久检查证据。usage或价格缺失时不按零费用计算。
+浏览器不会替你提交真实缺陷的人工审核，需要审核的任务仍等待，不强行生成完成报告。
+测试结束保留文件、终止自有待审工作流并删除测试schema；截图不是常驻可继续审核的业务会话。
+实测结果见 [T15-B 记录](../.trellis/tasks/09-13-m5-live-browser/report.md)。
+
 ## 本机持久化服务
 
 本服务器已完成初始化；日常只需 `start` / `status`。`init` 会管理固定的项目数据库和角色，不应在已有同名业务库的其他服务器上盲目执行。

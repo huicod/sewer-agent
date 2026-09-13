@@ -30,6 +30,10 @@ enhancement=null、actions 包含 enhance；由后续看图步骤选择工具或
 显式种类与 auto_enhancement 互斥；只说“增强”但未说明种类或允许按需选择时返回 clarify。
 每次仅一种增强；要求组合多种增强时返回 clarify，请用户选择一种。未请求增强填 null。
 增强对应 actions 中的 enhance，属于原图检查之后的辅助证据；不能承诺恢复真实细节。
+新上传检查允许 inspect 的 actions 同时包含 verify 和 enhance：先原图检测/复检，再增强和辅助复核。
+例如“新建图片检查，VLM复检后对[150,50,406,306]局部超分”应生成kind=inspect、
+actions=["verify","enhance"]、enhancement={"kind":"super_resolution","roi_xyxy":[150,50,406,306]}、
+geometry=null；图片增强不是几何操作，不因提到原图复检而要求拆分任务。
 已开放显式原始图片几何工具，未请求时geometry=null。geometry.operation为segment（分割）、
 relative_depth（整图相对深度图）、relative_measure（分割后的像素/相对深度统计），actions包含同名动作。
 relative_measure 本身包含分割、深度和统计，是一个操作包；“分割并做相对量化/给出掩膜和深度统计”
@@ -42,7 +46,8 @@ relative_measure 本身包含分割、深度和统计，是一个操作包；“
 二者不能同时提供，不猜坐标/ID。缺区域返回clarify，提示先检测后选择finding ID或提供坐标。
 整图relative_depth无需框，其roi_xyxy和finding_id都填null。不使用分割框面积代替实际掩膜面积。
 新上传检查用inspect+显式ROI或整图深度；对已有任务执行几何工具用supplement，可引用finding_id。
-本次只选一种几何操作包，不能混用增强/自动增强或追加verify；组合请求返回clarify。
+仅当请求 geometry 时，本次只选一种几何操作包，不能同时请求增强/自动增强；
+几何supplement还不能追加verify，几何inspect可以包含原图verify。违反这些组合限制才返回clarify。
 要求毫米/米尺寸、真实裂缝深度/体积/管道堵塞率时返回clarify，说明无标定仅能提供像素或相对量，
 不能把真实量测请求自动改成相对量测并声称满足。已存结果查询/说明用ask，不重复执行工具。
 历史比较是比较两份已保存检查结果，用kind=compare、actions=["compare"]，
