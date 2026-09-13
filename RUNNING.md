@@ -1,0 +1,84 @@
+# 本机运行与使用
+
+适用于这台已配置的GPU服务器，项目目录 `/root/autodl-tmp/server`。
+这是对话＋文件上传的Agent原型：LLM/VLM调用已有Qwen API，本地GPU执行检测及视觉工具。
+
+## 启动
+
+在服务器终端执行：
+
+```bash
+cd /root/autodl-tmp/server
+.venv/bin/python scripts/app.py build
+.venv/bin/python scripts/app.py start
+.venv/bin/python scripts/app.py status
+```
+
+网页和API共用 `http://127.0.0.1:8000`，不需另开Vite。更新前端时先stop，再build、start；普通重启不必构建。
+build须串行完成，不要同时build或同时执行build/start；当前不支持在线无缝替换网页资源。
+`start`重复执行不会重复启动进程；自动确保本机PG/Temporal已启动，但不安装依赖、不修改密钥、不初始化数据库。
+首次升级业务表时显式运行 `.venv/bin/python scripts/init_storage.py`；本服务器本轮已执行。
+全新服务器准备依赖另见 [后端环境说明](backend/README.md)，不要在现有服务器重新执行runtime init覆盖凭据。
+
+在自己电脑访问时，用服务器提供的SSH地址和端口建立转发：
+
+```bash
+ssh -N -L 8000:127.0.0.1:8000 -p <SSH端口> root@<服务器地址>
+```
+
+保留SSH窗口，再在电脑浏览器打开 `http://127.0.0.1:8000`。
+电脑的8000端口已占用时，将命令第一个8000改成18000，浏览器也改用18000。
+系统未提供公网鉴权，勿将API或Temporal直接改成公网监听；SSH密码/密钥由你本机使用，不需要发给Agent。
+
+## 使用
+
+1. 上传一张CCTV图片或离线视频，在对话框写“检查五类缺陷并复检，生成报告”。
+2. 观察任务阶段和发现项；需要审核时查看原始证据，再由你填写确认/拒绝/改类和理由。
+3. 已完成或部分完成的记录可打开报告；待人工审核的任务不会伪装成已完成。
+4. 图片增强为可选操作，如“检查图片，允许按需增强”；超分需给出原图像素区域。
+   分割/相对量化也需明确区域或已有发现ID，几何和增强分开请求。
+
+提交检查会实际调用已有Qwen账户并使用GPU。`build/start/status/stop`本身不测试付费模型；
+但启动worker会继续处理队列里原有的未完成任务，这些任务可能继续产生费用。
+不要用多个不受管理的GPU worker监听同一队列，否则会失去本机串行资源约束。
+
+## 停止、恢复和排错
+
+```bash
+.venv/bin/python scripts/app.py stop
+.venv/bin/python scripts/app.py restart
+```
+
+`stop`先停网页/API，再通知CPU/GPU worker正常退出，不取消检查、不清理任务或媒体，保留PG/Temporal。
+等待超过30秒会报错并保留进程记录，不自动强杀；正在运行的工具可能需要更多时间，再查status和日志。
+启动失败也只通知本次新建进程退出，最多等待30秒；超时保留记录，已有进程和持久服务不受清理。
+停止应用与页面“取消检查”不同。`restart`仅在stop成功后重新启动；从已有检查点继续，但崩溃前未保存的
+本地计算或供应商已接收却未回执的请求仍可能重做，不能保证零重复计费。
+
+| 现象 | 处理 |
+|---|---|
+| 缺前端构建 | 运行app.py build后再start |
+| 配置或业务表缺失 | 按.env.example补现有.env；业务表用init_storage.py显式初始化 |
+| 8000端口占用或PID身份不符 | 确认此前手动运行的服务，不杀未知进程；解决冲突后再start |
+| 进程运行但依赖未就绪 | 检查runtime.py status和日志；`/health`只代表API进程存活 |
+| worker退出 | 原因修复后运行start补齐或restart；当前没有开机自启/自动进程监督重启 |
+
+`status`区分PG进程`running`与业务库连接/表检查`ready`；总`ready`还要求三个应用组件和Temporal就绪。
+这些是运行检查，不代表付费模型响应、模型精度或全部功能已经验收。
+
+运行位置：
+
+- `var/runtime/app/`：API/CPU/GPU日志、进程身份和worker就绪记录；`var/runtime/`：Temporal日志与配置。
+- `var/assets/`：默认原图、视频及派生资产；实际以 `.env` 的 `SEWER_ASSET_ROOT` 为准。
+- `/var/lib/postgresql/14/main`：业务和Temporal数据库。备份需要同时保存数据库与资产；jj不是业务数据备份。
+- `.env`：本地密钥配置，沿用已有值；`.env.example`仅作参考，不能覆盖现有.env。
+
+日志可能包含任务标识和错误上下文，不公开上传整个日志目录。脚本状态输出不包含密钥或数据库密码。
+需要停止持久服务时，先停止应用，再显式用 `scripts/runtime.py stop`；该命令只停Temporal，PG仍保留。
+
+## 当前范围
+
+已有图片/视频检查、条件VLM、持久工作流与人工等待、报告、图片增强和相对几何、已存结果比较。
+开放补检停用；几何没有毫米真值；视频增强/几何和自动关联增强未接入。
+规范检索仍等指定的标准编号/版本及真实文档；全项验收和用户界面验收未全部完成。
+进度以 [总体计划](project_management/DEVELOPMENT_PLAN.md) 为准，真实模型图片证据见 [T15-B](.trellis/tasks/09-13-m5-live-browser/report.md)。

@@ -70,6 +70,8 @@ async def test_production_worker_registers_only_checkpoint_readers(monkeypatch, 
     executed = []
 
     class Worker:
+        is_running = False
+
         def __init__(self, client, **options):
             self.options, self.task_queue = options, options["task_queue"]
 

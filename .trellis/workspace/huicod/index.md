@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 29
+- **Total Sessions**: 30
 - **Last Active**: 2026-09-13
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~967 | Active |
+| `journal-1.md` | ~1002 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 30 | 2026-09-13 | T16 本机一体化运行与交付入口完成 | jj urlozrsx | `-` |
 | 29 | 2026-09-13 | T15-B 真实图片浏览器联调与资源记录完成 | jj ztuwslnm | `-` |
 | 28 | 2026-09-13 | T15-A 核心链路与浏览器验收完成 | jj myszupvl | `-` |
 | 27 | 2026-09-13 | T14-A 历史证据比较与报告完成 | jj prpustlr | `-` |
@@ -64,7 +65,7 @@
 
 ## Notes
 
-- 恢复先读 Session 29 与 `.trellis/tasks/09-13-m5-live-browser/report.md`。T15-B完成，jj `ztuwslnm`；实图汇总 var/evaluations/2026-09-13-live-browser/index.html。Sewer2403同图两真实任务，首跑几何成功/增强意图误澄清，修正意图说明后仅增强补跑通过，不能写成整组重跑。6次Qwen约0.18元标价估计、GPU分配峰值1.324GiB；两任务保留待审，无人工提交。最终后端1031/137跳过、前端84/build、默认浏览器1及增强筛选1通过。检测/VLM复检/融合及模型不改，开放补检停用，无推送。下一步T16运行交付与T15剩余全项验收，T14-B仍等规范输入；首版未整体交付。
+- 恢复先读 Session 30、`.trellis/tasks/09-13-m5-local-delivery/report.md`与`RUNNING.md`。T16完成，jj `urlozrsx`；证据var/evaluations/2026-09-13-delivery-final。统一app.py构建/启停/重启，网页/API同源；应用留服务器127.0.0.1:8000运行，自己电脑需SSH转发。后端1048/137跳过、前端84/build、真实Chromium与空会话重启持久化通过；0模型/API，失败两次证据保留。既有实图增益/工具证据仍看Session29，检测/VLM/融合和模型不变、开放补检停用、无推送。下一步T15剩余全项/故障/视频成本和用户界面验收；T14-B仍需规范编号/版本/来源，首版未整体交付。
 
 - Sessions are appended to journal files
 - New journal file created when current exceeds 2000 lines

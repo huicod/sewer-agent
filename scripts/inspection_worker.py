@@ -3,9 +3,13 @@
 
 import argparse
 import asyncio
+import json
 import logging
+import os
+import signal
 from concurrent.futures import ThreadPoolExecutor
 from datetime import timedelta
+from pathlib import Path
 
 from pipe_inspector.config import Settings
 from pipe_inspector.media import MediaStore
@@ -27,7 +31,48 @@ from temporalio.client import Client
 from temporalio.worker import Worker
 
 
-async def serve(kind: str) -> None:
+async def run_worker(worker: Worker, kind: str, ready_file: Path | None = None) -> None:
+    """Publish process readiness after startup, then drain on local stop signals."""
+    loop = asyncio.get_running_loop()
+    stopped = asyncio.Event()
+    signals = (signal.SIGTERM, signal.SIGINT)
+    previous = {sig: signal.getsignal(sig) for sig in signals}
+    for sig in signals:
+        loop.add_signal_handler(sig, stopped.set)
+    running = asyncio.create_task(worker.run())
+    stopping = asyncio.create_task(stopped.wait())
+    published = False
+    try:
+        while not running.done() and not stopped.is_set():
+            if worker.is_running:
+                if ready_file is not None:
+                    with ready_file.open("x", encoding="utf-8") as output:
+                        published = True
+                        os.chmod(ready_file, 0o600)
+                        json.dump({"pid": os.getpid(), "kind": kind}, output)
+                print(f"inspection {kind} worker ready", flush=True)
+                break
+            await asyncio.sleep(0.01)
+        await asyncio.wait((running, stopping), return_when=asyncio.FIRST_COMPLETED)
+        if not running.done():
+            await worker.shutdown()
+        await running
+    finally:
+        if published:
+            ready_file.unlink(missing_ok=True)
+        stopping.cancel()
+        await asyncio.gather(stopping, return_exceptions=True)
+        try:
+            if not running.done():
+                await worker.shutdown()
+                await running
+        finally:
+            for sig in signals:
+                loop.remove_signal_handler(sig)
+                signal.signal(sig, previous[sig])
+
+
+async def serve(kind: str, ready_file: Path | None = None) -> None:
     settings = Settings()
     repo = HumanReviewRepository(settings.database_dsn)
     media = MediaStore(
@@ -95,15 +140,17 @@ async def serve(kind: str) -> None:
             max_concurrent_activities=1 if gpu else 4,
             graceful_shutdown_timeout=timedelta(seconds=10),
         )
-        print(f"inspection {kind} worker ready; queue={worker.task_queue}", flush=True)
-        await worker.run()
+        await run_worker(worker, kind, ready_file)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("kind", choices=("cpu", "gpu"))
+    parser.add_argument("--ready-file", type=Path)
     args = parser.parse_args()
+    if args.ready_file is not None and not args.ready_file.is_absolute():
+        parser.error("--ready-file must be absolute")
     try:
-        asyncio.run(serve(args.kind))
+        asyncio.run(serve(args.kind, args.ready_file))
     except KeyboardInterrupt:
         pass

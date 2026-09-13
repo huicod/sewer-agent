@@ -965,3 +965,38 @@ T12-A 完成，保留五类/VLM/融合及开放补检退出在线的边界；T12
 ### Next Steps
 
 - T16一体化运行入口/交付说明，并核对T15剩余全项/故障/视频成本验收；T14-B等待用户规范编号、版本和来源。视频增强/几何、自动关联增强和用户最终界面验收限制仍在，首版未整体交付。
+
+
+## Session 30: T16 本机一体化运行与交付入口完成
+
+**Date**: 2026-09-13
+**Task**: T16 本机一体化运行与交付入口完成
+**Branch**: `-`
+
+### Summary
+
+统一构建启停、同源网页及重启会话验收通过，应用留本机运行；下一步T15剩余验收。
+
+### Main Changes
+
+- 恢复入口 .trellis/tasks/09-13-m5-local-delivery/report.md 与 RUNNING.md。scripts/app.py管理固定API/CPU/GPU进程，worker就绪/正常退出、PG业务库ready及默认API可选挂载dist；停止保留PG/Temporal和数据，无模型策略变更。
+- 证据 var/evaluations/2026-09-13-delivery-final，失败两目录保留。已显式init_storage补齐业务表；只创建3空会话，0模型/API、无人审提交、无.env变更/依赖/哈希/推送。应用留127.0.0.1:8000运行，自己电脑用SSH转发。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `jj urlozrsx` | (see git log) |
+
+### Testing
+
+- [OK] 后端1048 passed/137 skipped（25.07s），前端84及app.py build、Ruff/diff通过；真实Chromium启停重启、同源静态200、会话ID/时刻保留且tasks/turns空、无页面错误。
+- [OK] 一次独立审查2项Important已修：启动失败清理2秒改30秒；PG进程存活与业务库ready分离。最终无must-fix；两次smoke失败是时区字符串和turns接口断言，修正后完整重跑通过。
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- 核对T15剩余全项/故障/视频成本和用户界面验收；T14-B仍需规范编号、版本和来源。自动关联增强、视频增强/几何未接入，首版未整体交付。运行前注意worker会消费原有任务并可能产生API费用。

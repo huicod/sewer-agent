@@ -119,6 +119,8 @@ async def test_workers_share_one_detector_and_register_video_runtime(monkeypatch
     monkeypatch.setattr(module.Client, "connect", connect)
 
     class Worker:
+        is_running = False
+
         def __init__(self, *args, **kwargs):
             captured.update(kwargs)
             self.task_queue = kwargs["task_queue"]

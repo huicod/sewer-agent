@@ -3,6 +3,7 @@
 - Current code: Python 3.12, `backend/src/pipe_inspector`; tests: `backend/tests`.
 - Configuration: `config.Settings`, server-owned environment prefixed `SEWER_`. Use SecretStr for credentials; never log settings dumps, authorization headers, or media bytes.
 - FastAPI factories perform no model loading or network calls during import. `/health` means process liveness, not model/service readiness.
+- Local delivery uses `scripts/app.py` for fixed loopback API/CPU/GPU processes; only the API receives the optional built `SEWER_WEB_DIST`. Preserve the `.venv/bin/python` launcher path (resolving its symlink bypasses the venv). Worker readiness follows Temporal startup; SIGTERM drains the worker. Stop/startup-failure cleanup never force-kills or deletes persistent data, and dependency readiness must include the application database connection/tables, not only the PG process.
 - Models must be behind adapters. Domain contracts cannot import Ultralytics types. Existing five classes only; OTHER needs review, normal is a task conclusion.
 - Temporal orchestrates; network, file, DB and GPU operations are Activities. No second custom retry scheduler or business state machine competing with Temporal.
 - Open-detector supplementation is retired online (2026-09-12): no new open_scan run pins or plan admission. Keep historical workflow commands/schemas; production registers read-only retired handlers, never the archived OpenScanActivities executor.

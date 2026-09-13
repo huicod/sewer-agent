@@ -1,11 +1,15 @@
-# 管网检测服务器交付包
+# 管网检测 Agent（sewer-agent）
 
-初始交付：2026-08-25；开发规划更新：2026-09-09
+初始资料交付：2026-08-25；应用运行入口更新：2026-09-13
 
-本目录用于把当前可用的 YOLO26 训练材料和 VLM 复检调研传回服务器。两部分相互独立：
+本目录包含对话＋文件上传的管网检查原型，以及保留的训练材料和架构研究。
+本机启动、SSH访问与停止/恢复见 **[运行手册](RUNNING.md)**。
 
 ```text
 server/
+├── backend/    # API、持久工作流、检测/复检与工具
+├── frontend/   # 对话、上传、任务进度、证据和人工审核页面
+├── scripts/    # 本机运行、存储及工具入口
 ├── yolov26/     # 较新的 Sewer2403 训练链路、数据压缩包、权重和实验记录
 └── vlm_review/  # VLM 事件级复检、补召回、跟踪和报告调研
 ```
@@ -32,7 +36,7 @@ scp -P <端口> -r .\server root@<服务器IP>:/root/autodl-tmp/
 
 ## 3. 使用入口
 
-- 总体开发计划与阶段验收：[DEVELOPMENT_PLAN.md](project_management/DEVELOPMENT_PLAN.md)；已完成 T14-A 保存结果比较及 T15-A 核心浏览器验收，操作与验证见 [后端入口](backend/README.md)。T14-B 等待规范文档，整体首版仍在开发；开放补检已停用。
+- 总体开发计划与阶段验收：[DEVELOPMENT_PLAN.md](project_management/DEVELOPMENT_PLAN.md)；本机使用见 [运行手册](RUNNING.md)，开发与实验命令见 [后端入口](backend/README.md)。T14-B等待规范文档，整体首版验收尚未完成；开放补检已停用。
 - 当前视频运行与恢复证据：[T08 runtime report](.trellis/tasks/09-10-m2-video-workflow/runtime-report.md)；复检实测结果：[paired pilot](.trellis/tasks/09-10-m2-video-workflow/data-report.md)。工程闭环可用不代表准确率已提升。
 - 当前图片召回与复检结论：[召回保护及独立扫描实测](.trellis/tasks/09-11-image-recall/report.md)。默认保留候选复核并防止原检测丢失；独立扫描因误报回退仅供实验，不代表整体准确率已提高。
 - 开发规则：[AGENTS.md](AGENTS.md)

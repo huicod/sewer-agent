@@ -4,6 +4,7 @@ import psycopg
 from fastapi import FastAPI, Request
 from fastapi.exception_handlers import http_exception_handler
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException
 
 from pipe_inspector.agent.human_review import HumanReviewConflict
@@ -114,5 +115,10 @@ def create_app(
                 {"detail": {"code": "invalid_request", "message": "请求或上传表单格式无效"}}, 400
             )
         return await http_exception_handler(request, exc)
+
+    if settings.web_dist is not None:
+        if not (settings.web_dist / "index.html").is_file():
+            raise RuntimeError("web build is missing; build the frontend before serving")
+        app.mount("/", StaticFiles(directory=settings.web_dist, html=True), name="web")
 
     return app

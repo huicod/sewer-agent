@@ -4,6 +4,9 @@
 
 ## 本服务器环境
 
+日常启动与使用优先看 [本机运行手册](../RUNNING.md)：统一 `scripts/app.py` 管理网页/API、CPU和GPU worker。
+下面保留开发与分组件测试命令，不要在统一入口已启动时另开同队列worker。
+
 - Python 3.12.3；项目 `.venv` 以 `--system-site-packages` 复用服务器的 torch 2.8.0+cu128、torchvision 0.23.0+cu128，不重装 CUDA。这不是完全隔离环境。
 - 直接 Python 依赖版本固定在 `pyproject.toml`；未声明所有传递依赖及系统包完全可复现。Ultralytics 8.4.46 已通过现有权重单图 GPU 兼容验证。
 - PostgreSQL 14.24 使用原生 `14/main` 集群；Temporal Server 1.31.2 位于忽略入库的 `.tools/temporal/`。当前无 Docker/systemd；本脚本尚不是新服务器的一键安装器。
