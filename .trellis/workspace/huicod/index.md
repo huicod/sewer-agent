@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 31
+- **Total Sessions**: 32
 - **Last Active**: 2026-09-14
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~1037 | Active |
+| `journal-1.md` | ~1071 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 32 | 2026-09-14 | T15-D 真实视频资源与API用量验收完成 | jj opxksrwn | `-` |
 | 31 | 2026-09-14 | T15-C 故障矩阵与回执丢失浏览器验收完成 | jj stvsvnru | `-` |
 | 30 | 2026-09-13 | T16 本机一体化运行与交付入口完成 | jj urlozrsx | `-` |
 | 29 | 2026-09-13 | T15-B 真实图片浏览器联调与资源记录完成 | jj ztuwslnm | `-` |
@@ -66,7 +67,7 @@
 
 ## Notes
 
-- 恢复先读 Session31 与 `.trellis/tasks/09-14-m5-fault-acceptance/report.md`；T15-C完成，jj `stvsvnru`。七项边界故障集成、检查点恢复1项、浏览器core+回执丢失2项通过；完整后端1048/144默认跳过，前端84/build通过。逐例JSON在var/evaluations/2026-09-14-fault-matrix，截图在2026-09-14-fault-browser。仅加测试，无产品策略/模型/.env/依赖/推送变更；0真实API/GPU推理。应用已恢复服务器127.0.0.1:8000ready，用RUNNING.md建立SSH访问。下一步T15剩余全项、完整业务服务中断、视频成本和用户界面验收；T14-B仍需规范编号/版本/来源，首版未整体交付。
+- 恢复先读 Session32 与 `.trellis/tasks/09-14-m5-video-cost/report.md`；T15-D完成，jj `opxksrwn`。两次真实视频共1311帧/165块、13次Qwen请求/57533tokens，估算0.622020元；第二段8帧在发送前预算拒绝，两次均待审。原图/JSON在var/evaluations/2026-09-14-video-cost；实测2.05/2.22fps，扫描效率与非管内片段预算消耗仍待优化。完整后端1054/145默认跳过，Ruff与限定审查通过；不改产品策略/模型/.env/依赖，不推送。测试自有workflow/schema已清理，文件保留，应用127.0.0.1:8000持续ready。下一步T15剩余全项、业务服务中断、长视频效率/有效片段及用户界面验收；T14-B仍缺规范，首版未整体交付。
 
 - Sessions are appended to journal files
 - New journal file created when current exceeds 2000 lines

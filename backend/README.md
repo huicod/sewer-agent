@@ -89,6 +89,26 @@ SEWER_RUN_IMAGE_WORKFLOW_TEST=1 .venv/bin/python -m pytest \
 可设`SEWER_FAULT_OUTPUT`为仓库`var/evaluations/`下新的绝对目录保存逐例JSON，重跑换新目录。
 证据与剩余验收项见 [T15-C记录](../.trellis/tasks/09-14-m5-fault-acceptance/report.md)。
 
+### 真实视频资源与 API 用量验收（T15-D，显式付费）
+
+本机PG/Temporal就绪且GPU空闲时，固定一个不超过60秒的真实CCTV视频：
+
+```bash
+SEWER_RUN_VIDEO_COST_LIVE=1 SEWER_RUN_LIVE_API=1 \
+SEWER_API_MAX_OUTPUT_TOKENS=4096 \
+SEWER_LIVE_VIDEO="$PWD/var/datasets/videos-1/W90-W89_20260611151716.mp4" \
+SEWER_VIDEO_COST_OUTPUT="$PWD/var/evaluations/video-cost-new-run" \
+.venv/bin/python -m pytest backend/tests/integration/test_video_cost_live.py -q -s
+```
+
+输出必须是仓库`var/evaluations/`下的新绝对目录，重跑产生新费用；必须显式配置每次响应的token上限。
+沿用生产全帧检测、
+事件聚合和条件复检；语义选帧预算仍为32，本验收另限最多8次实际API请求（含失败/重试）。
+记录原始视频时长、覆盖、阶段耗时、PyTorch显存峰值、逐请求usage和证据；
+处理计时截止终态或人工等待，不含人等待时间。短片折算值不等于任意一小时视频的完整预算。
+仅清理测试自有workflow/schema，媒体和JSON保留；测试任务不出现在常驻应用中。
+不修改检测/VLM模型和策略，不自动提交人工审核；默认后端测试不运行此付费验收。
+
 ## 本机持久化服务
 
 本服务器已完成初始化；日常只需 `start` / `status`。`init` 会管理固定的项目数据库和角色，不应在已有同名业务库的其他服务器上盲目执行。
