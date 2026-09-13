@@ -1000,3 +1000,38 @@ T12-A 完成，保留五类/VLM/融合及开放补检退出在线的边界；T12
 ### Next Steps
 
 - 核对T15剩余全项/故障/视频成本和用户界面验收；T14-B仍需规范编号、版本和来源。自动关联增强、视频增强/几何未接入，首版未整体交付。运行前注意worker会消费原有任务并可能产生API费用。
+
+
+## Session 31: T15-C 故障矩阵与回执丢失浏览器验收完成
+
+**Date**: 2026-09-14
+**Task**: T15-C 故障矩阵与回执丢失浏览器验收完成
+**Branch**: `-`
+
+### Summary
+
+七项故障与真实浏览器重发通过；仅新增验收测试，应用已恢复运行。
+
+### Main Changes
+
+- 恢复入口 .trellis/tasks/09-14-m5-fault-acceptance/report.md；新test_fault_matrix.py在当前candidate_review下以实际PG/Temporal验证超时、429、非法JSON/Schema及OOM；HTTP/模型边界注入，没有产品逻辑改动。
+- 新增faults.spec.ts实收POST202后丢响应，同一请求/附件重发只留一轮对话/一个任务，刷新恢复待审。证据var/evaluations/2026-09-14-fault-matrix及2026-09-14-fault-browser。0真实API/GPU推理，无.env/依赖/模型/推送变更。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `jj stvsvnru` | (see git log) |
+
+### Testing
+
+- [OK] 完整后端1048 passed/144 skipped（24.03s），矩阵另启用7 passed（20.51s）；既有检查点丢回执恢复1 passed（4.22s），Ruff通过。超时uncertain、429failed、三次上限、失败非normal及AJ原框保留均有JSON。
+- [OK] 前端84/build及默认浏览器core+faults2 passed（28.3s），错误/恢复截图已查看；一次独立审查无问题。无test_image_/browser_acceptance_残留schema，public任务仍0；应用已恢复127.0.0.1:8000ready。
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- T15剩余全项、完整业务服务中断、视频成本和用户最终界面验收；T14-B规范编号/版本/来源待提供。T15-C是边界故障注入，不是供应商真实中断或物理GPU耗尽；自动关联增强/视频增强几何未接入，首版未整体交付。

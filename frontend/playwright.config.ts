@@ -18,7 +18,7 @@ process.env.XDG_CACHE_HOME = path.join(root, ".tools/cache");
 
 export default defineConfig({
   testDir: "./e2e",
-  testMatch: live ? "**/live.spec.ts" : "**/core.spec.ts",
+  testMatch: live ? "**/live.spec.ts" : ["**/core.spec.ts", "**/faults.spec.ts"],
   workers: 1,
   retries: 0,
   timeout: live ? 600_000 : 120_000,

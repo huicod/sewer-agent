@@ -25,7 +25,7 @@
 
 `GET /health` 仅表示 API 进程存活，不代表检测器/API 供应商/数据库已就绪。T04 的会话、上传和任务接口见下节。
 
-### 浏览器核心验收（T15-A）
+### 浏览器核心与回执丢失验收（T15-A/C）
 
 在本机 PostgreSQL/Temporal 已就绪、18080/18081 空闲时，从项目根目录运行：
 
@@ -43,10 +43,12 @@ npm --prefix frontend run test:e2e
 
 测试自动启停自己的 API、worker 与 Vite，使用真实 HTTP/PG/Temporal/FFmpeg，但图片、1.2秒视频和
 模型输出是明确标记的合成夹具，不调用真实 GPU 或付费 API。人工审核表单由浏览器自动填写，
-不是用户对真实缺陷的审核。覆盖上传对话、待审核刷新、审核完成、视频时间线及保存结果比较。
+不是用户对真实缺陷的审核。覆盖上传对话、待审核刷新、审核完成、视频时间线及保存结果比较，
+以及服务端已接收POST但回执丢失后的同请求重发：附件只上传一次，最终仅一轮对话/一个任务。
 默认证据在 `var/evaluations/browser/run-*/`：`screenshots/`、三份任务 JSON、比较 JSON、
 `browser-results.json`、`service/service-summary.json`；失败另保留 trace。
 可用 `SEWER_BROWSER_OUTPUT` 指定新的绝对目录，不复用旧运行目录。
+回执丢失场景另保存`lost-response.json`和错误/恢复截图；可用`-- --grep 'lost admission'`单独运行。
 结束仅删除本轮 schema、终止本轮未完成 workflow，保留文件；不会重启共享持久服务。
 历史结果及未验项目见 [T15-A 记录](../.trellis/tasks/09-13-m5-core-acceptance/report.md)。
 
@@ -62,7 +64,7 @@ SEWER_LIVE_IMAGE="$PWD/var/evaluations/2026-09-11-guided/paired/gallery/sample-0
 npm --prefix frontend run test:e2e
 ```
 
-默认 `test:e2e` 仍只运行无付费的 core 场景；执行前会类型检查浏览器脚本。
+默认 `test:e2e` 只运行无付费的 core 和 faults 场景；执行前会类型检查浏览器脚本。
 真实模式预计5次API请求，单服务运行最多8次（失败也消耗额度）；重新运行命令会产生新的预算与费用。
 两个场景可用 `-- --grep 'geometry'` 或 `-- --grep 'ROI enhancement'` 单独选择，
 失败后先检查保存结果，不自动重复整组付费测试。
@@ -71,6 +73,21 @@ npm --prefix frontend run test:e2e
 浏览器不会替你提交真实缺陷的人工审核，需要审核的任务仍等待，不强行生成完成报告。
 测试结束保留文件、终止自有待审工作流并删除测试schema；截图不是常驻可继续审核的业务会话。
 实测结果见 [T15-B 记录](../.trellis/tasks/09-13-m5-live-browser/report.md)。
+
+### 故障矩阵（T15-C，无付费）
+
+本机PG/Temporal就绪后运行：
+
+```bash
+SEWER_RUN_IMAGE_WORKFLOW_TEST=1 .venv/bin/python -m pytest \
+  backend/tests/integration/test_fault_matrix.py \
+  backend/tests/integration/test_image_workflow_faults_live.py -q
+```
+
+使用生产工作流、HTTP解析与真实存储，在外部边界注入超时、429、非法JSON/Schema和OOM异常。
+不制造真实GPU显存耗尽，不联系供应商；各用例独立schema/队列，不重启共享服务。
+可设`SEWER_FAULT_OUTPUT`为仓库`var/evaluations/`下新的绝对目录保存逐例JSON，重跑换新目录。
+证据与剩余验收项见 [T15-C记录](../.trellis/tasks/09-14-m5-fault-acceptance/report.md)。
 
 ## 本机持久化服务
 
