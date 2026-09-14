@@ -1203,3 +1203,39 @@ T12-A 完成，保留五类/VLM/融合及开放补检退出在线的边界；T12
 ### Next Steps
 
 - 继续751秒完整视频实测（终端22862，输出var/evaluations/2026-09-14-video-selection/long-full）；视频证据帧入口，规范仍待用户输入，最后构建重载与集成冻结。
+
+
+## Session 37: 视频帧工具与长片收尾，进入人工试用
+
+**Date**: 2026-09-14
+**Task**: 视频帧工具与长片收尾，进入人工试用
+
+### Summary
+
+总体计划4.1第1、2组完成；现有功能合并回归、审查及服务重载完成。第3组仍缺规范，含规范的全项正式冻结未完成；现在可人工试用。
+
+### Main Changes
+
+- 视频已存FRAME显式增强/几何：真实来源与独立额度，沿用补证工作流、冻结单帧基线，不重扫/改父视频；页面和HTML/JSON标明单帧范围。关联图片auto已在5f6bbdeb完成。
+- 定点关闭失败FRAME重试身份泄漏、新增异常定位与配置变化复制整片发现；独立Spec/Quality PASS，无未关闭Critical/Important。图片原VLM Prompt/融合、五类权重不变，开放补检不恢复。
+- 完整751.163秒长片已结束：18779帧/327事件/348 PNG，至人工门2411.315秒。8真实Qwen请求=4场景+4详细、33897 tokens；24详细发送前预算拒绝，实际详细仅0到8.403秒，不称全片VLM覆盖/精度提升。输出var/evaluations/2026-09-14-video-selection/long-full，隔离workflow/schema已清理，不重跑。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `jj sonwsnyp / da01e199` | (see git log) |
+
+### Testing
+
+- [OK] 最终完整backend1127 passed/159默认跳过、Ruff backend/scripts通过；额外PG storage40及PG/Temporal frame workflow2 passed（回执丢失后恢复，父视频不变）；关联auto此前真实增强集成8 passed。
+- [OK] frontend111 passed、tsc及生产build通过；真实HTTP/PG/Temporal合成模型核心浏览器1 passed/28.1s，选帧截图已查看，输出var/evaluations/2026-09-14-video-frame-tools/browser。浏览器验证入口，实际帧工具执行由上述workflow测试验证。
+- [OK] 确认Temporal无running workflow后受管app stop、init_storage、build、start/status均成功。API214231/CPU214230/GPU214229全ready，Temporal118993和PG未重启，入口127.0.0.1:8000。
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- 用户按RUNNING.md清单人工审查并反馈任务ID；规范需编号、版本及PDF/官方来源，收到后只补T14-B和相关验收。不得再扩开发阶段、改已接受图片策略、重复付费长片或自动推送。总体计划4.1唯一收尾表；进度/证据均已保存。

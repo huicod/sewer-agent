@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 36
+- **Total Sessions**: 37
 - **Last Active**: 2026-09-14
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~1205 | Active |
+| `journal-1.md` | ~1241 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 37 | 2026-09-14 | 视频帧工具与长片收尾，进入人工试用 | jj sonwsnyp / `da01e199` | `-` |
 | 36 | 2026-09-14 | 关联原图按需增强补齐与收尾交接 | jj pmpmwrvw | `-` |
 | 35 | 2026-09-14 | 视频证据选择代码验收与长片运行交接 | jj nqxtwmnm | `-` |
 | 34 | 2026-09-14 | 视频无损初查提速与四组收尾计划 | jj syylpnmz | `-` |
@@ -71,7 +72,7 @@
 
 ## Notes
 
-- 恢复先读Session36及关联增强report（jj `pmpmwrvw`）；关联原图本轮授权auto已通过完整后端1096/150跳过、PG/Temporal增强8、前端94、TS/Ruff和独立审查。视频选帧代码jj `nqxtwmnm`已通过，Session35/report保存实验；751秒完整长片仍运行，终端22862，输出`var/evaluations/2026-09-14-video-selection/long-full/`，勿重复启动或重启共享PG/Temporal。接下来视频证据帧工具；规范待用户编号/版本/来源，最后构建重载与集成冻结。总体计划4.1为唯一收尾表；首版未全项交付，不改图片VLM、不恢复开放补检、不推送。
+- 恢复先读Session37、视频帧工具report及长片最终report。代码基线`da01e199`（jj `sonwsnyp`）；总体计划4.1第1/2组完成，现有功能审查/回归/重载完成，可人工试用。最终后端1127/159默认跳过、PG40、PG/Temporal帧工具2、前端111、build/浏览器通过；服务127.0.0.1:8000全ready，PG/Temporal未重启。751秒长片已结束，18779帧/2411.315秒，8次Qwen=4场景+4详细，24详细预算未发，实际详细只到8.403秒；`long-full/`保留348 PNG和完整JSON，隔离schema/workflow已清理，不要重跑或继续终端22862。规范仍待用户编号/版本/PDF或官方来源；收到后仅补T14-B和相关全项验收。无其他新增开发阶段，不改图片VLM、不恢复开放补检、不推送。
 
 - Sessions are appended to journal files
 - New journal file created when current exceeds 2000 lines

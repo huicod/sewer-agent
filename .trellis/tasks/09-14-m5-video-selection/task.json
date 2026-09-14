@@ -3,7 +3,7 @@
   "name": "m5-video-selection",
   "title": "视频有效证据筛选与长视频验证",
   "description": "Reduce redundant and unusable video review spending while retaining full primary coverage and explicit unresolved evidence",
-  "status": "in_progress",
+  "status": "completed",
   "dev_type": null,
   "scope": null,
   "package": null,
@@ -11,7 +11,7 @@
   "creator": "huicod",
   "assignee": "huicod",
   "createdAt": "2026-09-14",
-  "completedAt": null,
+  "completedAt": "2026-09-14",
   "branch": null,
   "base_branch": "main",
   "worktree_path": null,
@@ -21,6 +21,6 @@
   "children": [],
   "parent": null,
   "relatedFiles": [],
-  "notes": "",
+  "notes": "Code c38644f1 reviewed; full 751.163s video passed: 18779 frames, 2411.315s to human gate, 8 actual Qwen calls (4 scene + 4 detailed), 24 detailed reviews not sent due to test budget. See report.md and retained long-full JSON/348 PNGs. Isolated workflow/schema cleaned, do not rerun.",
   "meta": {}
 }
