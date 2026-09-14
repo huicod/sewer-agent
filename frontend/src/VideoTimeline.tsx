@@ -1,7 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 
 import { ApiError, getVideo } from "./api";
-import type { VideoDetail, VideoEvent, VideoSceneAssessment } from "./types";
+import type {
+  VideoDetail,
+  VideoEvent,
+  VideoEvidenceFrame,
+  VideoSceneAssessment,
+} from "./types";
 
 const SCENE_LABELS: Record<VideoSceneAssessment["scene"], string> = {
   pipe: "管内画面", outside: "井外画面", unassessable: "无法观察", unknown: "场景不确定",
@@ -10,6 +15,8 @@ const SCENE_LABELS: Record<VideoSceneAssessment["scene"], string> = {
 type VideoTimelineProps = {
   taskId: string;
   snapshotRevision: string;
+  onSelectFrame?: (frame: VideoEvidenceFrame) => void;
+  frameSelectionDisabled?: boolean;
 };
 
 function assetUrl(assetId: string, version: number): string {
@@ -20,7 +27,12 @@ function eventOrder(left: VideoEvent, right: VideoEvent): number {
   return left.start_seconds - right.start_seconds || left.start_frame - right.start_frame;
 }
 
-export function VideoTimeline({ taskId, snapshotRevision }: VideoTimelineProps) {
+export function VideoTimeline({
+  taskId,
+  snapshotRevision,
+  onSelectFrame,
+  frameSelectionDisabled = false,
+}: VideoTimelineProps) {
   const [expanded, setExpanded] = useState(false);
   const [loading, setLoading] = useState(false);
   const [detail, setDetail] = useState<VideoDetail | null>(null);
@@ -71,6 +83,9 @@ export function VideoTimeline({ taskId, snapshotRevision }: VideoTimelineProps) 
     ? [...scan.state.events, ...(scan.state.finalized ? [] : scan.state.active)].sort(eventOrder)
     : [];
   const frameAssets = new Map(detail?.evidence?.frames.map((frame) => [frame.frame_index, frame.asset]) ?? []);
+  const storedFrames = [...(detail?.evidence?.frames ?? [])].sort((left, right) =>
+    left.frame_index - right.frame_index || left.timestamp_seconds - right.timestamp_seconds,
+  );
 
   return (
     <section className="video-timeline">
@@ -106,6 +121,33 @@ export function VideoTimeline({ taskId, snapshotRevision }: VideoTimelineProps) 
                 ))}
               </details>
             </section>
+          ) : null}
+          {storedFrames.length ? (
+            <details>
+              <summary>选择已存证据帧（{storedFrames.length}）</summary>
+              <p className="truth-note">
+                只能选择这里已持久化的精确帧；选中后仍需在对话中明确要求一种增强或几何工具，不会自动执行。
+              </p>
+              <div className="video-frame-picker">
+                {storedFrames.map((frame) => (
+                  <p key={`${frame.asset.asset_id}-${frame.asset.version}-${frame.frame_index}`}>
+                    <a href={assetUrl(frame.asset.asset_id, frame.asset.version)} target="_blank" rel="noreferrer">
+                      证据帧 {frame.frame_index} · {frame.timestamp_seconds} 秒
+                    </a>
+                    {onSelectFrame ? (
+                      <button
+                        type="button"
+                        className="secondary-button"
+                        disabled={frameSelectionDisabled}
+                        onClick={() => onSelectFrame(frame)}
+                      >
+                        选择证据帧 {frame.frame_index} 用于工具
+                      </button>
+                    ) : null}
+                  </p>
+                ))}
+              </div>
+            </details>
           ) : null}
           {scan ? (
             <>

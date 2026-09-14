@@ -13,6 +13,7 @@ from pipe_inspector.contracts.geometry import (
     SegmentationResult,
 )
 from pipe_inspector.contracts.inspection import InspectionDecision
+from pipe_inspector.contracts.intake import TaskRecord
 from pipe_inspector.contracts.tools import ToolCall, ToolCallStatus
 from pipe_inspector.storage.repository import MissingRecord, SubmissionConflict
 
@@ -131,14 +132,12 @@ def save_geometry(
         raise SubmissionConflict from None
     payload = {
         "result": result.model_dump(mode="json"),
-        "measurements": None
-        if measurements is None
-        else measurements.model_dump(mode="json"),
+        "measurements": None if measurements is None else measurements.model_dump(mode="json"),
     }
     with repository._connect() as connection:
         task_row = connection.execute(
             sql.SQL(
-                "SELECT input_asset_id, input_asset_version FROM {} "
+                "SELECT input_asset_id, input_asset_version, record FROM {} "
                 "WHERE task_id=%s FOR UPDATE"
             ).format(repository._table("sewer_tasks")),
             (task_id,),
@@ -193,24 +192,34 @@ def save_geometry(
             (source_ref.asset_id, source_ref.version),
         ).fetchone()
         source_row = connection.execute(
-            sql.SQL(
-                "SELECT payload FROM {} WHERE task_id=%s AND step='geometry_source'"
-            ).format(repository._table("sewer_step_checkpoints")),
+            sql.SQL("SELECT payload FROM {} WHERE task_id=%s AND step='geometry_source'").format(
+                repository._table("sewer_step_checkpoints")
+            ),
             (task_id,),
         ).fetchone()
         if input_row is None or source_row is None:
             raise MissingRecord
         try:
             source = AssetRecord.model_validate(input_row[0])
+            task = TaskRecord.model_validate(task_row[2])
             frozen = source_row[0]
             InspectionDecision.model_validate(frozen["decision"])
             frozen_ref = AssetRef.model_validate(frozen["input_asset"])
             prompt = frozen.get("prompt")
         except (KeyError, TypeError, ValueError):
             raise SubmissionConflict from None
+        allow_frame = repository._validate_frame_tool_source(
+            connection,
+            task,
+            source,
+            run_row[1],
+            operation=options.operation,
+        )
+        valid_source = (source.kind is AssetKind.IMAGE and source.parent is None) or (
+            allow_frame and source.kind is AssetKind.FRAME and source.parent is not None
+        )
         if (
-            source.kind is not AssetKind.IMAGE
-            or source.parent is not None
+            not valid_source
             or source.ref != source_ref
             or frozen_ref != source_ref
             or result.input_asset != source_ref
@@ -230,9 +239,9 @@ def save_geometry(
             raise SubmissionConflict
 
         segment_row = connection.execute(
-            sql.SQL(
-                "SELECT payload FROM {} WHERE task_id=%s AND step='geometry_segment'"
-            ).format(repository._table("sewer_step_checkpoints")),
+            sql.SQL("SELECT payload FROM {} WHERE task_id=%s AND step='geometry_segment'").format(
+                repository._table("sewer_step_checkpoints")
+            ),
             (task_id,),
         ).fetchone()
         _validate_measurements(

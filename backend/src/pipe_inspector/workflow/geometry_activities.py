@@ -55,6 +55,10 @@ def geometry_baseline(repo, run, task, observation, review) -> InspectionDecisio
     saved = repo.load_step(task_id, "geometry_source")
     if saved is not None:
         return InspectionDecision.model_validate(saved["decision"])
+    if "frame_source" in run["config"]:
+        from pipe_inspector.workflow.frame_tools import frozen_frame_context
+
+        return frozen_frame_context(repo, run, task)[2]
     if run["config"].get("operation") == "supplement_review":
         parent = TaskRecord.model_validate(repo.load_step(task_id, "source")["task"])
         return _linked_baseline(task_id, parent)
@@ -125,10 +129,17 @@ class GeometryActivities(ImageActivities):
             task = self.repo.get_task(task_id)
             asset = self.repo.get_asset(task.input_asset)
             selector_task = task
-            if run["config"].get("operation") == "supplement_review":
+            frame_tool = "frame_source" in run["config"]
+            if frame_tool:
+                from pipe_inspector.workflow.frame_tools import validate_frame_tool_context
+
+                validate_frame_tool_context(self.repo, run, task, asset)
+            elif run["config"].get("operation") == "supplement_review":
                 source = self.repo.load_step(task_id, "source")
                 selector_task = TaskRecord.model_validate(source["task"])
-            prompt = validate_geometry_input(asset, options, task=selector_task)
+            prompt = validate_geometry_input(
+                asset, options, task=selector_task, allow_frame=frame_tool
+            )
         except (KeyError, TypeError, ValueError, InspectionStartError):
             raise ApplicationError(
                 "Geometry configuration changed",
@@ -167,9 +178,7 @@ class GeometryActivities(ImageActivities):
         if run["config"].get("operation") == "supplement_review":
             observation = review = None
         else:
-            observation = ImageObservation.model_validate(
-                self.repo.load_step(task_id, "detect")
-            )
+            observation = ImageObservation.model_validate(self.repo.load_step(task_id, "detect"))
             saved = self.repo.load_step(task_id, "verify")
             review = (
                 ImageReview.model_validate(saved["review"])
@@ -223,9 +232,7 @@ class GeometryActivities(ImageActivities):
             )
             measurements = measure_geometry(result, self.media)
         except ApplicationError as exc:
-            raise self._error(
-                run, "geometry_segment", exc.type or "segmentation_failed"
-            ) from None
+            raise self._error(run, "geometry_segment", exc.type or "segmentation_failed") from None
         except (OSError, ValueError, RuntimeError, TypeError, KeyError):
             raise self._error(run, "geometry_segment", "segmentation_failed") from None
         return self.repo.save_geometry(
@@ -278,9 +285,7 @@ class GeometryActivities(ImageActivities):
                 segmentation = SegmentationResult.model_validate(segment["result"])
                 measurements = measure_geometry(segmentation, self.media, result)
         except ApplicationError as exc:
-            raise self._error(
-                run, "geometry_depth", exc.type or "relative_depth_failed"
-            ) from None
+            raise self._error(run, "geometry_depth", exc.type or "relative_depth_failed") from None
         except (OSError, ValueError, RuntimeError, TypeError, KeyError):
             raise self._error(run, "geometry_depth", "relative_depth_failed") from None
         return self.repo.save_geometry(

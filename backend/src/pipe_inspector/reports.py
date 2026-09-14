@@ -227,7 +227,17 @@ def render_html(report: TaskReport) -> str:
         "<p>" + evidence_link(task.input_asset) + "</p>",
         f"<h2>证据覆盖</h2><p>{covered}；{quality}；{audited}</p>",
     ]
-    if task.parent_task_id:
+    if task.frame_source is not None:
+        source = task.frame_source
+        lines.append(
+            '<p>视频帧工具：<a href="/api/tasks/'
+            f'{task.parent_task_id}/report?format=html">原视频任务报告</a>'
+            f"；帧 {source.frame_index}；原视频时间 {source.timestamp_seconds:g} 秒。"
+            "本报告结果与覆盖仅针对所选视频帧，整段视频结论不变；"
+            "复用已保存帧和检测/复检证据，未重新扫描视频。</p>"
+        )
+        lines.append("<p>源视频：" + evidence_link(source.video_asset) + "</p>")
+    elif task.parent_task_id:
         lines.append(
             '<p>关联追加复检：<a href="/api/tasks/'
             f'{task.parent_task_id}/report?format=html">原任务报告</a>'

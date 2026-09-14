@@ -9,9 +9,11 @@ from psycopg.types.json import Jsonb
 
 from pipe_inspector.contracts.assets import AssetKind, AssetRecord, AssetRef
 from pipe_inspector.contracts.enhancement import EnhancementKind, EnhancementResult
+from pipe_inspector.contracts.inspection import ImageObservation, InspectionDecision
 from pipe_inspector.contracts.intake import TaskRecord
 from pipe_inspector.contracts.tasks import TaskSnapshot
 from pipe_inspector.contracts.tools import ToolCall, ToolCallStatus
+from pipe_inspector.contracts.video import FrameObservation, VideoFrameToolPin
 from pipe_inspector.storage.repository import (
     MissingRecord,
     PostgresRepository,
@@ -97,9 +99,9 @@ class InspectionRepository(PostgresRepository):
                 ).fetchone()
                 if row is None:
                     row = connection.execute(
-                        sql.SQL(
-                            "SELECT run_id, task_id, config FROM {} WHERE task_id = %s"
-                        ).format(self._table("sewer_inspection_runs")),
+                        sql.SQL("SELECT run_id, task_id, config FROM {} WHERE task_id = %s").format(
+                            self._table("sewer_inspection_runs")
+                        ),
                         (task_id,),
                     ).fetchone()
                 if row is None:
@@ -157,9 +159,9 @@ class InspectionRepository(PostgresRepository):
                 ).fetchone()
                 if row is None:
                     row = connection.execute(
-                        sql.SQL(
-                            "SELECT payload FROM {} WHERE task_id = %s AND step = %s"
-                        ).format(self._table("sewer_step_checkpoints")),
+                        sql.SQL("SELECT payload FROM {} WHERE task_id = %s AND step = %s").format(
+                            self._table("sewer_step_checkpoints")
+                        ),
                         (task_id, step),
                     ).fetchone()
                 if row is None:
@@ -180,7 +182,7 @@ class InspectionRepository(PostgresRepository):
                 task_row = connection.execute(
                     sql.SQL(
                         """
-                        SELECT input_asset_id, input_asset_version
+                        SELECT input_asset_id, input_asset_version, record
                         FROM {} WHERE task_id = %s FOR UPDATE
                         """
                     ).format(self._table("sewer_tasks")),
@@ -210,7 +212,8 @@ class InspectionRepository(PostgresRepository):
                         sql.SQL(
                             "SELECT payload FROM {} WHERE task_id = %s "
                             "AND step = 'enhancement_selection'"
-                        ).format(self._table("sewer_step_checkpoints")), (task_id,),
+                        ).format(self._table("sewer_step_checkpoints")),
+                        (task_id,),
                     ).fetchone()
                     try:
                         pin = selected_enhancement_pin(config, selection[0]["selection"])
@@ -226,21 +229,25 @@ class InspectionRepository(PostgresRepository):
 
                 input_ref = AssetRef(asset_id=task_row[0], version=task_row[1])
                 input_row = connection.execute(
-                    sql.SQL(
-                        "SELECT record FROM {} WHERE asset_id = %s AND version = %s"
-                    ).format(self._table("sewer_assets")),
+                    sql.SQL("SELECT record FROM {} WHERE asset_id = %s AND version = %s").format(
+                        self._table("sewer_assets")
+                    ),
                     (input_ref.asset_id, input_ref.version),
                 ).fetchone()
                 if input_row is None:
                     raise MissingRecord
                 input_asset = AssetRecord.model_validate(input_row[0])
+                task = TaskRecord.model_validate(task_row[2])
+                allow_frame = self._validate_frame_tool_source(
+                    connection, task, input_asset, config, operation="enhance"
+                )
                 self._validate_enhancement_first_write(
-                    input_asset, result, call, pin
+                    input_asset, result, call, pin, allow_frame=allow_frame
                 )
                 existing_output = connection.execute(
-                    sql.SQL(
-                        "SELECT 1 FROM {} WHERE asset_id = %s AND version = %s"
-                    ).format(self._table("sewer_assets")),
+                    sql.SQL("SELECT 1 FROM {} WHERE asset_id = %s AND version = %s").format(
+                        self._table("sewer_assets")
+                    ),
                     (result.output_asset.ref.asset_id, result.output_asset.ref.version),
                 ).fetchone()
                 if existing_output is not None:
@@ -304,17 +311,13 @@ class InspectionRepository(PostgresRepository):
                 not isinstance(roi, (list, tuple))
                 or len(roi) != 4
                 or any(
-                    isinstance(value, bool) or not isinstance(value, (int, float))
-                    for value in roi
+                    isinstance(value, bool) or not isinstance(value, (int, float)) for value in roi
                 )
                 or any(not math.isfinite(value) for value in roi)
             ):
                 raise SubmissionConflict
             x1, y1, x2, y2 = roi
-            if not (
-                0 <= x1 < x2 <= input_asset.width
-                and 0 <= y1 < y2 <= input_asset.height
-            ):
+            if not (0 <= x1 < x2 <= input_asset.width and 0 <= y1 < y2 <= input_asset.height):
                 raise SubmissionConflict
             box = (math.floor(x1), math.floor(y1), math.ceil(x2), math.ceil(y2))
         if (
@@ -332,10 +335,14 @@ class InspectionRepository(PostgresRepository):
         result: EnhancementResult,
         call: ToolCall,
         pin: dict,
+        *,
+        allow_frame: bool = False,
     ) -> None:
+        valid_input = (input_asset.kind is AssetKind.IMAGE and input_asset.parent is None) or (
+            allow_frame and input_asset.kind is AssetKind.FRAME and input_asset.parent is not None
+        )
         if (
-            input_asset.kind != AssetKind.IMAGE
-            or input_asset.parent is not None
+            not valid_input
             or result.input_asset != input_asset.ref
             or result.output_asset.kind != AssetKind.ENHANCED_IMAGE
             or result.output_asset.parent != input_asset.ref
@@ -362,6 +369,81 @@ class InspectionRepository(PostgresRepository):
             or call.model_version != result.model_version
         ):
             raise SubmissionConflict
+
+    def _validate_frame_tool_source(
+        self,
+        connection: psycopg.Connection,
+        task: TaskRecord,
+        asset: AssetRecord,
+        config: dict,
+        *,
+        operation: str,
+    ) -> bool:
+        if asset.kind is AssetKind.IMAGE and asset.parent is None:
+            if "frame_source" in config or task.frame_source is not None:
+                raise SubmissionConflict
+            return False
+        if asset.kind is not AssetKind.FRAME or asset.parent is None:
+            raise SubmissionConflict
+        try:
+            pin = VideoFrameToolPin.model_validate(config["frame_source"])
+            checkpoint_row = connection.execute(
+                sql.SQL("SELECT payload FROM {} WHERE task_id=%s AND step='frame_source'").format(
+                    self._table("sewer_step_checkpoints")
+                ),
+                (task.snapshot.task_id,),
+            ).fetchone()
+            source_row = connection.execute(
+                sql.SQL("SELECT payload FROM {} WHERE task_id=%s AND step='source'").format(
+                    self._table("sewer_step_checkpoints")
+                ),
+                (task.snapshot.task_id,),
+            ).fetchone()
+            detect_row = connection.execute(
+                sql.SQL("SELECT payload FROM {} WHERE task_id=%s AND step='detect'").format(
+                    self._table("sewer_step_checkpoints")
+                ),
+                (task.snapshot.task_id,),
+            ).fetchone()
+            checkpoint = checkpoint_row[0]
+            observation = FrameObservation.model_validate(checkpoint["observation"])
+            decision = InspectionDecision.model_validate(checkpoint["decision"])
+            parent = TaskRecord.model_validate(source_row[0]["task"])
+            detected = ImageObservation.model_validate(detect_row[0])
+        except (KeyError, TypeError, ValueError):
+            raise SubmissionConflict from None
+        frame_source = task.frame_source
+        expected = ImageObservation(detection=observation.detection, quality=observation.quality)
+        if (
+            VideoFrameToolPin.model_validate(checkpoint["pin"]) != pin
+            or pin.operation != operation
+            or task.parent_task_id != pin.parent_task_id
+            or task.input_asset != pin.frame_asset
+            or frame_source is None
+            or frame_source.video_asset != pin.video_asset
+            or frame_source.frame_index != pin.frame_index
+            or frame_source.timestamp_seconds != pin.timestamp_seconds
+            or asset.ref != pin.frame_asset
+            or asset.parent != pin.video_asset
+            or (asset.width, asset.height) != (pin.width, pin.height)
+            or parent.snapshot.task_id != pin.parent_task_id
+            or parent.input_asset != pin.video_asset
+            or parent.session_id != task.session_id
+            or observation.frame_index != pin.frame_index
+            or observation.timestamp_seconds != pin.timestamp_seconds
+            or (observation.detection.width, observation.detection.height)
+            != (pin.width, pin.height)
+            or detected != expected
+            or any(
+                evidence.asset != pin.frame_asset
+                or evidence.frame_index != pin.frame_index
+                or evidence.timestamp_seconds != pin.timestamp_seconds
+                for finding in decision.findings
+                for evidence in finding.evidence
+            )
+        ):
+            raise SubmissionConflict
+        return True
 
     def _record_call(self, connection: psycopg.Connection, call: ToolCall) -> None:
         row = connection.execute(
@@ -400,8 +482,7 @@ class InspectionRepository(PostgresRepository):
         with self._connect() as connection:
             rows = connection.execute(
                 sql.SQL(
-                    "SELECT record FROM {} WHERE task_id = %s "
-                    "ORDER BY step_id, call_id, attempt"
+                    "SELECT record FROM {} WHERE task_id = %s ORDER BY step_id, call_id, attempt"
                 ).format(self._table("sewer_tool_calls")),
                 (task_id,),
             ).fetchall()
@@ -422,9 +503,7 @@ class InspectionRepository(PostgresRepository):
                 if current.snapshot == snapshot:
                     return current
                 raise SubmissionConflict
-            updated = TaskRecord.model_validate(
-                current.model_dump() | {"snapshot": snapshot}
-            )
+            updated = TaskRecord.model_validate(current.model_dump() | {"snapshot": snapshot})
             connection.execute(
                 sql.SQL("UPDATE {} SET record = %s WHERE task_id = %s").format(
                     self._table("sewer_tasks")

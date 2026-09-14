@@ -1,6 +1,7 @@
 """Video initial-scan values; candidates and coverage are not a final inspection verdict."""
 
 from typing import Literal
+from uuid import UUID
 
 from pydantic import Field, model_validator
 
@@ -13,6 +14,24 @@ from .inspection import ImageObservation, QualitySummary
 class FrameObservation(ImageObservation):
     frame_index: int = Field(ge=0)
     timestamp_seconds: float = Field(ge=0)
+
+
+class VideoFrameToolPin(ContractModel):
+    version: Literal["video-frame-tool-v1"] = "video-frame-tool-v1"
+    parent_task_id: UUID
+    video_asset: AssetRef
+    frame_asset: AssetRef
+    frame_index: int = Field(ge=0)
+    timestamp_seconds: float = Field(ge=0)
+    width: int = Field(gt=0)
+    height: int = Field(gt=0)
+    operation: Literal["enhance", "segment", "relative_depth", "relative_measure"]
+
+    @model_validator(mode="after")
+    def distinct_source_assets(self):
+        if self.frame_asset == self.video_asset:
+            raise ValueError("frame asset must be derived from its video")
+        return self
 
 
 class FrameLocator(ContractModel):

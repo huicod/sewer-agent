@@ -1,22 +1,28 @@
 """Atomic PostgreSQL checkpoints for the initial video scan."""
 
 from datetime import datetime, timezone
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import psycopg
 from psycopg import sql
 from psycopg.types.json import Jsonb
 
-from pipe_inspector.contracts.assets import AssetKind, AssetRecord
-from pipe_inspector.contracts.intake import TaskRecord
-from pipe_inspector.contracts.tasks import TaskSnapshot
+from pipe_inspector.agent.recall_policy import decide_image_recall
+from pipe_inspector.agent.supplement_policy import SUPPLEMENT_POLICY_VERSION
+from pipe_inspector.contracts.assets import AssetKind, AssetRecord, AssetRef
+from pipe_inspector.contracts.findings import EvidenceRef, Finding
+from pipe_inspector.contracts.geometry import GeometryOptions
+from pipe_inspector.contracts.inspection import ImageObservation, ImageReview, InspectionDecision
+from pipe_inspector.contracts.intake import FrameSource, TaskRecord, TaskSubmission
+from pipe_inspector.contracts.tasks import RuntimeStatus, TaskSnapshot
 from pipe_inspector.contracts.video import (
     FrameObservation,
     VideoAggregationState,
+    VideoFrameToolPin,
     VideoScanResult,
 )
 from pipe_inspector.storage.repository import MissingRecord, SubmissionConflict
-from pipe_inspector.storage.supplements import SupplementRepository
+from pipe_inspector.storage.supplements import SupplementNotAllowed, SupplementRepository
 from pipe_inspector.vision.video_events import aggregate_chunk
 
 
@@ -26,8 +32,10 @@ class VideoRepository(SupplementRepository):
     def initialize(self) -> None:
         super().initialize()
         tasks = self._table("sewer_tasks")
+        assets = self._table("sewer_assets")
         states = self._table("sewer_video_states")
         chunks = self._table("sewer_video_chunks")
+        frame_tools = self._table("sewer_video_frame_tools")
         with self._connect() as connection:
             connection.execute(
                 sql.SQL(
@@ -54,6 +62,352 @@ class VideoRepository(SupplementRepository):
                     """
                 ).format(chunks, tasks)
             )
+            connection.execute(
+                sql.SQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS {} (
+                        parent_task_id uuid NOT NULL REFERENCES {} (task_id),
+                        frame_asset_id uuid NOT NULL,
+                        frame_asset_version integer NOT NULL,
+                        operation text NOT NULL CHECK (
+                            operation IN ('enhance', 'segment', 'relative_depth',
+                                          'relative_measure')
+                        ),
+                        task_id uuid UNIQUE NOT NULL REFERENCES {} (task_id),
+                        PRIMARY KEY (
+                            parent_task_id, frame_asset_id, frame_asset_version, operation
+                        ),
+                        FOREIGN KEY (frame_asset_id, frame_asset_version)
+                            REFERENCES {} (asset_id, version)
+                    )
+                    """
+                ).format(frame_tools, tasks, tasks, assets)
+            )
+
+    def _existing_frame_request(
+        self,
+        connection: psycopg.Connection,
+        parent_task_id: UUID,
+        submission: TaskSubmission,
+    ) -> TaskRecord | None:
+        row = connection.execute(
+            sql.SQL(
+                """
+                SELECT tasks.submission, tasks.record, tools.parent_task_id
+                FROM {} AS tasks
+                LEFT JOIN {} AS tools ON tools.task_id = tasks.task_id
+                WHERE tasks.request_id = %s
+                """
+            ).format(
+                self._table("sewer_tasks"),
+                self._table("sewer_video_frame_tools"),
+            ),
+            (submission.request_id,),
+        ).fetchone()
+        if row is None:
+            return None
+        record = TaskRecord.model_validate(row[1])
+        if (
+            TaskSubmission.model_validate(row[0]) != submission
+            or row[2] != parent_task_id
+            or record.frame_source is None
+        ):
+            raise SubmissionConflict
+        return record
+
+    def _frame_tool_context(
+        self,
+        connection: psycopg.Connection,
+        parent: TaskRecord,
+        submission: TaskSubmission,
+    ) -> tuple[AssetRecord, AssetRecord, FrameObservation, dict | None]:
+        if parent.session_id != submission.session_id or parent.parent_task_id is not None:
+            raise SubmissionConflict
+        if parent.snapshot.runtime_status not in {
+            RuntimeStatus.WAITING_REVIEW,
+            RuntimeStatus.COMPLETED,
+            RuntimeStatus.PARTIAL,
+        }:
+            raise SupplementNotAllowed("source_not_ready")
+        rows = []
+        for ref in (parent.input_asset, submission.input_asset):
+            row = connection.execute(
+                sql.SQL("SELECT record FROM {} WHERE asset_id = %s AND version = %s").format(
+                    self._table("sewer_assets")
+                ),
+                (ref.asset_id, ref.version),
+            ).fetchone()
+            if row is None:
+                raise MissingRecord
+            rows.append(AssetRecord.model_validate(row[0]))
+        video, frame = rows
+        if (
+            video.kind is not AssetKind.VIDEO
+            or video.parent is not None
+            or frame.kind is not AssetKind.FRAME
+            or frame.parent != video.ref
+        ):
+            raise SupplementNotAllowed("source_evidence_missing")
+
+        evidence_row = connection.execute(
+            sql.SQL("SELECT payload FROM {} WHERE task_id = %s AND step = 'video_evidence'").format(
+                self._table("sewer_step_checkpoints")
+            ),
+            (parent.snapshot.task_id,),
+        ).fetchone()
+        try:
+            matches = [
+                item
+                for item in evidence_row[0]["frames"]
+                if AssetRef.model_validate(item["asset"]) == frame.ref
+            ]
+        except (KeyError, TypeError, ValueError):
+            raise SupplementNotAllowed("source_evidence_missing") from None
+        if len(matches) != 1:
+            raise SupplementNotAllowed("source_evidence_missing")
+        artifact = matches[0]
+        try:
+            frame_index = artifact["frame_index"]
+            timestamp_seconds = artifact["timestamp_seconds"]
+            chunk_row = connection.execute(
+                sql.SQL(
+                    """
+                    SELECT observations FROM {}
+                    WHERE task_id = %s AND start_frame <= %s AND end_frame >= %s
+                    """
+                ).format(self._table("sewer_video_chunks")),
+                (parent.snapshot.task_id, frame_index, frame_index),
+            ).fetchone()
+            observations = [
+                FrameObservation.model_validate(item)
+                for item in chunk_row[0]
+                if item.get("frame_index") == frame_index
+            ]
+        except (KeyError, TypeError, ValueError):
+            raise SupplementNotAllowed("source_evidence_missing") from None
+        if len(observations) != 1:
+            raise SupplementNotAllowed("source_evidence_missing")
+        observation = observations[0]
+        if observation.timestamp_seconds != timestamp_seconds or (
+            observation.detection.width,
+            observation.detection.height,
+        ) != (frame.width, frame.height):
+            raise SupplementNotAllowed("source_evidence_missing")
+        verify_row = connection.execute(
+            sql.SQL("SELECT payload FROM {} WHERE task_id = %s AND step = %s").format(
+                self._table("sewer_step_checkpoints")
+            ),
+            (parent.snapshot.task_id, f"video_verify:{frame_index}"),
+        ).fetchone()
+        return video, frame, observation, None if verify_row is None else verify_row[0]
+
+    @staticmethod
+    def _frame_decision(
+        task_id: UUID,
+        frame: AssetRecord,
+        observation: FrameObservation,
+        video_verify: dict | None,
+    ) -> InspectionDecision:
+        try:
+            review = (
+                ImageReview.model_validate(video_verify["review"])
+                if video_verify is not None
+                else None
+            )
+        except (KeyError, TypeError, ValueError):
+            raise SupplementNotAllowed("source_evidence_missing") from None
+        image_observation = ImageObservation(
+            detection=observation.detection,
+            quality=observation.quality,
+        )
+        decision = decide_image_recall(task_id, frame.ref, image_observation, review)
+        findings = tuple(
+            Finding.model_validate(
+                finding.model_dump()
+                | {
+                    "evidence": tuple(
+                        EvidenceRef.model_validate(
+                            evidence.model_dump()
+                            | {
+                                "frame_index": observation.frame_index,
+                                "timestamp_seconds": observation.timestamp_seconds,
+                            }
+                        )
+                        for evidence in finding.evidence
+                    )
+                }
+            )
+            for finding in decision.findings
+        )
+        return InspectionDecision.model_validate(decision.model_dump() | {"findings": findings})
+
+    @staticmethod
+    def _validate_frame_tool_config(
+        config: dict,
+        parent: TaskRecord,
+        frame: AssetRecord,
+        observation: FrameObservation,
+    ) -> VideoFrameToolPin:
+        required = {
+            "operation": "supplement_review",
+            "parent_task_id": str(parent.snapshot.task_id),
+            "force_review": True,
+            "supplement_policy_version": SUPPLEMENT_POLICY_VERSION,
+        }
+        try:
+            pin = VideoFrameToolPin.model_validate(config["frame_source"])
+            if pin.operation == "enhance":
+                valid_operation = "enhancement" in config and "geometry" not in config
+            else:
+                options = GeometryOptions.model_validate(config["geometry"]["options"])
+                valid_operation = "enhancement" not in config and options.operation == pin.operation
+        except (KeyError, TypeError, ValueError):
+            raise SubmissionConflict from None
+        if (
+            any(config.get(key) != value for key, value in required.items())
+            or not valid_operation
+            or pin.parent_task_id != parent.snapshot.task_id
+            or pin.video_asset != parent.input_asset
+            or pin.frame_asset != frame.ref
+            or pin.frame_index != observation.frame_index
+            or pin.timestamp_seconds != observation.timestamp_seconds
+            or (pin.width, pin.height)
+            != (observation.detection.width, observation.detection.height)
+            or any(
+                config.get(key) != getattr(observation.detection, key)
+                for key in ("detector_id", "model_version", "label_space_version")
+            )
+        ):
+            raise SubmissionConflict
+        return pin
+
+    def admit_frame_tool(
+        self,
+        parent_task_id: UUID,
+        submission: TaskSubmission,
+        config: dict,
+    ) -> TaskRecord:
+        created_at = datetime.now(timezone.utc)
+        child_id = uuid4()
+        try:
+            with self._connect() as connection:
+                existing = self._existing_frame_request(connection, parent_task_id, submission)
+                if existing is not None:
+                    return existing
+                parent_row = connection.execute(
+                    sql.SQL("SELECT record FROM {} WHERE task_id = %s FOR UPDATE").format(
+                        self._table("sewer_tasks")
+                    ),
+                    (parent_task_id,),
+                ).fetchone()
+                if parent_row is None:
+                    raise MissingRecord
+                existing = self._existing_frame_request(connection, parent_task_id, submission)
+                if existing is not None:
+                    return existing
+                parent = TaskRecord.model_validate(parent_row[0])
+                video, frame, observation, video_verify = self._frame_tool_context(
+                    connection, parent, submission
+                )
+                pin = self._validate_frame_tool_config(config, parent, frame, observation)
+                used = connection.execute(
+                    sql.SQL(
+                        """
+                        SELECT 1 FROM {}
+                        WHERE parent_task_id = %s
+                          AND frame_asset_id = %s
+                          AND frame_asset_version = %s
+                          AND operation = %s
+                        """
+                    ).format(self._table("sewer_video_frame_tools")),
+                    (
+                        parent_task_id,
+                        frame.ref.asset_id,
+                        frame.ref.version,
+                        pin.operation,
+                    ),
+                ).fetchone()
+                if used is not None:
+                    raise SupplementNotAllowed("frame_tool_limit")
+                candidate = TaskRecord(
+                    **submission.model_dump(),
+                    created_at=created_at,
+                    snapshot=TaskSnapshot(task_id=child_id, updated_at=created_at),
+                    parent_task_id=parent_task_id,
+                    frame_source=FrameSource(
+                        video_asset=video.ref,
+                        frame_index=observation.frame_index,
+                        timestamp_seconds=observation.timestamp_seconds,
+                    ),
+                )
+                decision = self._frame_decision(child_id, frame, observation, video_verify)
+                image_observation = ImageObservation(
+                    detection=observation.detection, quality=observation.quality
+                )
+                connection.execute(
+                    sql.SQL(
+                        """
+                        INSERT INTO {} (
+                            request_id, task_id, session_id,
+                            input_asset_id, input_asset_version,
+                            created_at, submission, record
+                        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                        """
+                    ).format(self._table("sewer_tasks")),
+                    (
+                        submission.request_id,
+                        child_id,
+                        submission.session_id,
+                        frame.ref.asset_id,
+                        frame.ref.version,
+                        created_at,
+                        Jsonb(submission.model_dump(mode="json")),
+                        Jsonb(candidate.model_dump(mode="json")),
+                    ),
+                )
+                connection.execute(
+                    sql.SQL(
+                        """
+                        INSERT INTO {} (
+                            parent_task_id, frame_asset_id, frame_asset_version,
+                            operation, task_id
+                        ) VALUES (%s, %s, %s, %s, %s)
+                        """
+                    ).format(self._table("sewer_video_frame_tools")),
+                    (
+                        parent_task_id,
+                        frame.ref.asset_id,
+                        frame.ref.version,
+                        pin.operation,
+                        child_id,
+                    ),
+                )
+                connection.execute(
+                    sql.SQL("INSERT INTO {} (task_id, run_id, config) VALUES (%s, %s, %s)").format(
+                        self._table("sewer_inspection_runs")
+                    ),
+                    (child_id, uuid4(), Jsonb(config)),
+                )
+                checkpoints = {
+                    "detect": image_observation.model_dump(mode="json"),
+                    "source": {"task": parent.model_dump(mode="json"), "verify": None},
+                    "frame_source": {
+                        "pin": pin.model_dump(mode="json"),
+                        "observation": observation.model_dump(mode="json"),
+                        "video_verify": video_verify,
+                        "decision": decision.model_dump(mode="json"),
+                    },
+                }
+                checkpoint_insert = sql.SQL(
+                    "INSERT INTO {} (task_id, step, payload) VALUES (%s, %s, %s)"
+                ).format(self._table("sewer_step_checkpoints"))
+                for step, payload in checkpoints.items():
+                    connection.execute(checkpoint_insert, (child_id, step, Jsonb(payload)))
+        except psycopg.errors.ForeignKeyViolation as error:
+            raise MissingRecord from error
+        except psycopg.errors.UniqueViolation as error:
+            raise SubmissionConflict from error
+        return candidate
 
     @staticmethod
     def _is_empty_state(state: VideoAggregationState) -> bool:

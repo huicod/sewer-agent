@@ -9,6 +9,12 @@ from .common import ContractModel
 from .tasks import TaskSnapshot
 
 
+class FrameSource(ContractModel):
+    video_asset: AssetRef
+    frame_index: int = Field(ge=0)
+    timestamp_seconds: float = Field(ge=0)
+
+
 class SessionRecord(ContractModel):
     session_id: UUID
     created_at: AwareDatetime
@@ -29,11 +35,14 @@ class TaskRecord(ContractModel):
     created_at: AwareDatetime
     snapshot: TaskSnapshot
     parent_task_id: UUID | None = None
+    frame_source: FrameSource | None = None
 
     @model_validator(mode="after")
     def validate_parent_link(self) -> "TaskRecord":
         if self.parent_task_id == self.snapshot.task_id:
             raise ValueError("task cannot be its own parent")
+        if self.frame_source is not None and self.parent_task_id is None:
+            raise ValueError("frame source requires parent task")
         return self
 
 

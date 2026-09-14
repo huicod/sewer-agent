@@ -21,6 +21,7 @@ import type {
   TaskRecord,
   TurnRecord,
   TurnSubmission,
+  VideoEvidenceFrame,
 } from "./types";
 import { ReviewPanel } from "./ReviewPanel";
 import { VideoTimeline } from "./VideoTimeline";
@@ -77,7 +78,13 @@ type PendingSubmission = {
 
 type PendingTurn = TurnSubmission & {
   file: File | null;
+  frameAsset: AssetRef | null;
   sessionId: string;
+};
+
+type SelectedVideoFrame = {
+  parentTaskId: string;
+  frame: VideoEvidenceFrame;
 };
 
 type AppProps = {
@@ -99,6 +106,11 @@ function isActiveTurn(turn: TurnRecord): boolean {
 function formatError(error: unknown): string {
   if (error instanceof ApiError) return error.message;
   return "发生未知错误，请稍后重试";
+}
+
+function sameAssetRef(left: AssetRef | null, right: AssetRef | null): boolean {
+  if (left === null || right === null) return left === right;
+  return left.asset_id === right.asset_id && left.version === right.version;
 }
 
 function upsertTask(tasks: TaskRecord[], next: TaskRecord): TaskRecord[] {
@@ -145,9 +157,20 @@ type TaskCardProps = {
   onStart: (taskId: string) => void;
   onCancel: (taskId: string) => void;
   onReviewed: (task: TaskRecord, snapshot: TaskRecord["snapshot"]) => void;
+  onSelectFrame: (taskId: string, frame: VideoEvidenceFrame) => void;
+  frameSelectionDisabled: boolean;
 };
 
-function TaskCard({ task, starting, cancelling, onStart, onCancel, onReviewed }: TaskCardProps) {
+function TaskCard({
+  task,
+  starting,
+  cancelling,
+  onStart,
+  onCancel,
+  onReviewed,
+  onSelectFrame,
+  frameSelectionDisabled,
+}: TaskCardProps) {
   const [reviewOpen, setReviewOpen] = useState(false);
   const [mediaKind, setMediaKind] = useState<string | null>(null);
   const [mediaLoading, setMediaLoading] = useState(false);
@@ -179,7 +202,9 @@ function TaskCard({ task, starting, cancelling, onStart, onCancel, onReviewed }:
     <article className="task-card">
       <div className="task-card__heading">
         <div>
-          <p className="eyebrow">{task.parent_task_id ? "关联追加复检" : "检查任务"}</p>
+          <p className="eyebrow">
+            {task.frame_source ? "视频证据帧工具" : task.parent_task_id ? "关联追加复检" : "检查任务"}
+          </p>
           <h3>{task.instruction}</h3>
         </div>
         <span className={`status status--${task.snapshot.runtime_status}`}>
@@ -188,9 +213,20 @@ function TaskCard({ task, starting, cancelling, onStart, onCancel, onReviewed }:
       </div>
       {task.parent_task_id ? (
         <p className="task-hint">
-          复用原图片和检测证据，原结果保持不变。{" "}
+          {task.frame_source
+            ? "仅分析已存视频证据帧，不重新扫描视频，也不改写整片结论。"
+            : "复用原图片和检测证据，原结果保持不变。"}{" "}
           <a href={reportUrl(task.parent_task_id, "html")} target="_blank" rel="noreferrer">原任务报告</a>
         </p>
+      ) : null}
+      {task.frame_source ? (
+        <section aria-label="视频证据帧来源">
+          <p>来源：帧 {task.frame_source.frame_index} · {task.frame_source.timestamp_seconds} 秒；仅分析这一帧，不代表整段视频结论。</p>
+          <p className="evidence-links">
+            <a href={evidenceUrl(task.frame_source.video_asset)} target="_blank" rel="noreferrer">打开来源视频</a>
+            <a href={evidenceUrl(task.input_asset)} target="_blank" rel="noreferrer">打开证据帧</a>
+          </p>
+        </section>
       ) : null}
       {queued ? (
         <>
@@ -330,15 +366,20 @@ function TaskCard({ task, starting, cancelling, onStart, onCancel, onReviewed }:
         runtimeStatus={task.snapshot.runtime_status}
         findingIds={task.snapshot.findings.map((finding) => finding.finding_id)}
       />
-      {hasVideoLocator || mediaKind === "video" ? (
-        <VideoTimeline taskId={task.snapshot.task_id} snapshotRevision={task.snapshot.updated_at} />
+      {!task.frame_source && (hasVideoLocator || mediaKind === "video") ? (
+        <VideoTimeline
+          taskId={task.snapshot.task_id}
+          snapshotRevision={task.snapshot.updated_at}
+          onSelectFrame={(frame) => onSelectFrame(task.snapshot.task_id, frame)}
+          frameSelectionDisabled={frameSelectionDisabled}
+        />
       ) : null}
-      {!hasVideoLocator && !mediaKind ? (
+      {!task.frame_source && !hasVideoLocator && !mediaKind ? (
         <button type="button" className="secondary-button" disabled={mediaLoading} onClick={() => void discoverMedia()}>
           {mediaLoading ? "正在识别媒体…" : "查看媒体证据"}
         </button>
       ) : null}
-      {mediaKind && mediaKind !== "video" ? (
+      {!task.frame_source && mediaKind && mediaKind !== "video" ? (
         <a className="source-asset-link" href={evidenceUrl(task.input_asset)} target="_blank" rel="noreferrer">打开源图片</a>
       ) : null}
       {mediaError ? <p className="task-error" role="alert">{mediaError}</p> : null}
@@ -398,6 +439,7 @@ export default function App({ pollIntervalMs = 2_000 }: AppProps) {
   const [conversationFile, setConversationFile] = useState<File | null>(null);
   const [selectedTaskId, setSelectedTaskId] = useState("");
   const [selectedReferenceTaskId, setSelectedReferenceTaskId] = useState("");
+  const [selectedVideoFrame, setSelectedVideoFrame] = useState<SelectedVideoFrame | null>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [turnSubmitting, setTurnSubmitting] = useState(false);
@@ -424,6 +466,7 @@ export default function App({ pollIntervalMs = 2_000 }: AppProps) {
       setConversationFile(null);
       setSelectedTaskId("");
       setSelectedReferenceTaskId("");
+      setSelectedVideoFrame(null);
       pendingTurn.current = null;
     } catch (nextError) {
       setError(formatError(nextError));
@@ -659,6 +702,7 @@ export default function App({ pollIntervalMs = 2_000 }: AppProps) {
       setConversationFile(null);
       setSelectedTaskId("");
       setSelectedReferenceTaskId("");
+      setSelectedVideoFrame(null);
       conversationForm.current?.reset();
     } catch (nextError) {
       const message = formatError(nextError);
@@ -680,24 +724,28 @@ export default function App({ pollIntervalMs = 2_000 }: AppProps) {
       setConversationError("请输入对话内容");
       return;
     }
-    const taskId = selectedTaskId || null;
+    const taskId = selectedVideoFrame?.parentTaskId ?? (selectedTaskId || null);
     const referenceTaskId = selectedReferenceTaskId || null;
-    if (referenceTaskId && conversationFile) {
+    if (referenceTaskId && (conversationFile || selectedVideoFrame)) {
       setConversationError("保存结果对比不能同时上传新附件");
       return;
     }
+    const selectedFrameAsset = selectedVideoFrame?.frame.asset ?? null;
     let pending = pendingTurn.current;
     const sameIntent = Boolean(
       pending && pending.sessionId === session.session_id && pending.text === cleanText &&
       pending.task_id === taskId && pending.file === conversationFile &&
-      pending.reference_task_id === referenceTaskId,
+      pending.reference_task_id === referenceTaskId &&
+      sameAssetRef(pending.frameAsset, selectedFrameAsset),
     );
     if (!sameIntent) {
       setTurnSubmitting(true);
       setConversationError(null);
       try {
-        const reusableAsset = pending?.file === conversationFile ? pending.input_asset : null;
-        const inputAsset = reusableAsset ?? (conversationFile ? (await uploadAsset(conversationFile)).ref : null);
+        const reusableAsset = conversationFile !== null && pending?.file === conversationFile &&
+          pending.frameAsset === null ? pending.input_asset : null;
+        const inputAsset = selectedFrameAsset ?? reusableAsset ??
+          (conversationFile ? (await uploadAsset(conversationFile)).ref : null);
         pending = {
           request_id: crypto.randomUUID(),
           sessionId: session.session_id,
@@ -706,6 +754,7 @@ export default function App({ pollIntervalMs = 2_000 }: AppProps) {
           task_id: taskId,
           reference_task_id: referenceTaskId,
           file: conversationFile,
+          frameAsset: selectedFrameAsset,
         };
         pendingTurn.current = pending;
       } catch (nextError) {
@@ -725,8 +774,18 @@ export default function App({ pollIntervalMs = 2_000 }: AppProps) {
     pendingTurn.current.text === conversationText.trim() &&
     pendingTurn.current.task_id === (selectedTaskId || null) &&
     pendingTurn.current.reference_task_id === (selectedReferenceTaskId || null) &&
-    pendingTurn.current.file === conversationFile,
+    pendingTurn.current.file === conversationFile &&
+    sameAssetRef(pendingTurn.current.frameAsset, selectedVideoFrame?.frame.asset ?? null),
   );
+
+  function selectVideoFrame(parentTaskId: string, frame: VideoEvidenceFrame) {
+    setSelectedVideoFrame({ parentTaskId, frame });
+    setSelectedTaskId(parentTaskId);
+    setSelectedReferenceTaskId("");
+    setConversationFile(null);
+    if (conversationFileInput.current) conversationFileInput.current.value = "";
+    pendingTurn.current = null;
+  }
 
   return (
     <main className="app-shell">
@@ -781,6 +840,27 @@ export default function App({ pollIntervalMs = 2_000 }: AppProps) {
         </div>
         {conversationError ? <div className="conversation-error" role="alert">{conversationError}</div> : null}
         <form ref={conversationForm} className="conversation-form" onSubmit={(event) => void submitTurn(event)}>
+          {selectedVideoFrame ? (
+            <section className="task-hint" aria-label="已选视频证据帧">
+              <p>已选视频证据帧：帧 {selectedVideoFrame.frame.frame_index} · {selectedVideoFrame.frame.timestamp_seconds} 秒</p>
+              <p className="evidence-links">
+                <a href={evidenceUrl(selectedVideoFrame.frame.asset)} target="_blank" rel="noreferrer">打开已选帧</a>
+                <button
+                  type="button"
+                  className="secondary-button"
+                  disabled={turnSubmitting || hasActiveTurn}
+                  onClick={() => {
+                    setSelectedVideoFrame(null);
+                    setSelectedTaskId("");
+                    pendingTurn.current = null;
+                  }}
+                >取消选帧</button>
+              </p>
+              <p className="truth-note">
+                请在消息中明确要求增强，或提供原图像素 ROI 进行分割/相对测量；整帧相对深度可直接提出。不会自动执行工具。
+              </p>
+            </section>
+          ) : null}
           <label className="field">
             <span>对话内容</span>
             <textarea
@@ -801,8 +881,10 @@ export default function App({ pollIntervalMs = 2_000 }: AppProps) {
                 accept=".jpg,.jpeg,.png,.mp4,.mov,.avi,.mkv,image/jpeg,image/png,video/*"
                 onChange={(event) => {
                   const nextFile = event.target.files?.[0] ?? null;
+                  pendingTurn.current = null;
                   setConversationFile(nextFile);
                   if (nextFile) {
+                    setSelectedVideoFrame(null);
                     setSelectedTaskId("");
                     setSelectedReferenceTaskId("");
                   }
@@ -815,6 +897,8 @@ export default function App({ pollIntervalMs = 2_000 }: AppProps) {
               <select
                 value={selectedTaskId}
                 onChange={(event) => {
+                  pendingTurn.current = null;
+                  setSelectedVideoFrame(null);
                   setSelectedTaskId(event.target.value);
                   setSelectedReferenceTaskId("");
                   if (event.target.value) {
@@ -843,7 +927,7 @@ export default function App({ pollIntervalMs = 2_000 }: AppProps) {
                     if (conversationFileInput.current) conversationFileInput.current.value = "";
                   }
                 }}
-                disabled={!session || turnSubmitting || hasActiveTurn || !selectedTaskId}
+                disabled={!session || turnSubmitting || hasActiveTurn || !selectedTaskId || Boolean(selectedVideoFrame)}
               >
                 <option value="">不对比</option>
                 {tasks.filter((task) => task.snapshot.task_id !== selectedTaskId).map((task) => (
@@ -924,6 +1008,8 @@ export default function App({ pollIntervalMs = 2_000 }: AppProps) {
               onReviewed={(reviewedTask, snapshot) => {
                 setTasks((current) => upsertTask(current, { ...reviewedTask, snapshot }));
               }}
+              onSelectFrame={selectVideoFrame}
+              frameSelectionDisabled={turnSubmitting || hasActiveTurn}
             />
           ))}
         </div>

@@ -60,14 +60,22 @@ def build_geometry_config(settings, options: GeometryOptions, check_files=True):
     return config
 
 
-def validate_geometry_input(asset, options: GeometryOptions, task=None):
-    if asset.kind != "image" or asset.parent is not None:
+def validate_geometry_input(
+    asset, options: GeometryOptions, task=None, *, allow_frame: bool = False
+):
+    original_image = asset.kind == "image" and asset.parent is None
+    pinned_frame = allow_frame and asset.kind == "frame" and asset.parent is not None
+    if not (original_image or pinned_frame):
         raise InspectionStartError("geometry_image_only", "几何工具当前仅支持原始图片", 409)
     if asset.width * asset.height > MAX_GEOMETRY_PIXELS:
         raise InspectionStartError("geometry_pixel_limit", "原图超过几何工具像素预算", 409)
     if options.operation == "relative_depth":
         return None
     if options.finding_id is not None:
+        if pinned_frame:
+            raise InspectionStartError(
+                "geometry_finding_invalid", "视频帧工具请提供明确的原图像素 ROI", 409
+            )
         findings = (
             []
             if task is None or task.input_asset != asset.ref

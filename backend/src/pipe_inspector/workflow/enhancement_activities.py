@@ -37,6 +37,10 @@ def enhancement_baseline(repo, run, task, observation, review):
     saved = repo.load_step(task_id, "enhancement_source")
     if saved is not None:
         return InspectionDecision.model_validate(saved["decision"])
+    if "frame_source" in run["config"]:
+        from pipe_inspector.workflow.frame_tools import frozen_frame_context
+
+        return frozen_frame_context(repo, run, task)[2]
     if run["config"].get("operation") != "supplement_review":
         return decide_image_recall(task_id, task.input_asset, observation, review)
     parent = TaskRecord.model_validate(repo.load_step(task_id, "source")["task"]).snapshot
@@ -105,7 +109,12 @@ class EnhancementActivities(ImageActivities):
                 raise ValueError("pin mismatch")
             task = self.repo.get_task(UUID(run["task_id"]))
             asset = self.repo.get_asset(task.input_asset)
-            validate_enhancement_input(asset, options)
+            frame_tool = "frame_source" in run["config"]
+            if frame_tool:
+                from pipe_inspector.workflow.frame_tools import validate_frame_tool_context
+
+                validate_frame_tool_context(self.repo, run, task, asset)
+            validate_enhancement_input(asset, options, allow_frame=frame_tool)
         except (KeyError, ValueError, InspectionStartError):
             raise ApplicationError(
                 "Enhancement configuration changed",

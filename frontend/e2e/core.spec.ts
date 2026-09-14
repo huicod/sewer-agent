@@ -80,6 +80,40 @@ test("image/video dialogue, durable review, evidence reports and saved compariso
   await expect(videoCard.getByRole("link", { name: /证据帧/ }).first()).toBeVisible();
   await page.screenshot({ path: path.join(output, "screenshots/03-video-evidence.png"), fullPage: true });
 
+  const videoDetail = await (await page.request.get(`/api/tasks/${video}/video`)).json();
+  const selectedFrame = videoDetail.evidence.frames.find((frame: { frame_index: number }) =>
+    frame.frame_index === videoDetail.scan.state.events[0].evidence[0].frame_index,
+  );
+  expect(selectedFrame).toBeTruthy();
+  await videoCard.getByText(`选择已存证据帧（${videoDetail.evidence.frames.length}）`, {
+    exact: true,
+  }).click();
+  await videoCard.getByRole("button", {
+    name: `选择证据帧 ${selectedFrame.frame_index} 用于工具`, exact: true,
+  }).first().click();
+  await expect(page.getByLabel("已选视频证据帧", { exact: true })).toBeVisible();
+  await expect(page.getByLabel("关联已有任务（可选）")).toHaveValue(video);
+  await page.screenshot({ path: path.join(output, "screenshots/06-selected-video-frame.png"), fullPage: true });
+  // This synthetic browser journey checks the exact reference and safe boundary;
+  // actual frame enhancement/geometry execution has its own PG/Temporal integration test.
+  await page.getByLabel("对话内容", { exact: true }).fill("询问所选视频证据帧状态");
+  const frameAdmission = page.waitForResponse((response) =>
+    /\/api\/sessions\/[^/]+\/turns$/.test(response.url()) && response.request().method() === "POST",
+  );
+  await page.getByRole("button", { name: "发送消息", exact: true }).click();
+  const frameResponse = await frameAdmission;
+  expect(frameResponse.status()).toBe(202);
+  const frameTurn = await frameResponse.json();
+  expect(frameTurn.task_id).toBe(video);
+  expect(frameTurn.input_asset).toEqual(selectedFrame.asset);
+  await expect.poll(async () => {
+    const saved = await (await page.request.get(
+      `/api/sessions/${frameTurn.session_id}/turns/${frameTurn.request_id}`,
+    )).json();
+    expect(saved.status).not.toBe("failed");
+    return saved.reply;
+  }).toContain("所选帧入口仅支持");
+
   const second = await inspect(page, "image.png", "浏览器验收图片二：请检查并复核");
   await review(page, second);
   await page.getByLabel("关联已有任务（可选）").selectOption(second);
@@ -106,6 +140,7 @@ test("image/video dialogue, durable review, evidence reports and saved compariso
   expect(errors).toEqual([]);
   await writeFile(path.join(output, "browser-evidence.json"), JSON.stringify({
     image_tasks: [first, second], video_task: video, synthetic_models: true,
+    selected_frame: selectedFrame, selected_frame_turn: frameTurn.request_id,
     page_errors: errors, real_browser_http_postgres_temporal: true,
   }, null, 2));
 });

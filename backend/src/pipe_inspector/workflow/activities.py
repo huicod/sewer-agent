@@ -116,7 +116,7 @@ class ImageActivities:
             self.repo.record_call(uncertain)
 
     @staticmethod
-    def _configuration_changed_findings(task_id, asset, observation):
+    def _configuration_changed_findings(task_id, asset, observation, run):
         return tuple(
             Finding(
                 finding_id=uuid4(),
@@ -326,7 +326,7 @@ class ImageActivities:
                     runtime_status="failed",
                     inspection_result="inconclusive",
                     findings=self._configuration_changed_findings(
-                        task_id, task.input_asset, observation
+                        task_id, task.input_asset, observation, run
                     ),
                     coverage=CoverageSummary(
                         sufficient_coverage=True,
@@ -382,6 +382,10 @@ class ImageActivities:
 
                     decision = self._decide(run, task, observation, review, error)
                     decision = apply_open_results(self.repo, run, decision)
+                if "frame_source" in run["config"]:
+                    from pipe_inspector.workflow.frame_tools import localize_frame_decision
+
+                    decision = localize_frame_decision(self.repo, run, task, decision)
                 partial = (
                     bool(error)
                     or bool(geometry_error)

@@ -83,6 +83,10 @@ class ConversationDispatcher:
                 "已选择比较参考任务，但本条没有明确解析为比较请求；本次未执行工具。"
                 "请明确比较两份检查，或清除比较参考后发送其他操作。"
             )
+        if turn.task_id is not None and turn.input_asset is not None:
+            selected_asset = await asyncio.to_thread(self.repo.get_asset, turn.input_asset)
+            if selected_asset.kind == "frame":
+                return await self._frame_tool(turn, intent, await self._target(turn))
         if intent.kind == "compare":
             from pipe_inspector.agent.comparison import compare_saved_tasks
             from pipe_inspector.contracts.comparison import ComparisonResult
@@ -180,17 +184,26 @@ class ConversationDispatcher:
                 "请先选择已有任务，或上传图片/视频并发起检查；目前没有可引用的检查证据。"
             )
         snapshot = task.snapshot
+        frame_note = ""
+        if task.frame_source is not None:
+            source = task.frame_source
+            frame_note = (
+                f"仅针对所选帧 {source.frame_index}（原视频时间 {source.timestamp_seconds:g} 秒）；"
+                "整段视频结论不变。"
+            )
         if intent.kind == "report":
             message = (
                 "证据报告已准备，可通过关联任务查看 JSON 或 HTML。"
                 if snapshot.is_terminal
                 else "任务仍在处理，最终报告尚未就绪；请先查看关联任务进度。"
             )
-            return self._reply(message, snapshot.task_id)
+            return self._reply(frame_note + message, snapshot.task_id)
         lines = [
             f"结果：{RESULTS[snapshot.inspection_result]}；任务状态：{snapshot.runtime_status.value}。",
             f"覆盖充分：{snapshot.coverage.sufficient_coverage}；画质充分：{snapshot.coverage.sufficient_quality}；阴性审计完成：{snapshot.coverage.negative_audit_complete}。",
         ]
+        if frame_note:
+            lines.insert(0, frame_note)
         if snapshot.waiting_reason:
             lines.append("限制/待处理：" + snapshot.waiting_reason[:500])
         selected = [
@@ -237,6 +250,62 @@ class ConversationDispatcher:
                              "无标定，不能换算真实尺寸；分割与相对深度图见关联任务证据面板。")
                 break
         return self._reply("\n".join(lines), snapshot.task_id)
+
+    async def _frame_tool(self, turn, intent, task):
+        tail = {ActionKind.SUMMARIZE, ActionKind.EXPORT_REPORT}
+        operations = set(intent.actions) - tail
+        if intent.kind not in {"inspect", "supplement"} or intent.auto_enhancement:
+            return self._reply(
+                "所选帧入口仅支持本轮明确指定一种增强或几何操作；"
+                "查询原视频请先清除选帧。本次未执行工具。"
+            )
+        if operations == {ActionKind.ENHANCE} and intent.enhancement is not None:
+            options = {"enhancement": intent.enhancement}
+        elif (
+            intent.geometry is not None
+            and operations == {intent.geometry.operation}
+            and intent.geometry.finding_id is None
+        ):
+            options = {"geometry": intent.geometry}
+        else:
+            return self._reply(
+                "请对所选帧指定一种暗光恢复、去雾、去模糊、局部超分或几何操作。"
+                "分割/相对测量和局部超分需提供该帧像素框；整帧相对深度无需框。"
+                "不追加原图VLM或自动增强，本次未执行工具。"
+            )
+        if task is None:
+            return self._reply("请从已有视频任务的时间线选择所选帧，本次未执行工具。")
+        parent_id = task.snapshot.task_id
+        submission = TaskSubmission(
+            request_id=turn.request_id,
+            session_id=turn.session_id,
+            input_asset=turn.input_asset,
+            instruction=turn.text,
+        )
+        try:
+            child = await self.starter.admit_frame_tool(parent_id, submission, **options)
+        except SupplementNotAllowed as exc:
+            reason = {
+                "frame_tool_limit": "所选帧的该工具操作额度已使用，请查看原关联任务。",
+                "source_not_ready": "视频尚未完成证据保存，请等待视频结果或人工审核阶段。",
+                "source_evidence_missing": "所选帧缺少与原视频匹配的已保存证据。",
+            }.get(exc.code, "所选帧不符合视频证据工具的准入条件。")
+            return self._reply(reason + "本次未执行新工具，原视频结果不变。", parent_id)
+        except InspectionStartError as exc:
+            return self._reply(str(exc) + "；本次未执行工具，原视频结果不变。", parent_id)
+        child_id = child.snapshot.task_id
+        await asyncio.to_thread(self.repo.update_turn, turn.request_id, linked_task_id=child_id)
+        await self.starter.start(child_id)
+        if child.snapshot.is_terminal:
+            return self._reply(
+                "已复用所选帧的已有工具结果，未新建任务或重复执行；原视频结果不变。",
+                child_id,
+            )
+        return self._reply(
+            "视频证据帧工具已启动，仅针对所选帧，复用冻结证据，不重新扫描或复检原视频。"
+            "单帧工具结果尚未完成，可在关联任务查看进度；不会改写整段视频结论。",
+            child_id,
+        )
 
     async def _supplement(self, turn, intent, task):
         if set(intent.actions) & {ActionKind.SEGMENT, ActionKind.RELATIVE_DEPTH,

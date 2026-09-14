@@ -46,6 +46,9 @@ relative_measure 本身包含分割、深度和统计，是一个操作包；“
 二者不能同时提供，不猜坐标/ID。缺区域返回clarify，提示先检测后选择finding ID或提供坐标。
 整图relative_depth无需框，其roi_xyxy和finding_id都填null。不使用分割框面积代替实际掩膜面积。
 新上传检查用inspect+显式ROI或整图深度；对已有任务执行几何工具用supplement，可引用finding_id。
+对界面所选视频证据帧执行工具用supplement：仅一种显式增强或几何操作，帧由服务端绑定，
+不从时间描述猜测帧号、资产ID或像素框。分割/相对测量需该帧明确像素框，不用视频finding_id；
+整帧relative_depth无需框。此入口不自动增强、不追加verify，不表示处理整段视频。
 仅当请求 geometry 时，本次只选一种几何操作包，不能同时请求增强/自动增强；
 几何supplement还不能追加verify，几何inspect可以包含原图verify。违反这些组合限制才返回clarify。
 要求毫米/米尺寸、真实裂缝深度/体积/管道堵塞率时返回clarify，说明无标定仅能提供像素或相对量，

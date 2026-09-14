@@ -74,12 +74,19 @@ export type TaskSnapshot = {
 
 export type TaskRecord = {
   parent_task_id?: string | null;
+  frame_source?: VideoFrameSource | null;
   request_id: string;
   session_id: string;
   input_asset: AssetRef;
   instruction: string;
   created_at: string;
   snapshot: TaskSnapshot;
+};
+
+export type VideoFrameSource = {
+  video_asset: AssetRef;
+  frame_index: number;
+  timestamp_seconds: number;
 };
 
 export type SessionRecord = {

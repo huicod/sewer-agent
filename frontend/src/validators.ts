@@ -213,6 +213,7 @@ export function isTaskSnapshot(value: unknown): value is TaskSnapshot {
 }
 
 export function isTaskRecord(value: unknown): value is TaskRecord {
+  const parentTaskId = isRecord(value) ? value.parent_task_id : undefined;
   return (
     isRecord(value) &&
     isUuid(value.request_id) &&
@@ -222,8 +223,22 @@ export function isTaskRecord(value: unknown): value is TaskRecord {
     isTimestamp(value.created_at) &&
     isTaskSnapshot(value.snapshot) &&
     (value.parent_task_id === undefined || value.parent_task_id === null ||
-      (isUuid(value.parent_task_id) && value.parent_task_id !== value.snapshot.task_id))
+      (isUuid(value.parent_task_id) && value.parent_task_id !== value.snapshot.task_id)) &&
+    (value.frame_source === undefined || value.frame_source === null ||
+      (isUuid(parentTaskId) && isVideoFrameSource(value.frame_source)))
   );
+}
+
+const VIDEO_FRAME_SOURCE_FIELDS = new Set([
+  "video_asset", "frame_index", "timestamp_seconds",
+]);
+
+function isVideoFrameSource(value: unknown): boolean {
+  return isRecord(value) && hasExactFields(value, VIDEO_FRAME_SOURCE_FIELDS) &&
+    isRecord(value.video_asset) &&
+    hasExactFields(value.video_asset, new Set(["asset_id", "version"])) &&
+    isAssetRef(value.video_asset) && isNonNegativeInteger(value.frame_index) &&
+    isNonNegativeFinite(value.timestamp_seconds);
 }
 
 export function isSessionDetail(value: unknown): value is SessionDetail {
@@ -719,6 +734,9 @@ const TASK_FIELDS = new Set([
   "request_id", "session_id", "input_asset", "instruction", "created_at", "snapshot",
 ]);
 const TASK_FIELDS_WITH_PARENT = new Set([...TASK_FIELDS, "parent_task_id"]);
+const TASK_FIELDS_WITH_FRAME_SOURCE = new Set([
+  ...TASK_FIELDS_WITH_PARENT, "frame_source",
+]);
 const SNAPSHOT_FIELDS = new Set([
   "schema_version", "task_id", "runtime_status", "inspection_result", "stage", "stage_progress",
   "overall_progress", "processed_frames", "processed_chunks", "active_tool", "retry_count",
@@ -737,7 +755,8 @@ const EVIDENCE_FIELDS = new Set(["asset", "region", "frame_index", "timestamp_se
 function isExactComparisonTask(value: unknown): value is TaskRecord {
   if (
     !isRecord(value) ||
-    !(hasExactFields(value, TASK_FIELDS) || hasExactFields(value, TASK_FIELDS_WITH_PARENT)) ||
+    !(hasExactFields(value, TASK_FIELDS) || hasExactFields(value, TASK_FIELDS_WITH_PARENT) ||
+      hasExactFields(value, TASK_FIELDS_WITH_FRAME_SOURCE)) ||
     !isTaskRecord(value) || !isRecord(value.snapshot)
   ) return false;
   const snapshot = value.snapshot;

@@ -12,8 +12,13 @@ from pipe_inspector.workflow.activities import ImageActivities
 
 
 class SupplementActivities(ImageActivities):
-    def _configuration_changed_findings(self, task_id, asset, observation):
-        findings = super()._configuration_changed_findings(task_id, asset, observation)
+    def _configuration_changed_findings(self, task_id, asset, observation, run):
+        if "frame_source" in run["config"]:
+            from pipe_inspector.workflow.frame_tools import frozen_frame_context
+
+            task = self.repo.get_task(task_id)
+            return frozen_frame_context(self.repo, run, task)[2].findings
+        findings = super()._configuration_changed_findings(task_id, asset, observation, run)
         source = self.repo.load_step(task_id, "source")
         parent = TaskRecord.model_validate(source["task"])
         return findings + tuple(
@@ -23,15 +28,17 @@ class SupplementActivities(ImageActivities):
         )
 
     def _decide(self, run, task, observation, review, error):
+        if "frame_source" in run["config"]:
+            from pipe_inspector.workflow.frame_tools import frozen_frame_context
+
+            return frozen_frame_context(self.repo, run, task)[2]
         if "auto_enhancement" in run["config"] and "enhancement" not in run["config"]:
             from pipe_inspector.agent.enhancement_fusion import apply_enhancement_review
             from pipe_inspector.workflow.enhancement_activities import enhancement_baseline
 
             baseline = enhancement_baseline(self.repo, run, task, observation, review)
             return (
-                apply_enhancement_review(baseline, None, None, error=error)
-                if error
-                else baseline
+                apply_enhancement_review(baseline, None, None, error=error) if error else baseline
             )
         source = self.repo.load_step(task.snapshot.task_id, "source")
         parent = TaskRecord.model_validate(source["task"])

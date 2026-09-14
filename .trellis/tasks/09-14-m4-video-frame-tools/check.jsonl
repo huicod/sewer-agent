@@ -1,0 +1,2 @@
+{"file":".trellis/spec/backend/conventions.md","reason":"Durable source and budget integrity"}
+{"file":".trellis/spec/frontend/conventions.md","reason":"Read-only evidence and retry identity"}

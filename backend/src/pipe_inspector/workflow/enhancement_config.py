@@ -66,8 +66,12 @@ def selected_enhancement_pin(config, selection):
     return candidate | {"options": options.model_dump(mode="json")}
 
 
-def validate_enhancement_input(asset, options: EnhancementOptions) -> None:
-    if asset.kind != "image" or asset.parent is not None:
+def validate_enhancement_input(
+    asset, options: EnhancementOptions, *, allow_frame: bool = False
+) -> None:
+    original_image = asset.kind == "image" and asset.parent is None
+    pinned_frame = allow_frame and asset.kind == "frame" and asset.parent is not None
+    if not (original_image or pinned_frame):
         raise InspectionStartError("enhancement_image_only", "当前增强只支持原始图片任务", 409)
     if options.kind == "super_resolution" and options.roi_xyxy is None:
         raise InspectionStartError("enhancement_roi_required", "请提供局部超分的原图像素框", 409)

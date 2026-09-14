@@ -6,7 +6,7 @@ from uuid import UUID
 from psycopg import sql
 from psycopg.types.json import Jsonb
 
-from pipe_inspector.contracts.assets import AssetKind, AssetRecord
+from pipe_inspector.contracts.assets import AssetKind, AssetRecord, AssetRef
 from pipe_inspector.contracts.intake import TaskRecord
 from pipe_inspector.contracts.turns import TurnRecord, TurnSubmission
 from pipe_inspector.storage.inspection import InspectionRepository
@@ -56,16 +56,63 @@ class ConversationRepository(InspectionRepository):
         asset = None
         if submission.input_asset is not None:
             asset_row = connection.execute(
-                sql.SQL(
-                    "SELECT record FROM {} WHERE asset_id = %s AND version = %s"
-                ).format(self._table("sewer_assets")),
+                sql.SQL("SELECT record FROM {} WHERE asset_id = %s AND version = %s").format(
+                    self._table("sewer_assets")
+                ),
                 (submission.input_asset.asset_id, submission.input_asset.version),
             ).fetchone()
             if asset_row is None:
                 raise MissingRecord
             asset = AssetRecord.model_validate(asset_row[0])
-            if asset.kind not in {AssetKind.IMAGE, AssetKind.VIDEO} or asset.parent is not None:
+            original = asset.kind in {AssetKind.IMAGE, AssetKind.VIDEO} and asset.parent is None
+            selected_frame = asset.kind is AssetKind.FRAME and asset.parent is not None
+            if not original and not selected_frame:
                 raise SubmissionConflict
+            if selected_frame:
+                if submission.task_id is None:
+                    raise SubmissionConflict
+                task_row = connection.execute(
+                    sql.SQL("SELECT record FROM {} WHERE task_id = %s").format(
+                        self._table("sewer_tasks")
+                    ),
+                    (submission.task_id,),
+                ).fetchone()
+                if task_row is None:
+                    raise MissingRecord
+                selected_task = TaskRecord.model_validate(task_row[0])
+                if (
+                    selected_task.session_id != submission.session_id
+                    or selected_task.input_asset != asset.parent
+                    or selected_task.parent_task_id is not None
+                ):
+                    raise SubmissionConflict
+                source_row = connection.execute(
+                    sql.SQL("SELECT record FROM {} WHERE asset_id = %s AND version = %s").format(
+                        self._table("sewer_assets")
+                    ),
+                    (asset.parent.asset_id, asset.parent.version),
+                ).fetchone()
+                evidence_row = connection.execute(
+                    sql.SQL(
+                        "SELECT payload FROM {} WHERE task_id = %s AND step = 'video_evidence'"
+                    ).format(self._table("sewer_step_checkpoints")),
+                    (submission.task_id,),
+                ).fetchone()
+                try:
+                    source_asset = AssetRecord.model_validate(source_row[0])
+                    matches = [
+                        item
+                        for item in evidence_row[0]["frames"]
+                        if AssetRef.model_validate(item["asset"]) == asset.ref
+                    ]
+                except (KeyError, TypeError, ValueError):
+                    raise SubmissionConflict from None
+                if (
+                    source_asset.kind is not AssetKind.VIDEO
+                    or source_asset.parent is not None
+                    or len(matches) != 1
+                ):
+                    raise SubmissionConflict
             foreign_owner = connection.execute(
                 sql.SQL(
                     """
@@ -98,9 +145,10 @@ class ConversationRepository(InspectionRepository):
             task = TaskRecord.model_validate(task_row[0])
             if task.session_id != submission.session_id:
                 raise SubmissionConflict
-            if (task_id == submission.task_id and asset is not None
-                    and task.input_asset != asset.ref):
-                raise SubmissionConflict
+            if task_id == submission.task_id and asset is not None:
+                expected_asset = asset.parent if asset.kind is AssetKind.FRAME else asset.ref
+                if task.input_asset != expected_asset:
+                    raise SubmissionConflict
 
     def admit_turn(self, submission: TurnSubmission, config: dict) -> TurnRecord:
         created_at = datetime.now(timezone.utc)
@@ -318,9 +366,7 @@ class ConversationRepository(InspectionRepository):
             if "attempts" in changes:
                 changes["attempts"] = max(current.attempts, changes["attempts"])
             updated = TurnRecord.model_validate(
-                current.model_dump()
-                | changes
-                | {"updated_at": datetime.now(timezone.utc)}
+                current.model_dump() | changes | {"updated_at": datetime.now(timezone.utc)}
             )
             connection.execute(
                 sql.SQL("UPDATE {} SET record = %s WHERE request_id = %s").format(
