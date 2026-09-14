@@ -30,7 +30,7 @@ DETECTOR_ID = "business-restart-fixture"
 MODEL_VERSION = "fixture-v1"
 LABEL_SPACE_VERSION = "five"
 VLM_MODEL = "business-restart-reviewer-v1"
-_FRAME_NAME = re.compile(r"frame-(\d+)\.png$")
+_FRAME_NAME = re.compile(r"frame-(\d+)\.(?:png|bmp)$")
 
 
 class CallTrace:

@@ -62,6 +62,7 @@ def scan_video(
         with closing(
             decode_video_chunks(
                 source,
+                frame_format="BMP",
                 chunk_size=chunk_size,
                 timeout_seconds=timeout_seconds,
                 max_pixels=max_pixels,

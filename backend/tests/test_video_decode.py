@@ -69,9 +69,61 @@ def test_temporary_png_uses_fast_lossless_encoding(tmp_path, monkeypatch):
 
     monkeypatch.setattr(Image.Image, "save", save)
     for chunk in decode_video_chunks(source):
+        assert chunk[0].path.suffix == ".png"
         with Image.open(chunk[0].path) as image:
+            assert image.format == "PNG"
             assert image.size == (18, 12) and image.mode == "RGB"
     assert options == [{"format": "PNG", "compress_level": 1}]
+
+
+def test_bmp_frames_preserve_default_png_pixels_and_pts(tmp_path):
+    source = tmp_path / "lossless.mkv"
+    _make_cfr_video(source, frames=3)
+
+    png_decoder = decode_video_chunks(source)
+    png_frames = next(png_decoder)
+    png_pixels = []
+    for frame in png_frames:
+        assert frame.path.suffix == ".png"
+        with Image.open(frame.path) as image:
+            assert image.format == "PNG"
+            png_pixels.append(image.convert("RGB").tobytes())
+    png_pts = [frame.timestamp_seconds for frame in png_frames]
+    png_decoder.close()
+
+    bmp_decoder = decode_video_chunks(source, frame_format="BMP")
+    bmp_frames = next(bmp_decoder)
+    bmp_pixels = []
+    for frame in bmp_frames:
+        assert frame.path.suffix == ".bmp"
+        assert frame.path.read_bytes()[30:34] == b"\x00\x00\x00\x00"
+        with Image.open(frame.path) as image:
+            assert image.format == "BMP"
+            bmp_pixels.append(image.convert("RGB").tobytes())
+    bmp_pts = [frame.timestamp_seconds for frame in bmp_frames]
+    bmp_decoder.close()
+
+    assert bmp_pixels == png_pixels
+    assert bmp_pts == pytest.approx(png_pts)
+
+
+def test_rejects_unknown_frame_format_before_creating_scratch_directory(tmp_path):
+    source = tmp_path / "source.mkv"
+    source.touch()
+    scratch = tmp_path / "scratch"
+    scratch.mkdir()
+
+    with pytest.raises(VideoDecodeError) as caught:
+        list(
+            decode_video_chunks(
+                source,
+                frame_format="JPEG",  # type: ignore[arg-type]
+                scratch_root=scratch,
+            )
+        )
+
+    assert caught.value.code == "invalid_options"
+    assert not list(scratch.iterdir())
 
 
 def test_sparse_evidence_only_materializes_selected_originals(tmp_path, monkeypatch):

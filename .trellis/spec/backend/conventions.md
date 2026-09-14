@@ -18,6 +18,7 @@
 - Intake uses contracts/intake.py; initial submissions reference original image/video AssetRef IDs. The HTTP layer owns media upload and never accepts client filesystem paths.
 - PostgresRepository uses short psycopg transactions and explicit init_storage.py DDL; no schema mutation during request/import. UUID request_id is unique and binds one immutable submission across retries.
 - MediaStore preserves original bytes, uses Pillow for JPEG/PNG and bounded, file-only FFmpeg for video metadata/first-frame admission. Full video integrity/coverage belongs to later inspection.
+- Video primary scan uses lossless BMP only for bounded temporary chunks; `decode_video_chunks` defaults and persisted evidence stay PNG. Preserve RGB pixels, original PTS, suffix/encoding agreement and chunk cleanup; do not pass scan-only format choices into evidence/VLM assets.
 - Run storage integration explicitly with SEWER_RUN_STORAGE_TEST=1; each test uses and drops only its unique test-owned schema. Do not restart Temporal/PostgreSQL for intake tests.
 
 - Shared DASHSCOPE_API_KEY is an explicit exception to the SEWER_ prefix: reuse only for explicitly configured Qwen roles on allowlisted official HTTPS hosts. Other providers need explicit role keys; never dump configuration secrets.

@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 33
+- **Total Sessions**: 34
 - **Last Active**: 2026-09-14
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~1105 | Active |
+| `journal-1.md` | ~1139 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 34 | 2026-09-14 | 视频无损初查提速与四组收尾计划 | jj syylpnmz | `-` |
 | 33 | 2026-09-14 | T15-E 业务服务重启恢复验收完成 | jj wqqzlvlt | `-` |
 | 32 | 2026-09-14 | T15-D 真实视频资源与API用量验收完成 | jj opxksrwn | `-` |
 | 31 | 2026-09-14 | T15-C 故障矩阵与回执丢失浏览器验收完成 | jj stvsvnru | `-` |
@@ -68,7 +69,7 @@
 
 ## Notes
 
-- 恢复先读 Session33 与 `.trellis/tasks/09-14-m5-service-recovery/report.md`；T15-E完成，jj `wqqzlvlt`。实际Temporal/PG重启，图片待审快照/原框/调用不变，视频2帧1块续至6帧3块且各帧只检测一次；workflow/run ID不变，服务重启4.79秒、就绪后26.11秒恢复。证据var/evaluations/2026-09-14-business-restart-001，合成媒体/模型替身、0付费API。完整后端1064/146默认跳过、live1通过，Ruff/独立审查通过；不改产品策略/.env/依赖，不推送。schema/workflow/worker清理无残留，文件保留，应用127.0.0.1:8000恢复ready。下一步T15视频扫描效率/有效片段筛选及剩余交付验收；T14-B仍缺规范，自动关联增强/视频增强几何未接入，首版未整体交付。T15-D真实视频资源证据保留在上一Session。
+- 恢复先读 Session34 与 `.trellis/tasks/09-14-m5-video-efficiency/report.md`；jj `syylpnmz`。初查临时BMP、持久PNG；同561帧扫描/证据237.61→59.51秒，逐帧/聚合/5张PNG证据一致，0付费API。完整1066通过/146默认跳过，另启用视频集成5通过，Ruff/独立审查PASS；应用重载ready，PG/Temporal未重启。总体计划4.1记录剩余四组：视频效率/筛选、剩余工具入口、规范、集成冻结。当前第1组尚需有效片段筛选/长视频验收；第3组等规范编号/版本/来源。图片交互可立即人工试用，但首版未全项交付；不改图片VLM、不恢复开放补检、不推送。旧T15-D/E证据保留，无需重跑。
 
 - Sessions are appended to journal files
 - New journal file created when current exceeds 2000 lines

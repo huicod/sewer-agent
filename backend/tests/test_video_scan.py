@@ -1,5 +1,6 @@
 import subprocess
 from contextlib import closing
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -41,12 +42,13 @@ class PixelDetector:
 
     def __init__(self, *, batch=True, fail_after=None):
         self.capabilities = SimpleNamespace(supports_batch=batch)
-        self.batches, self.calls, self.fail_after = [], 0, fail_after
+        self.batches, self.calls, self.fail_after, self.paths = [], 0, fail_after, []
 
     def predict_image(self, path):
         if self.fail_after is not None and self.calls >= self.fail_after:
             raise RuntimeError("fixture inference failure")
         self.calls += 1
+        self.paths.append(Path(path))
         with Image.open(path) as im:
             width, height = im.size
             bright = im.convert("RGB").getpixel((width // 2, height // 2))[0] > 200
@@ -95,12 +97,15 @@ def test_real_decode_scans_every_frame_and_preserves_single_frame_event(clip, tm
     assert (event.start_frame, event.end_frame) == (2, 2)
     assert event.start_seconds == pytest.approx(0.4)
     assert detector.batches == ([2, 2, 2] if batch else [])
+    assert {path.suffix for path in detector.paths} == {".bmp"}
     assert result.inspection_result == "pending"
     evidence = extract_scan_evidence(clip, result, tmp_path / "evidence", chunk_size=2)
     assert {item.frame_index for item in evidence} == {0, 2}
+    assert {Path(item.relative_path).suffix for item in evidence} == {".png"}
     assert detector.calls == 6  # evidence extraction decodes only, does not infer
     event_frame = next(item for item in evidence if item.frame_index == 2)
     with Image.open(tmp_path / "evidence" / event_frame.relative_path) as im:
+        assert im.format == "PNG"
         assert im.convert("RGB").getpixel((16, 12))[0] > 200
 
 
@@ -177,6 +182,7 @@ def test_resume_does_not_infer_committed_prefix_and_keeps_original_event(clip, t
         on_progress=lambda index, timestamp: decoded.append(index),
     )
     assert detector.calls == 4
+    assert {path.suffix for path in detector.paths} == {".bmp"}
     assert decoded == [0, 1, 2, 3, 4, 5]
     assert resumed == original
 

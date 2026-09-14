@@ -13,7 +13,7 @@ import time
 from collections import deque
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, Iterator
+from typing import Callable, Iterator, Literal
 
 from PIL import Image
 
@@ -208,6 +208,7 @@ def _raw_frames(
 def decode_video_chunks(
     source: Path,
     *,
+    frame_format: Literal["PNG", "BMP"] = "PNG",
     chunk_size: int = 8,
     timeout_seconds: float = 30,
     max_pixels: int = 40_000_000,
@@ -216,9 +217,10 @@ def decode_video_chunks(
     on_progress: Callable[[int, float], None] | None = None,
     selected_frames: frozenset[int] | None = None,
 ) -> Iterator[tuple[DecodedFrame, ...]]:
-    """Decode all video frames once, yielding temporary PNG paths in bounded chunks."""
+    """Decode all video frames once, yielding temporary lossless paths in bounded chunks."""
     if (
-        chunk_size <= 0
+        frame_format not in ("PNG", "BMP")
+        or chunk_size <= 0
         or max_pixels <= 0
         or not math.isfinite(timeout_seconds)
         or timeout_seconds <= 0
@@ -306,11 +308,13 @@ def decode_video_chunks(
                 if chunk_directory is None:
                     chunk_directory = owned_root / f"chunk-{chunk_number:08d}"
                     chunk_directory.mkdir()
-                path = chunk_directory / f"frame-{info.index:012d}.png"
+                path = chunk_directory / f"frame-{info.index:012d}.{frame_format.lower()}"
                 try:
-                    Image.frombytes("RGB", (info.width, info.height), pixels).save(
-                        path, format="PNG", compress_level=1
-                    )
+                    image = Image.frombytes("RGB", (info.width, info.height), pixels)
+                    if frame_format == "PNG":
+                        image.save(path, format="PNG", compress_level=1)
+                    else:
+                        image.save(path, format="BMP")
                 except (OSError, ValueError) as exc:
                     raise VideoDecodeError("frame_write_failed") from exc
                 chunk.append(
