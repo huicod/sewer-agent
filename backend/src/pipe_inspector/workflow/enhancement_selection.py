@@ -89,7 +89,11 @@ class EnhancementSelectionActivities(EnhancementActivities):
                 await asyncio.to_thread(self.repo.load_step, task_id, "detect")
             )
             saved = await asyncio.to_thread(self.repo.load_step, task_id, "verify")
-            review = ImageReview.model_validate(saved["review"]) if saved.get("review") else None
+            review = (
+                ImageReview.model_validate(saved["review"])
+                if saved and saved.get("review")
+                else None
+            )
             baseline = await asyncio.to_thread(
                 enhancement_baseline, self.repo, run, task, observation, review
             )

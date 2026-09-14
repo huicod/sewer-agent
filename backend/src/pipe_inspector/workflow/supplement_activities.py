@@ -23,6 +23,16 @@ class SupplementActivities(ImageActivities):
         )
 
     def _decide(self, run, task, observation, review, error):
+        if "auto_enhancement" in run["config"] and "enhancement" not in run["config"]:
+            from pipe_inspector.agent.enhancement_fusion import apply_enhancement_review
+            from pipe_inspector.workflow.enhancement_activities import enhancement_baseline
+
+            baseline = enhancement_baseline(self.repo, run, task, observation, review)
+            return (
+                apply_enhancement_review(baseline, None, None, error=error)
+                if error
+                else baseline
+            )
         source = self.repo.load_step(task.snapshot.task_id, "source")
         parent = TaskRecord.model_validate(source["task"])
         prior = source.get("verify")

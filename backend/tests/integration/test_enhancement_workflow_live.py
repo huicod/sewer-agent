@@ -6,6 +6,7 @@ import os
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from threading import Event
+from types import SimpleNamespace
 from uuid import uuid4
 
 import numpy as np
@@ -15,7 +16,11 @@ from PIL import Image
 from pipe_inspector.config import Settings
 from pipe_inspector.contracts.assets import AssetRef
 from pipe_inspector.contracts.detection import Detection, DetectionBatch
-from pipe_inspector.contracts.enhancement import EnhancementOptions, EnhancementReview
+from pipe_inspector.contracts.enhancement import (
+    EnhancementOptions,
+    EnhancementProposal,
+    EnhancementReview,
+)
 from pipe_inspector.contracts.human_review import FindingReview, HumanReviewSubmission
 from pipe_inspector.contracts.inspection import (
     CandidateReview,
@@ -30,6 +35,7 @@ from pipe_inspector.storage.human_review import HumanReviewRepository
 from pipe_inspector.workflow.activities import ImageActivities
 from pipe_inspector.workflow.enhancement_activities import EnhancementActivities
 from pipe_inspector.workflow.enhancement_config import build_enhancement_config
+from pipe_inspector.workflow.enhancement_selection import EnhancementSelectionActivities
 from pipe_inspector.workflow.human_review_activities import HumanReviewActivities
 from pipe_inspector.workflow.image import ImageInspectionWorkflow
 from pipe_inspector.workflow.start import InspectionStarter, run_config
@@ -425,7 +431,8 @@ async def test_enhancement_conflict_waits_for_human_and_preserves_detector_box(l
             await handle.terminate("test cleanup")
 
 
-async def test_linked_supplement_enhances_frozen_parent_without_original_tools(live_case):
+@pytest.mark.parametrize("mode", ["explicit", "auto_selected", "auto_skipped"])
+async def test_linked_supplement_enhances_frozen_parent_without_original_tools(live_case, mode):
     settings, repo, media, parent = live_case
     detector = FixtureDetector([])
     parent_id = parent.snapshot.task_id
@@ -482,6 +489,11 @@ async def test_linked_supplement_enhances_frozen_parent_without_original_tools(l
     settings.enhancement_models_dir.mkdir(parents=True)
     (settings.enhancement_models_dir / FixtureModel.model_version).write_bytes(b"fixture")
     starter = InspectionStarter(settings, repo)
+    admission = (
+        {"enhancement": EnhancementOptions(kind="dehaze")}
+        if mode == "explicit"
+        else {"auto_enhancement": True}
+    )
     child = await starter.admit_supplement(
         parent_id,
         TaskSubmission(
@@ -490,7 +502,7 @@ async def test_linked_supplement_enhances_frozen_parent_without_original_tools(l
             input_asset=parent.input_asset,
             instruction="enhance only the frozen supplement evidence",
         ),
-        enhancement=EnhancementOptions(kind="dehaze"),
+        **admission,
     )
     child_id = child.snapshot.task_id
     run = repo.get_run(child_id)
@@ -508,6 +520,32 @@ async def test_linked_supplement_enhances_frozen_parent_without_original_tools(l
         reviewer=reviewer,
         model_factory=model_factory,
     )
+
+    async def propose(*args, **kwargs):
+        trace.append("select")
+        return EnhancementProposal(
+            options=None if mode == "auto_skipped" else EnhancementOptions(kind="dehaze"),
+            degradation="none" if mode == "auto_skipped" else "haze",
+            confidence="clear",
+            evidence="fixture scene evidence",
+            inspection_impact="fixture judgement on enhancement usefulness",
+        )
+
+    selector = EnhancementSelectionActivities(
+        settings, repo, media, selector=SimpleNamespace(propose=propose)
+    )
+    selection_ack_lost = False
+
+    @activity.defn(name="select_image_enhancement")
+    async def lose_selection_ack(run):
+        nonlocal selection_ack_lost
+        saved = await selector.select_image_enhancement(run)
+        if not selection_ack_lost:
+            selection_ack_lost = True
+            selector.selector = None  # persisted choice must avoid another API client
+            raise ApplicationError("fixture lost selection ack", type="fixture_ack_lost")
+        return saved
+
     client = await Client.connect(
         settings.temporal_address, namespace=settings.temporal_namespace
     )
@@ -523,6 +561,7 @@ async def test_linked_supplement_enhances_frozen_parent_without_original_tools(l
                         enhancement_activities.prepare_image_enhancement,
                         enhancement_activities.review_image_enhancement,
                         supplement_activities.finish_supplement,
+                        lose_selection_ack,
                     ],
                     activity_executor=executor,
                 ),
@@ -545,21 +584,32 @@ async def test_linked_supplement_enhances_frozen_parent_without_original_tools(l
 
         assert result["runtime_status"] == "completed"
         assert result["inspection_result"] == "normal"
-        assert trace == ["enhance", "enhancement_review"]
-        assert model_factory.calls == 1
+        enhanced = mode != "auto_skipped"
+        expected_trace = ([] if mode == "explicit" else ["select"]) + (
+            ["enhance", "enhancement_review"] if enhanced else []
+        )
+        assert trace == expected_trace
+        assert model_factory.calls == int(enhanced)
         assert repo.load_step(child_id, "verify") is None
         assert repo.load_step(child_id, "detect") == observation.model_dump(mode="json")
         source = repo.load_step(child_id, "source")
         assert source["task"] == frozen_json
-        assert repo.load_step(child_id, "enhancement_source")["decision"][
-            "inspection_result"
-        ] == "normal"
+        if enhanced:
+            assert repo.load_step(child_id, "enhancement_source")["decision"][
+                "inspection_result"
+            ] == "normal"
+        else:
+            assert repo.load_step(child_id, "enhance") is None
+        if mode != "explicit":
+            assert selection_ack_lost
+            selection = repo.load_step(child_id, "enhancement_selection")["selection"]
+            assert selection["status"] == ("selected" if enhanced else "skipped")
         assert repo.get_task(parent_id).model_dump(mode="json") == frozen_json
         assert repo.list_calls(parent_id) == ()
-        assert [call.step_id for call in repo.list_calls(child_id)] == [
-            "enhance",
-            "enhancement_review",
-        ]
+        assert {call.step_id for call in repo.list_calls(child_id)} == (
+            (set() if mode == "explicit" else {"enhancement_selection"})
+            | ({"enhance", "enhancement_review"} if enhanced else set())
+        )
         # A replayed admission must return the frozen child even when the local
         # deployment changes after completion. This touches only the dummy weight.
         checkpoint = settings.enhancement_models_dir / FixtureModel.model_version
@@ -572,7 +622,7 @@ async def test_linked_supplement_enhances_frozen_parent_without_original_tools(l
                 input_asset=child.input_asset,
                 instruction=child.instruction,
             ),
-            enhancement=EnhancementOptions(kind="dehaze"),
+            **admission,
         )
         assert recovered.snapshot.task_id == child_id
         assert repo.get_run(child_id) == run

@@ -192,7 +192,7 @@ async def test_auto_conversation_preflight_rejects_video_without_creating_task(t
 
 
 @pytest.mark.asyncio
-async def test_auto_supplement_is_not_silently_converted_to_explicit_enhancement():
+async def test_current_turn_auto_supplement_admits_without_explicit_enhancement():
     from types import SimpleNamespace
     from unittest.mock import AsyncMock
 
@@ -200,12 +200,18 @@ async def test_auto_supplement_is_not_silently_converted_to_explicit_enhancement
     from test_conversation_dispatch import Store
 
     store = Store()
-    starter = SimpleNamespace(admit_supplement=AsyncMock(), start=AsyncMock())
+    child = SimpleNamespace(snapshot=SimpleNamespace(task_id=uuid4(), is_terminal=False))
+    starter = SimpleNamespace(admit_supplement=AsyncMock(return_value=child), start=AsyncMock())
+    turn = store.turn.model_copy(update={"task_id": store.task.snapshot.task_id})
     reply = await ConversationDispatcher(store, starter).handle(
-        store.turn, auto_intent(kind="supplement")
+        turn, auto_intent(kind="supplement")
     )
-    assert "新建图片检查" in reply["reply"]
-    assert not store.created and starter.admit_supplement.call_count == 0
+    assert "按需增强" in reply["reply"]
+    assert not store.created
+    starter.admit_supplement.assert_awaited_once()
+    assert starter.admit_supplement.call_args.kwargs == {"auto_enhancement": True}
+    starter.start.assert_awaited_once_with(child.snapshot.task_id)
+    assert reply["linked_task_id"] == str(child.snapshot.task_id)
 
 
 @pytest.mark.asyncio

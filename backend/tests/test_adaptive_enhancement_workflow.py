@@ -99,6 +99,50 @@ async def test_uncertain_selection_saves_reason_but_does_not_run_enhancement(cas
     assert factory.call_count == 0
 
 
+@pytest.mark.asyncio
+async def test_linked_selector_uses_frozen_parent_baseline_without_child_verify(case):
+    from datetime import datetime, timezone
+
+    from pipe_inspector.contracts.intake import TaskRecord
+    from pipe_inspector.contracts.tasks import TaskSnapshot
+
+    selector, run, requests = automatic(case)
+    _, _, store, _, _, env = case
+    parent_id = uuid4()
+    parent = TaskRecord(
+        request_id=uuid4(),
+        session_id=uuid4(),
+        input_asset=store.task.input_asset,
+        instruction="原检查",
+        created_at=datetime.now(timezone.utc),
+        snapshot=TaskSnapshot(
+            task_id=parent_id,
+            updated_at=datetime.now(timezone.utc),
+            runtime_status="completed",
+            stage="finished",
+            inspection_result="normal",
+            coverage={
+                "sufficient_coverage": True,
+                "sufficient_quality": True,
+                "negative_audit_complete": True,
+            },
+        ),
+    )
+    run["config"].update(
+        operation="supplement_review",
+        parent_task_id=str(parent_id),
+        supplement_policy_version="supplement-policy-v2",
+    )
+    store.steps["source"] = {"task": parent.model_dump(mode="json"), "verify": None}
+    store.steps.pop("verify")
+
+    result = await env.run(selector.select_image_enhancement, run)
+
+    assert result["enhancement"]["model_id"] == "dehazeformer-mct"
+    assert requests[0]["baseline"].inspection_result == "normal"
+    assert requests[0]["baseline"].findings == ()
+
+
 def test_selector_failure_keeps_successful_original_review_confirmations(monkeypatch):
     from pipe_inspector.contracts.detection import Detection
     from pipe_inspector.contracts.inspection import ImageReview
@@ -130,3 +174,58 @@ def test_selector_failure_keeps_successful_original_review_confirmations(monkeyp
     assert finding["canonical_label"] == "AJ" and finding["score"] == 0.9
     assert finding["evidence"][0]["region"]["bbox_xyxy"] == [2, 3, 18, 20]
     assert "authentication_failed" in result["waiting_reason"]
+
+
+@pytest.mark.parametrize(
+    ("error", "runtime_status"),
+    [(None, "completed"), ("authentication_failed", "partial")],
+)
+def test_linked_auto_skip_or_error_finishes_from_frozen_parent_without_child_review(
+    case, error, runtime_status
+):
+    from datetime import datetime, timezone
+    from unittest.mock import AsyncMock, Mock
+
+    from pipe_inspector.contracts.intake import TaskRecord
+    from pipe_inspector.workflow.supplement_activities import SupplementActivities
+    from test_supplement_policy import observation, previous, review
+
+    enhanced, _, store, run, _, env = case
+    parent_snapshot = previous(store.task.input_asset, observation(), review("accept"))
+    parent = TaskRecord(
+        request_id=uuid4(),
+        session_id=uuid4(),
+        input_asset=store.task.input_asset,
+        instruction="原检查",
+        created_at=datetime.now(timezone.utc),
+        snapshot=parent_snapshot,
+    )
+    frozen = parent.model_dump(mode="json")
+    run["config"].pop("enhancement")
+    run["config"].update(
+        auto_enhancement={"version": "enhancement-selection-v1"},
+        operation="supplement_review",
+        parent_task_id=str(parent_snapshot.task_id),
+        supplement_policy_version="supplement-policy-v2",
+    )
+    store.steps["source"] = {"task": frozen, "verify": None}
+    store.steps.pop("verify")
+    detector = SimpleNamespace(predict_image=Mock(side_effect=AssertionError("must not detect")))
+    reviewer = SimpleNamespace(review=AsyncMock(side_effect=AssertionError("must not review")))
+    activities = SupplementActivities(
+        enhanced.settings, store, enhanced.media, detector=detector, reviewer=reviewer
+    )
+
+    result = env.run(activities.finish_supplement, {"run": run, "error": error})
+
+    assert result["runtime_status"] == runtime_status
+    assert result["inspection_result"] == "defects_found"
+    assert len(result["findings"]) == 1
+    assert result["findings"][0]["canonical_label"] == "PL"
+    assert result["findings"][0]["task_id"] == str(store.task_id)
+    assert store.steps["source"]["task"] == frozen
+    assert "verify" not in store.steps
+    detector.predict_image.assert_not_called()
+    reviewer.review.assert_not_awaited()
+    if error:
+        assert error in result["waiting_reason"]

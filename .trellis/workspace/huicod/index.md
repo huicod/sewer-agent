@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 35
+- **Total Sessions**: 36
 - **Last Active**: 2026-09-14
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~1173 | Active |
+| `journal-1.md` | ~1205 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 36 | 2026-09-14 | 关联原图按需增强补齐与收尾交接 | jj pmpmwrvw | `-` |
 | 35 | 2026-09-14 | 视频证据选择代码验收与长片运行交接 | jj nqxtwmnm | `-` |
 | 34 | 2026-09-14 | 视频无损初查提速与四组收尾计划 | jj syylpnmz | `-` |
 | 33 | 2026-09-14 | T15-E 业务服务重启恢复验收完成 | jj wqqzlvlt | `-` |
@@ -70,7 +71,7 @@
 
 ## Notes
 
-- 恢复先读 Session34 与 `.trellis/tasks/09-14-m5-video-efficiency/report.md`；jj `syylpnmz`。初查临时BMP、持久PNG；同561帧扫描/证据237.61→59.51秒，逐帧/聚合/5张PNG证据一致，0付费API。完整1066通过/146默认跳过，另启用视频集成5通过，Ruff/独立审查PASS；应用重载ready，PG/Temporal未重启。总体计划4.1记录剩余四组：视频效率/筛选、剩余工具入口、规范、集成冻结。当前第1组尚需有效片段筛选/长视频验收；第3组等规范编号/版本/来源。图片交互可立即人工试用，但首版未全项交付；不改图片VLM、不恢复开放补检、不推送。旧T15-D/E证据保留，无需重跑。
+- 恢复先读Session36及关联增强report（jj `pmpmwrvw`）；关联原图本轮授权auto已通过完整后端1096/150跳过、PG/Temporal增强8、前端94、TS/Ruff和独立审查。视频选帧代码jj `nqxtwmnm`已通过，Session35/report保存实验；751秒完整长片仍运行，终端22862，输出`var/evaluations/2026-09-14-video-selection/long-full/`，勿重复启动或重启共享PG/Temporal。接下来视频证据帧工具；规范待用户编号/版本/来源，最后构建重载与集成冻结。总体计划4.1为唯一收尾表；首版未全项交付，不改图片VLM、不恢复开放补检、不推送。
 
 - Sessions are appended to journal files
 - New journal file created when current exceeds 2000 lines

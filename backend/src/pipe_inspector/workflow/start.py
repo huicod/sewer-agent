@@ -169,11 +169,19 @@ class InspectionStarter:
         self.settings, self.repo, self.connect = settings, repository, connect
 
     async def admit_supplement(
-        self, parent_task_id: UUID, submission: TaskSubmission, *, enhancement=None, geometry=None
+        self,
+        parent_task_id: UUID,
+        submission: TaskSubmission,
+        *,
+        enhancement=None,
+        geometry=None,
+        auto_enhancement: bool = False,
     ):
-        if enhancement is not None and geometry is not None:
-            raise InspectionStartError("geometry_combination_invalid", "几何与增强请分开请求", 409)
-        if enhancement is not None or geometry is not None:
+        if sum((enhancement is not None, geometry is not None, auto_enhancement)) > 1:
+            raise InspectionStartError(
+                "geometry_combination_invalid", "几何与增强请分开请求", 409
+            )
+        if enhancement is not None or geometry is not None or auto_enhancement:
             existing = await asyncio.to_thread(
                 self.repo.find_task_by_request_id, submission.request_id
             )
@@ -201,6 +209,15 @@ class InspectionStarter:
             asset = await asyncio.to_thread(self.repo.get_asset, submission.input_asset)
             validate_enhancement_input(asset, enhancement)
             config["enhancement"] = build_enhancement_config(self.settings, enhancement)
+        if auto_enhancement:
+            from pipe_inspector.workflow.enhancement_config import build_auto_enhancement_config
+
+            asset = await asyncio.to_thread(self.repo.get_asset, submission.input_asset)
+            if asset.kind != AssetKind.IMAGE or asset.parent is not None:
+                raise InspectionStartError(
+                    "enhancement_image_only", "当前增强只支持原始图片任务", 409
+                )
+            config["auto_enhancement"] = build_auto_enhancement_config(self.settings)
         if geometry is not None:
             from pipe_inspector.workflow.geometry_config import (
                 build_geometry_config,

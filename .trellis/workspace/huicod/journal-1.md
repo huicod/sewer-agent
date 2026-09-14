@@ -1171,3 +1171,35 @@ T12-A 完成，保留五类/VLM/融合及开放补检退出在线的边界；T12
 
 - 继续观察var/evaluations/2026-09-14-video-selection/long-full完整751.163秒真实流程；当前约10fps扫描，验收物理API最多8次，未结束不能报全部通过。
 - 长片期间可推进总体计划第2组自动关联增强；视频证据帧入口、规范输入和最终集成仍待收尾，不推送。
+
+
+## Session 36: 关联原图按需增强补齐与收尾交接
+
+**Date**: 2026-09-14
+**Task**: 关联原图按需增强补齐与收尾交接
+
+### Summary
+
+总体计划4.1第2组关联auto入口通过；视频长片仍在运行，视频帧工具待接入。
+
+### Main Changes
+
+- 本轮授权关联原图选择至多一种增强；冻结原证据、共享一次额度，skip/error不重跑原检测或VLM。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `jj pmpmwrvw` | (see git log) |
+
+### Testing
+
+- [OK] 完整后端1096通过/150默认跳过，真实PG-Temporal增强8通过，前端94通过及TS检查，Ruff和独立Spec/Quality通过。
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- 继续751秒完整视频实测（终端22862，输出var/evaluations/2026-09-14-video-selection/long-full）；视频证据帧入口，规范仍待用户输入，最后构建重载与集成冻结。

@@ -236,6 +236,7 @@ describe("conversation-ready intake shell", () => {
     render(<App pollIntervalMs={60_000} />);
 
     expect(await screen.findByText(/必要时按需增强后再检查/)).toBeTruthy();
+    expect(screen.getByText(/对新图或关联原图/)).toBeTruthy();
   });
 
   it("shows a safe start failure and keeps the same task available for retry", async () => {

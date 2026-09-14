@@ -34,6 +34,29 @@ class ImageSupplementWorkflow:
             if "geometry" in run["config"]:
                 self.stage = "tools"
                 await run_image_geometry(run)
+            elif "auto_enhancement" in run["config"]:
+                self.stage = "tools"
+                selected = await workflow.execute_activity(
+                    "select_image_enhancement",
+                    run,
+                    start_to_close_timeout=timedelta(
+                        seconds=run["config"]["api_timeout_seconds"] + 30
+                    ),
+                    retry_policy=RetryPolicy(
+                        maximum_attempts=min(
+                            3,
+                            (run["config"].get("plan") or {})
+                            .get("budget", {})
+                            .get("max_transport_attempts", 3),
+                        )
+                    ),
+                )
+                if selected.get("enhancement") is not None:
+                    run = run | {
+                        "config": run["config"]
+                        | {"enhancement": selected["enhancement"]}
+                    }
+                    await run_image_enhancement(run)
             elif "enhancement" in run["config"]:
                 self.stage = "tools"
                 await run_image_enhancement(run)

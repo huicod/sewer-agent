@@ -763,7 +763,7 @@ export default function App({ pollIntervalMs = 2_000 }: AppProps) {
         </div>
         <p className="conversation-note">
           可询问已存证据、请求报告，或上传图片/视频启动检查。原图片任务可显式请求一次关联补证或图片增强；
-          也可在本次图片任务中说“必要时按需增强后再检查”，授权助手选择至多一种增强。
+          也可对新图或关联原图说“必要时按需增强后再检查”，仅在本轮授权助手选择至多一种增强。
           附件与已有任务二选一，选择一项会清除另一项。
         </p>
         <div className="transcript" aria-live="polite">

@@ -242,10 +242,6 @@ class ConversationDispatcher:
         if set(intent.actions) & {ActionKind.SEGMENT, ActionKind.RELATIVE_DEPTH,
                                   ActionKind.RELATIVE_MEASURE}:
             return await self._geometry_supplement(turn, intent, task)
-        if intent.auto_enhancement:
-            return self._reply(
-                "按需增强当前仅支持新建图片检查；关联任务可明确指定一种增强。本次未追加工具。"
-            )
         allowed = {
             ActionKind.VERIFY,
             ActionKind.ENHANCE,
@@ -259,7 +255,7 @@ class ConversationDispatcher:
                 "请求包含未部署工具，本次未执行任何追加操作。"
             )
         enhancement_requested = ActionKind.ENHANCE in requested
-        if enhancement_requested and intent.enhancement is None:
+        if enhancement_requested and intent.enhancement is None and not intent.auto_enhancement:
             return self._reply(
                 "请从暗光恢复、去雾、去模糊或局部超分中明确选择一种追加增强；"
                 "局部超分还需提供原图像素框。本次未执行。"
@@ -286,14 +282,18 @@ class ConversationDispatcher:
                 validate_existing_admission(
                     existing, submission, parent_task_id=parent_id
                 )
-        if enhancement_requested and existing is None:
+        if enhancement_requested and existing is None and not intent.auto_enhancement:
             asset = await asyncio.to_thread(self.repo.get_asset, task.input_asset)
             try:
                 self._preflight_enhancement(asset, intent.enhancement)
             except InspectionStartError as exc:
                 return self._reply(self._enhancement_error(exc), parent_id)
         supplement_kwargs = (
-            {"enhancement": intent.enhancement} if enhancement_requested else {}
+            {"auto_enhancement": True}
+            if intent.auto_enhancement
+            else {"enhancement": intent.enhancement}
+            if enhancement_requested
+            else {}
         )
         try:
             child = await self.starter.admit_supplement(
@@ -320,6 +320,12 @@ class ConversationDispatcher:
             return self._reply(
                 "已复用已有关联任务和结果，未新建补证或重复执行；"
                 "原任务和已固定运行参数保持不变。",
+                child_id,
+            )
+        if intent.auto_enhancement:
+            return self._reply(
+                "关联按需增强已启动，复用原图片和已冻结证据，不重新运行检测器或原图复检；"
+                "系统仅在当前轮许可下选择必要的增强，可在关联任务中查看进度和报告。",
                 child_id,
             )
         if enhancement_requested:
