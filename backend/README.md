@@ -133,6 +133,21 @@ SEWER_RUN_RESTART_TEST=1 .venv/bin/python -m pytest backend/tests/integration/te
 
 该测试已证明人工等待跨重启恢复、已确认完成的 Activity 不因重放再次写入。它不是完整业务工作流，也不证明所有崩溃窗口下 exactly-once；后续业务落库仍需唯一键及幂等提交。
 
+当前业务恢复验收（T15-E）使用真实图片/视频工作流、PG 和 Temporal，但媒体和模型均为测试替身，
+不调用 Qwen。它会中断测试 worker 并重启本机持久服务，**只用于本项目专用、无其他任务的维护窗口**。
+先用 `scripts/app.py stop` 停止应用，确认其他 worker/客户端也停止，再显式运行：
+
+```bash
+SEWER_RUN_RESTART_TEST=1 SEWER_RUN_BUSINESS_RESTART_TEST=1 \
+SEWER_BUSINESS_RESTART_OUTPUT="$PWD/var/evaluations/business-restart-new-run" \
+.venv/bin/python -m pytest backend/tests/integration/test_business_service_restart.py -q -s
+```
+
+双开关、本机集群、托管应用停止和无其他运行工作流均为准入条件；输出必须是新目录。
+场景覆盖图片人工等待与视频首块已提交后的续跑，不代表断电、磁盘损坏或所有崩溃窗口已验证。
+只给合成测试图片提交审核；保留证据，清理仅限自有测试 schema/workflow。
+无论测试成功与否，结束后检查 `scripts/runtime.py status` 并运行 `scripts/app.py start` 恢复网页。
+
 ## LLM/VLM 配置与真实联调
 
 两者均通过 API；当前适配器明确面向 OpenAI-compatible `chat/completions`，不是所有供应商的通用协议。按 `.env.example` 在服务器现有 `.env` 中补充各自的 Base URL、模型和密钥，不要覆盖运行时生成的数据库配置。

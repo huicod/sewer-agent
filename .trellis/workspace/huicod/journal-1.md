@@ -1069,3 +1069,37 @@ T12-A 完成，保留五类/VLM/融合及开放补检退出在线的边界；T12
 ### Next Steps
 
 - 从T15-D report.md恢复：业务服务中断、长视频效率/有效片段筛选、最终界面及全项验收；T14-B仍等用户指定标准。保持图片VLM策略/开放补检停用，不自动推送。
+
+
+## Session 33: T15-E 业务服务重启恢复验收完成
+
+**Date**: 2026-09-14
+**Task**: T15-E 业务服务重启恢复验收完成
+
+### Summary
+
+实际Temporal/PG重启，图片保持待审，视频首块后续跑无重复；补齐当前业务恢复证据，产品策略不改。
+
+### Main Changes
+
+- 恢复入口 .trellis/tasks/09-14-m5-service-recovery/report.md；四个测试文件，双开关及维护窗口守卫、跨进程调用轨迹、原workflow/run ID和服务身份核对。
+- 证据 var/evaluations/2026-09-14-business-restart-001；服务重启4.79秒、就绪后26.11秒续跑。仅合成媒体/模型替身，0付费API、无生产/.env/依赖/推送变更。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `jj wqqzlvlt` | (see git log) |
+
+### Testing
+
+- [OK] 完整后端1064 passed/146 skipped（23.84秒），重启另启用1 passed（37.88秒）；Ruff、diff和独立审查PASS。单文件导入收集缺陷已修，首次失败未中断持久服务。
+- [OK] 图片detect/review各1次、快照和原框不变，合成审核幂等；视频2帧1块→6帧3块，帧0..5各一次。schema/workflow/test worker清理无残留，public任务0。应用127.0.0.1:8000已恢复ready。
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- 继续T15视频扫描效率/有效片段筛选及剩余交付验收；T14-B仍等标准编号/版本/来源，自动关联增强和视频增强/几何未接入，首版未整体交付。保持图片VLM策略及开放补检停用，不推送。

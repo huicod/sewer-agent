@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 32
+- **Total Sessions**: 33
 - **Last Active**: 2026-09-14
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~1071 | Active |
+| `journal-1.md` | ~1105 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 33 | 2026-09-14 | T15-E 业务服务重启恢复验收完成 | jj wqqzlvlt | `-` |
 | 32 | 2026-09-14 | T15-D 真实视频资源与API用量验收完成 | jj opxksrwn | `-` |
 | 31 | 2026-09-14 | T15-C 故障矩阵与回执丢失浏览器验收完成 | jj stvsvnru | `-` |
 | 30 | 2026-09-13 | T16 本机一体化运行与交付入口完成 | jj urlozrsx | `-` |
@@ -67,7 +68,7 @@
 
 ## Notes
 
-- 恢复先读 Session32 与 `.trellis/tasks/09-14-m5-video-cost/report.md`；T15-D完成，jj `opxksrwn`。两次真实视频共1311帧/165块、13次Qwen请求/57533tokens，估算0.622020元；第二段8帧在发送前预算拒绝，两次均待审。原图/JSON在var/evaluations/2026-09-14-video-cost；实测2.05/2.22fps，扫描效率与非管内片段预算消耗仍待优化。完整后端1054/145默认跳过，Ruff与限定审查通过；不改产品策略/模型/.env/依赖，不推送。测试自有workflow/schema已清理，文件保留，应用127.0.0.1:8000持续ready。下一步T15剩余全项、业务服务中断、长视频效率/有效片段及用户界面验收；T14-B仍缺规范，首版未整体交付。
+- 恢复先读 Session33 与 `.trellis/tasks/09-14-m5-service-recovery/report.md`；T15-E完成，jj `wqqzlvlt`。实际Temporal/PG重启，图片待审快照/原框/调用不变，视频2帧1块续至6帧3块且各帧只检测一次；workflow/run ID不变，服务重启4.79秒、就绪后26.11秒恢复。证据var/evaluations/2026-09-14-business-restart-001，合成媒体/模型替身、0付费API。完整后端1064/146默认跳过、live1通过，Ruff/独立审查通过；不改产品策略/.env/依赖，不推送。schema/workflow/worker清理无残留，文件保留，应用127.0.0.1:8000恢复ready。下一步T15视频扫描效率/有效片段筛选及剩余交付验收；T14-B仍缺规范，自动关联增强/视频增强几何未接入，首版未整体交付。T15-D真实视频资源证据保留在上一Session。
 
 - Sessions are appended to journal files
 - New journal file created when current exceeds 2000 lines

@@ -10,6 +10,7 @@
 - Test behavior before implementation. Unit tests use local fixtures; live model/API/service checks are explicit integration tests, never silently simulated as successes.
 - Validation: `.venv/bin/python -m pytest backend/tests -q` and `.venv/bin/ruff check backend`.
 - Keep distinct test basenames across unpackaged unit/integration directories so the full pytest suite collects. Paid video acceptance must require both explicit live gates and a configured output-token ceiling; count physical API attempts separately from selected review frames, stop processing timing at the human gate, and retain missing usage as unknown.
+- Integration tests importing sibling test helpers use `backend.tests.*` paths and must collect standalone, not only beside unit tests that happen to extend sys.path. Disruptive service acceptance requires explicit dual gates, stopped managed app and an exclusive local runtime; preserve pre/post service identity, unchanged workflow run IDs and cross-process call evidence. Fixture model results demonstrate recovery, not accuracy or external exactly-once billing.
 - Add only needed modules and dependencies. No routine file hashes, microservice scaffolding, new model training, or unrelated cleanup.
 - Shared public contracts: `pipe_inspector.contracts`; use validated constructors/JSON parsing, not `model_copy(update=...)` for untrusted changes (Pydantic bypasses validation there).
 - `TaskPlan.target_labels` is reporting focus, not a detector class filter. Runtime gating and transitions remain in the upcoming workflow.
