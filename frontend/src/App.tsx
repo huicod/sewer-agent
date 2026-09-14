@@ -54,6 +54,7 @@ const TASK_STAGE_TEXT: Record<string, string> = {
   tools: "图片增强处理",
 };
 const ACTIVE_TOOL_TEXT: Record<string, string> = {
+  video_scene: "视频场景筛选",
   enhancement_selection: "按需选择图片增强",
   low_light: "低照度恢复",
   dehaze: "去雾增强",

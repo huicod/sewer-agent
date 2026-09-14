@@ -385,6 +385,26 @@ export type VideoEvidenceFrame = {
 export type VideoEvidence = {
   frames: VideoEvidenceFrame[];
   review_frames: number[];
+  selection?: VideoReviewSelection;
+};
+
+export type VideoSceneAssessment = {
+  frame_index: number;
+  scene: "pipe" | "outside" | "unassessable" | "unknown";
+  reason: string;
+};
+
+export type VideoReviewSelection = {
+  version: "video-selection-v1";
+  candidate_count: number;
+  pool_frames: number[];
+  review_frames: number[];
+  deferred_count: number;
+  unreviewed_event_count: number;
+  unreviewed_audit_count: number;
+  scene_calls: number;
+  scene_errors: string[];
+  assessments: VideoSceneAssessment[];
 };
 
 export type VideoDetail = {

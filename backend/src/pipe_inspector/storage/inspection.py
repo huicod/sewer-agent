@@ -127,14 +127,19 @@ class InspectionRepository(PostgresRepository):
         step: str,
         payload: dict,
         call: ToolCall | None = None,
+        *,
+        allow_error_checkpoint: bool = False,
     ) -> dict:
         if not step.strip():
             raise ValueError("step must not be empty")
         if call is not None:
             if call.task_id != task_id or call.step_id != step:
                 raise ValueError("call must belong to the checkpoint task and step")
-            if call.status not in {ToolCallStatus.SUCCEEDED, ToolCallStatus.SKIPPED}:
-                raise ValueError("checkpoint calls must be succeeded or skipped")
+            allowed_statuses = {ToolCallStatus.SUCCEEDED, ToolCallStatus.SKIPPED}
+            if allow_error_checkpoint:
+                allowed_statuses.update({ToolCallStatus.FAILED, ToolCallStatus.UNCERTAIN})
+            if call.status not in allowed_statuses:
+                raise ValueError("checkpoint call status is not allowed")
         try:
             with self._connect() as connection:
                 if call is not None:

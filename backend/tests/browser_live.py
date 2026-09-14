@@ -457,6 +457,12 @@ def build_live_components(settings, repository, media) -> LiveComponents:
         _role_client(settings, recorder, "image_review"),
         max_image_bytes=settings.vlm_max_image_bytes,
     )
+    from pipe_inspector.agent.video_selection import VideoSceneSelector
+
+    video_scene_selector = VideoSceneSelector(
+        _role_client(settings, recorder, "video_scene"),
+        max_image_bytes=settings.vlm_max_image_bytes,
+    )
     parser = IntentParser(_role_client(settings, recorder, "intent", llm=True))
     enhancement_reviewer = EnhancementReviewer(
         _role_client(settings, recorder, "enhancement_review"),
@@ -477,7 +483,8 @@ def build_live_components(settings, repository, media) -> LiveComponents:
         settings, repository, media, detector=detector, reviewer=image_reviewer
     )
     videos = VideoActivities(
-        settings, repository, media, detector=detector, reviewer=image_reviewer
+        settings, repository, media, detector=detector, reviewer=image_reviewer,
+        scene_selector=video_scene_selector,
     )
 
     def enhancement_factory(kind, checkpoint, device="cuda:0"):

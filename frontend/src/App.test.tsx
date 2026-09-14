@@ -198,16 +198,19 @@ describe("conversation-ready intake shell", () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
-  it("names adaptive enhancement selection without fetching task detail", async () => {
+  it.each([
+    { stage: "tools", tool: "enhancement_selection", label: "按需选择图片增强" },
+    { stage: "verifying", tool: "video_scene", label: "视频场景筛选" },
+  ])("names $tool without fetching task detail", async ({ stage, tool, label }) => {
     localStorage.setItem("pipe-inspector.session-id", sessionId);
     const selecting = {
       ...task("running"),
       snapshot: {
         ...task("running").snapshot,
-        stage: "tools",
+        stage,
         stage_progress: 0.5,
         overall_progress: 0.7,
-        active_tool: "enhancement_selection",
+        active_tool: tool,
       },
     };
     const fetchMock = vi.fn()
@@ -220,8 +223,7 @@ describe("conversation-ready intake shell", () => {
 
     render(<App pollIntervalMs={60_000} />);
 
-    expect(await screen.findByText("图片增强处理")).toBeTruthy();
-    expect(screen.getByText("按需选择图片增强")).toBeTruthy();
+    expect(await screen.findByText(label)).toBeTruthy();
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 

@@ -115,6 +115,27 @@ def test_preflight_rejects_missing_api_output_bound_and_preserves_configured_val
     assert configured.api_max_output_tokens == 4096
 
 
+def test_long_video_requires_extra_opt_in_and_remains_bounded(tmp_path: Path) -> None:
+    source = tmp_path / "source.mp4"
+    source.write_bytes(b"fixture")
+    values = {
+        "SEWER_RUN_VIDEO_COST_LIVE": "1", "SEWER_RUN_LIVE_API": "1",
+        "SEWER_RUN_LONG_VIDEO_LIVE": "1", "SEWER_LIVE_VIDEO": str(source),
+        "SEWER_VIDEO_COST_OUTPUT": str(tmp_path / "var/evaluations/long"),
+    }
+    admission = load_video_cost_admission(
+        values, repo_root=tmp_path, probe=lambda _: _probe(duration_seconds=751.163)
+    )
+    assert admission is not None and admission.duration_seconds == 751.163
+    with pytest.raises(RuntimeError, match="at most 900 seconds"):
+        load_video_cost_admission(
+            values, repo_root=tmp_path, probe=lambda _: _probe(duration_seconds=900.01)
+        )
+    values["SEWER_RUN_LONG_VIDEO_LIVE"] = "true"
+    with pytest.raises(RuntimeError, match="exactly 0 or 1"):
+        load_video_cost_admission(values, repo_root=tmp_path, probe=lambda _: _probe())
+
+
 def test_summary_sums_provider_returned_tokens() -> None:
     result = summarize_measurements(
         provider={

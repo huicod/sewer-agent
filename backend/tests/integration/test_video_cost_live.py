@@ -233,6 +233,7 @@ def _write_evidence(
         "final_checkpoint": final,
         "tool_calls": tool_calls,
         "evidence_frames": frame_records,
+        "video_selection": evidence.get("selection"),
         "billing_amount": None,
         "billing_note": (
             "Provider-returned usage is measured separately from any currency estimate or bill."
@@ -301,6 +302,7 @@ async def test_live_video_cost_acceptance() -> None:
             media,
             detector=components.detector,
             reviewer=components.reviewer,
+            scene_selector=components.videos.scene_selector,
             timing=timing,
         )
         config = video_run_config(settings, components.detector)

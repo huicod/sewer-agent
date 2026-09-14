@@ -17,6 +17,7 @@ from temporalio import activity
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 MAX_VIDEO_SECONDS = 60.0
+MAX_LONG_VIDEO_SECONDS = 900.0
 _TOKEN_FIELDS = (
     "prompt_tokens",
     "completion_tokens",
@@ -71,6 +72,10 @@ def load_video_cost_admission(
         return None
     if video_gate != "1" or api_gate != "1":
         raise RuntimeError("video cost run requires both explicit live API gates")
+    long_video_gate = environ.get("SEWER_RUN_LONG_VIDEO_LIVE", "0")
+    if long_video_gate not in {"0", "1"}:
+        raise RuntimeError("SEWER_RUN_LONG_VIDEO_LIVE must be exactly 0 or 1")
+    max_seconds = MAX_LONG_VIDEO_SECONDS if long_video_gate == "1" else MAX_VIDEO_SECONDS
 
     raw_source = environ.get("SEWER_LIVE_VIDEO", "")
     source = Path(raw_source)
@@ -101,8 +106,8 @@ def load_video_cost_admission(
         raise RuntimeError("video cost admission requires valid video metadata") from None
     if not math.isfinite(duration) or duration <= 0 or width <= 0 or height <= 0:
         raise RuntimeError("video cost admission requires valid video metadata")
-    if duration > MAX_VIDEO_SECONDS:
-        raise RuntimeError("video cost source must be at most 60 seconds")
+    if duration > max_seconds:
+        raise RuntimeError(f"video cost source must be at most {max_seconds:g} seconds")
     return VideoCostAdmission(
         source=source,
         output=output,

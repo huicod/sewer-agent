@@ -73,6 +73,8 @@ test("image/video dialogue, durable review, evidence reports and saved compariso
   const videoCard = card(page, video);
   await videoCard.getByRole("button", { name: "展开视频候选时间线" }).click();
   await expect(videoCard.getByText("解码完整", { exact: true })).toBeVisible();
+  await expect(videoCard.getByRole("heading", { name: "复检证据选择", exact: true })).toBeVisible();
+  await expect(videoCard.getByText(/入选不代表复检已经完成/)).toBeVisible();
   await expect(videoCard.locator(".timeline-events > li")).toHaveCount(1);
   await expect(videoCard.getByText(/帧 0–5 · 6 次观测/)).toBeVisible();
   await expect(videoCard.getByRole("link", { name: /证据帧/ }).first()).toBeVisible();

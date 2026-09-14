@@ -406,12 +406,42 @@ function isVideoScan(value: unknown): boolean {
   return ids.length === new Set(ids).size;
 }
 
+function isVideoSelection(value: unknown, reviewFrames: unknown[]): boolean {
+  if (!isRecord(value) || value.version !== "video-selection-v1" ||
+    !isNonNegativeInteger(value.candidate_count) || !isNonNegativeInteger(value.deferred_count) ||
+    !isNonNegativeInteger(value.unreviewed_event_count) || !isNonNegativeInteger(value.unreviewed_audit_count) ||
+    !isNonNegativeInteger(value.scene_calls) || (value.scene_calls as number) > 4 ||
+    !Array.isArray(value.scene_errors) || !value.scene_errors.every(isNonEmptyString) ||
+    value.scene_errors.length > (value.scene_calls as number) ||
+    !Array.isArray(value.pool_frames) || value.pool_frames.length > 64 ||
+    !value.pool_frames.every(isNonNegativeInteger) || new Set(value.pool_frames).size !== value.pool_frames.length ||
+    (value.candidate_count as number) < value.pool_frames.length ||
+    !Array.isArray(value.review_frames) || new Set(value.review_frames).size !== value.review_frames.length ||
+    value.review_frames.length !== reviewFrames.length ||
+    !value.review_frames.every((frame, index) => value.pool_frames instanceof Array &&
+      value.pool_frames.includes(frame) && frame === reviewFrames[index]) ||
+    value.deferred_count !== (value.candidate_count as number) - value.review_frames.length ||
+    !Array.isArray(value.assessments) || value.assessments.length > 64
+  ) return false;
+  const pool = new Set(value.pool_frames);
+  const assessmentFrames = new Set<unknown>();
+  return value.assessments.every((assessment) => {
+    if (!isRecord(assessment) || !isNonNegativeInteger(assessment.frame_index) || !pool.has(assessment.frame_index) ||
+      assessmentFrames.has(assessment.frame_index) ||
+      !["pipe", "outside", "unassessable", "unknown"].includes(assessment.scene as string) ||
+      !isNonEmptyString(assessment.reason) || assessment.reason.length > 300) return false;
+    assessmentFrames.add(assessment.frame_index);
+    return true;
+  });
+}
+
 function isVideoEvidence(value: unknown): boolean {
   if (!isRecord(value) || !Array.isArray(value.frames) || !Array.isArray(value.review_frames)) return false;
   return value.frames.every((frame) =>
     isRecord(frame) && isNonNegativeInteger(frame.frame_index) &&
     isNonNegativeFinite(frame.timestamp_seconds) && isAssetRef(frame.asset),
-  ) && value.review_frames.every(isNonNegativeInteger);
+  ) && value.review_frames.every(isNonNegativeInteger) &&
+    (value.selection === undefined || isVideoSelection(value.selection, value.review_frames));
 }
 
 export function isVideoDetail(value: unknown): value is VideoDetail {

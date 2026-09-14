@@ -203,6 +203,59 @@ def test_checkpoint_and_success_call_commit_atomically(inspection_store):
     assert store.list_calls(task_id) == ()
 
 
+def test_error_checkpoint_requires_opt_in_and_commits_atomically(inspection_store):
+    store, _, _ = inspection_store
+    task, asset = create_task(store)
+    task_id = task.snapshot.task_id
+    failed = tool_call(
+        task_id,
+        asset,
+        call_id=uuid4(),
+        attempt=1,
+        status="uncertain",
+        error={"code": "timeout", "retryable": True, "message": "scene request timed out"},
+    )
+
+    with pytest.raises(ValueError, match="checkpoint call status"):
+        store.save_step(task_id, "detect", {"error": "timeout"}, failed)
+    saved = store.save_step(
+        task_id,
+        "detect",
+        {"error": "timeout"},
+        failed,
+        allow_error_checkpoint=True,
+    )
+
+    assert saved == {"error": "timeout"}
+    assert store.list_calls(task_id) == (failed,)
+
+
+def test_error_call_rolls_back_when_checkpoint_cannot_serialize(inspection_store):
+    store, _, _ = inspection_store
+    task, asset = create_task(store)
+    task_id = task.snapshot.task_id
+    failed = tool_call(
+        task_id,
+        asset,
+        call_id=uuid4(),
+        attempt=1,
+        status="failed",
+        error={"code": "invalid", "retryable": False, "message": "invalid scene response"},
+    )
+
+    with pytest.raises(TypeError):
+        store.save_step(
+            task_id,
+            "detect",
+            {"not_json": {1, 2}},
+            failed,
+            allow_error_checkpoint=True,
+        )
+
+    assert store.load_step(task_id, "detect") is None
+    assert store.list_calls(task_id) == ()
+
+
 def test_snapshot_update_preserves_submission_and_terminal_projection(inspection_store):
     store, _, _ = inspection_store
     task, _ = create_task(store)

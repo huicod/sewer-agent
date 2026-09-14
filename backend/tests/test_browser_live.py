@@ -273,5 +273,8 @@ def test_live_components_construct_production_adapters_without_loading_or_reques
     assert components.models["detector"] == "detector.pt"
     assert components.models["intent"] == "qwen-intent"
     assert components.models["review"] == "qwen-review"
+    from pipe_inspector.agent.video_selection import VideoSceneSelector
+
+    assert isinstance(components.videos.scene_selector, VideoSceneSelector)
     assert components.recorder.snapshot()["provider_calls"] == []
     assert components.gpu.snapshot()["serial_calls"] == []

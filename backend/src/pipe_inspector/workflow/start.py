@@ -26,6 +26,7 @@ from pipe_inspector.contracts.intake import TaskRecord, TaskSubmission
 from pipe_inspector.contracts.planning import ActionKind, TaskPlan
 from pipe_inspector.contracts.tasks import TaskSnapshot
 from pipe_inspector.contracts.video import VideoAggregationConfig
+from pipe_inspector.contracts.video_selection import VIDEO_SELECTION_VERSION
 from pipe_inspector.storage.repository import SubmissionConflict
 from pipe_inspector.storage.supplements import SupplementNotAllowed
 from pipe_inspector.vision.detector import UltralyticsDetector
@@ -128,6 +129,7 @@ def video_run_config(
         "view_policy_version": None,
         "image_review_mode": "candidate_review",
         "video_policy_version": "video-review-v1",
+        "video_selection_version": VIDEO_SELECTION_VERSION,
         "video_aggregation": VideoAggregationConfig().model_dump(mode="json"),
         "video_chunk_size": 8,
         "video_review_budget": 32,

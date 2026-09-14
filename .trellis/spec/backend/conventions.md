@@ -1,5 +1,7 @@
 # Backend conventions
 
+- New video runs pin `video_selection_version=video-selection-v1`: bounded scene previews only prioritize detailed review; keep full primary coverage and original event PNGs. Scene calls share the existing video review budget, never count as defect/negative audit reviews, and checkpoint batches before final selection. Unpinned old runs retain old ordering; cached batches validate pinned context before checking mutable API settings. Error batch/call commits opt in to `save_step(..., allow_error_checkpoint=True)`; ordinary checkpoint status guards stay unchanged.
+
 - Current code: Python 3.12, `backend/src/pipe_inspector`; tests: `backend/tests`.
 - Configuration: `config.Settings`, server-owned environment prefixed `SEWER_`. Use SecretStr for credentials; never log settings dumps, authorization headers, or media bytes.
 - FastAPI factories perform no model loading or network calls during import. `/health` means process liveness, not model/service readiness.
