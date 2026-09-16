@@ -12,6 +12,7 @@ import filecmp
 import html
 import json
 import math
+import random
 import re
 import shutil
 import xml.etree.ElementTree as ET
@@ -31,8 +32,8 @@ from prepare_sewer2403_yolo import (
     BoxLabel,
     Sample,
     SampleGroup,
-    assign_once,
     group_key,
+    group_priority,
     split_score,
     split_targets,
     write_label,
@@ -291,6 +292,63 @@ def connected_groups(aliases, pairs):
     return [find(i) for i in range(len(aliases))]
 
 
+def load_preparation(directory):
+    rows = []
+    for line in (directory / "cleaned_manifest.jsonl").read_text().splitlines():
+        data = json.loads(line)
+        group = data.pop("group_id")
+        data["image"], data["xml"] = Path(data["image"]), Path(data["xml"])
+        data["labels"] = tuple(BoxLabel(**label) for label in data["labels"])
+        data["source_classes"] = tuple(data["source_classes"])
+        # Preserve transitive links through images excluded in final selection.
+        data["aliases"] = (*data["aliases"], f"preparation-group:{group}")
+        rows.append(Record(**data))
+    rejected = [
+        json.loads(line) for line in (directory / "excluded.jsonl").read_text().splitlines()
+    ]
+    return rows, rejected
+
+
+def select_five_only(rows):
+    kept, rejected = [], []
+    for row in rows:
+        known = FIVE_CLASS_MAPPING if row.dataset == "sewer2403" else SEDD_MAPPING
+        if set(row.source_classes) - set(known):
+            reason = "mixed_non_target" if row.labels else "non_target_only"
+            rejected.append(rejected_row(row.dataset, row.image, row.xml, reason))
+        else:
+            kept.append(row)
+    return kept, rejected
+
+
+def assign_balanced_groups(groups, ratios, targets, totals, seed):
+    """Balance relative deficits: shared classes must not swamp a smaller source."""
+    rng = random.Random(seed)
+    ordered = sorted(groups, key=lambda g: group_priority(g, totals, rng.random()))
+    assigned = {split: [] for split in ratios}
+    sizes = Counter()
+    counts = {split: Counter() for split in ratios}
+    for group in ordered:
+        candidates = [s for s in ratios if sizes[s] + group.size <= targets[s]] or list(ratios)
+        rng.shuffle(candidates)
+
+        def gain(split):
+            score = 0.0
+            for label, count in group.class_image_counts.items():
+                target = totals[label] * ratios[split]
+                before = target - counts[split][label]
+                score += (before**2 - (before - count) ** 2) / max(target, 1)
+            before = targets[split] - sizes[split]
+            score += 0.05 * (before**2 - (before - group.size) ** 2) / max(targets[split], 1)
+            return score, -max(0, sizes[split] + group.size - targets[split])
+
+        selected = max(candidates, key=gain)
+        assigned[selected].append(group)
+        sizes[selected] += group.size
+        counts[selected].update(group.class_image_counts)
+    return assigned
+
+
 def split_rows(rows, group_ids, *, seed):
     grouped = defaultdict(list)
     for row, group in zip(rows, group_ids, strict=True):
@@ -309,7 +367,7 @@ def split_rows(rows, group_ids, *, seed):
     ratios, targets = split_targets(len(rows), 0.9, 0.05)
     best, best_score = None, (math.inf, math.inf)
     for attempt in range(32):
-        assignment = assign_once(groups, ratios, targets, totals, seed + attempt)
+        assignment = assign_balanced_groups(groups, ratios, targets, totals, seed + attempt)
         score = split_score(assignment, ratios, targets, totals, 0.025)
         if score < best_score:
             best, best_score = assignment, score
@@ -431,6 +489,21 @@ def export_dataset(out, rows, group_ids, splits, rejected, pairs, *, seed):
         "names": dict(enumerate(CLASSES)),
     }
     (out / "data.yaml").write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8")
+    (out / "eval").mkdir()
+    for dataset in ("sewer2403", "sedd"):
+        source_config = dict(config)
+        for split in ("val", "test"):
+            paths = [
+                str((out / "images" / split / (r.identifier + r.image.suffix.lower())).resolve())
+                for r, s in zip(rows, splits, strict=True)
+                if r.dataset == dataset and s == split
+            ]
+            relative = f"eval/{dataset}_{split}.txt"
+            (out / relative).write_text("".join(p + "\n" for p in paths), encoding="utf-8")
+            source_config[split] = relative
+        (out / f"eval_{dataset}.yaml").write_text(
+            yaml.safe_dump(source_config, sort_keys=False), encoding="utf-8"
+        )
     with (out / "excluded.jsonl").open("w", encoding="utf-8") as f:
         for row in rejected:
             f.write(json.dumps(row, ensure_ascii=False) + "\n")
@@ -465,13 +538,14 @@ def export_dataset(out, rows, group_ids, splits, rejected, pairs, *, seed):
         },
         "repairs_in_retained_images": dict(sum((Counter(r.repairs) for r in rows), Counter())),
         "mapping": {"sewer2403": FIVE_CLASS_MAPPING, "sedd": SEDD_MAPPING},
+        "evaluation_scope": {"sewer2403": list(CLASSES), "sedd": ["PL", "BLOCK"]},
         "limitations": [
             "Known filename/video aliases and detected visual-near-copy groups are isolated. "
             "Unknown pipe/video identity cannot be guaranteed independent.",
             "SEDD supplies PL/BLOCK annotations, not exhaustive FS/BX/AJ truth. "
             "No automatic semantic relabeling or five-class human audit performed.",
-            "Missing SEDD XML is not taken as confirmed normal. Root-only SEDD is excluded; "
-            "sewer non-target-only images are five-class background, not normal pipes.",
+            "Missing SEDD XML alone is not evidence of normality. Final selection excludes "
+            "all explicitly annotated non-target defects, including mixed-label images.",
             "The old sewer-trained best.pt may have seen new val/test images; "
             "this split is intended for fresh training from generic pretrained weights.",
         ],
@@ -550,6 +624,9 @@ def main():
     parser.add_argument("--out", type=Path, default=ROOT / "var/datasets/merged_five_v1")
     parser.add_argument("--seed", type=int, default=20260916)
     parser.add_argument(
+        "--from-preparation", type=Path, help="Reuse a verified cleaning checkpoint."
+    )
+    parser.add_argument(
         "--prepare-only",
         action="store_true",
         help="Save cleaned candidates without deciding splits.",
@@ -557,18 +634,34 @@ def main():
     args = parser.parse_args()
     if args.out.exists():
         raise FileExistsError(args.out)
-    rows, rejected = [], []
-    for dataset, source in (("sewer2403", args.sewer), ("sedd", args.sedd)):
-        accepted, excluded = collect(source, dataset)
-        rows.extend(accepted)
-        rejected.extend(excluded)
-        print(f"{dataset}: accepted={len(accepted)}, excluded={len(excluded)}", flush=True)
-    rows, duplicates = deduplicate(rows)
-    rejected.extend(duplicates)
-    print(f"Exact-copy check: retained={len(rows)}, excluded={len(duplicates)}", flush=True)
-    with ThreadPoolExecutor(max_workers=4) as pool:
-        thumbnails = list(pool.map(thumbnail, rows))
-    pairs = visual_pairs(thumbnails)
+    if args.from_preparation:
+        rows, rejected = load_preparation(args.from_preparation)
+    else:
+        rows, rejected = [], []
+        for dataset, source in (("sewer2403", args.sewer), ("sedd", args.sedd)):
+            accepted, excluded = collect(source, dataset)
+            rows.extend(accepted)
+            rejected.extend(excluded)
+            print(f"{dataset}: accepted={len(accepted)}, excluded={len(excluded)}", flush=True)
+        rows, duplicates = deduplicate(rows)
+        rejected.extend(duplicates)
+        print(f"Exact-copy check: retained={len(rows)}, excluded={len(duplicates)}", flush=True)
+    if not args.prepare_only:
+        rows, outside_scope = select_five_only(rows)
+        rejected.extend(outside_scope)
+        print(f"Five-class-only selection: retained={len(rows)}", flush=True)
+    if args.from_preparation:
+        indices = {r.identifier: i for i, r in enumerate(rows)}
+        with (args.from_preparation / "similar_pairs.csv").open() as f:
+            pairs = [
+                (indices[r["first_id"]], indices[r["second_id"]])
+                for r in csv.DictReader(f)
+                if r["first_id"] in indices and r["second_id"] in indices
+            ]
+    else:
+        with ThreadPoolExecutor(max_workers=4) as pool:
+            thumbnails = list(pool.map(thumbnail, rows))
+        pairs = visual_pairs(thumbnails)
     groups = connected_groups([r.aliases for r in rows], pairs)
     print(f"Grouping: {len(set(groups))} groups, {len(pairs)} near-copy pairs", flush=True)
     if args.prepare_only:

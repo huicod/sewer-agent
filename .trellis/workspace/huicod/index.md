@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 42
+- **Total Sessions**: 43
 - **Last Active**: 2026-09-16
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~1400 | Active |
+| `journal-1.md` | ~1440 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 43 | 2026-09-16 | 五类严格筛选与90/5/5数据集完成，等待训练确认 | jj `orkqmomu` | `data/merged-five-dataset` |
 | 42 | 2026-09-16 | 清洗合并五类候选，等待SEDD评估范围选择 | jj `rzktnoru` | `data/merged-five-dataset` |
 | 41 | 2026-09-16 | 修复复核溯源与分组，完成尺度对照并等待重训决定 | `fefc3ff9` | `fix/review-provenance-scale` |
 | 40 | 2026-09-16 | 在线图片对齐已认可引导复核并推送独立分支 | `9f46bca0` | `fix/online-guided-review` |
@@ -77,7 +78,7 @@
 
 ## Notes
 
-- 最新恢复入口：Session42、`09-16-merged-five-dataset/report.md`。用户授权两套数据清洗、五类、90/5/5；已保存19,431候选及分组/排除记录于`var/datasets/merged_five_v1_preparation`，18测试通过。等待用户决定SEDD只训练或入评估但仅评PL/BLOCK，最终split/data.yaml尚未生成。复用cleaned_manifest，勿重复全量解码/近邻搜索。数据任务保留in_progress。服务仍暂停，未训练/API/推送；在线策略保持Session41，原训练manifest未找回，不能以旧best.pt在新split报告独立测试。T14-B规范输入仍待提供。
+- 最新恢复入口：Session43、`09-16-merged-five-dataset/report.md`。五类外及混合标注图整张排除；最终`var/datasets/merged_five_v1/data.yaml`已生成，12,120图，10,908/606/606，22定向测试/全量产物检查/独立审查通过。两来源均划分，SEDD仅评PL/BLOCK。无XML/配对冲突保留待核实，不能充当正常；BX稀少且背景仅32图，边界见报告。数据任务完成，等待训练确认，不再后台清洗或调用模型。服务仍暂停，未训练/API/推送；线上保持Session41，原训练manifest未找回，旧best.pt不能用于新split独立测试。T14-B规范输入仍待提供。
 
 - Sessions are appended to journal files
 - New journal file created when current exceeds 2000 lines

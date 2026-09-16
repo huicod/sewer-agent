@@ -1397,3 +1397,31 @@ SEDD只有PL/BLOCK可映射标注，缺FS/BX/AJ完整真值；已询问是否只
 还没有最终split、data.yaml或训练图片目录；不要宣称完整训练集已完成。
 后续从cleaned_manifest恢复Record/group_id即可，避免重做全量解码和近邻搜索。
 详细计数、限制和继续步骤见任务report.md；不自行推送GitHub、重训或启动服务。
+
+## Session 43: 五类严格筛选与90/5/5数据集完成，等待训练确认
+
+**Date**: 2026-09-16
+**Task**: `.trellis/tasks/09-16-merged-five-dataset`
+**Change**: `orkqmomu` / `data/merged-five-dataset`（仅本地）
+
+用户进一步确认两来源合并，五类外数据不进入训练。按已有标注整张排除其他类及目标+其他混合图；
+显式空XML独立记载，不将缺XML或其他缺陷当正常。完成`var/datasets/merged_five_v1/`：
+12,120图（sewer11,244含空XML32；SEDD876），train/val/test=10,908/606/606。
+各来源均覆盖三个split；BX为288/16/16阳性图，FS677/38/38。9,519组、951近似对，已知组跨集0。
+
+从已存清洗检查点复用分组，包括排除中间节点后的传递关系；不重复全量解码。
+发现并修复旧分配函数把所有SEDD分配到train的问题（全局比例正常但来源分层失效），新增真实回归。
+输出YOLO图/标签/data.yaml、来源专用eval yaml/列表、split_manifest、summary、excluded与21张标注预览。
+SEDD只评PL/BLOCK（原ID0/3），合并指标不是完整五类金标准；旧权重不能用于宣称新split独立测试。
+
+SEDD官方资料/包结构未明确5001缺XML逐文件正常约定；924内部名冲突虽然尺寸与同stem全匹配，
+12图抽检仍不足以无条件确认全部，均留待核查；5空XML来自error_image也未当正常。
+原始源及准备检查点未改删。背景仅32张，不能宣称正常场景误报已充分覆盖。
+
+22项定向测试、Ruff检查/格式检查、diff检查通过。全产物逐图标签/框/类别/清单及纳入排除总量
+26,612复算一致；来源评估名单和group/alias/near-pair跨集检查通过；主Agent抽看BX/FS/PL转换图。
+单次独立只读审查无当前产物阻塞问题；原始目录直跑路径的潜在桥接节点限制见report，复现用检查点命令。
+
+**Status: Completed — dataset preparation only; awaiting user training approval.**
+恢复先读任务report.md与数据README，不使用旧preparation当训练入口。不再继续后台清洗、模型调用或训练。
+未来确认模型/训练参数后另行开训练任务，测试集不调参。服务仍暂停；未推GitHub，未改权重/VLM策略。

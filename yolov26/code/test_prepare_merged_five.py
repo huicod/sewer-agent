@@ -2,6 +2,7 @@
 
 import json
 import sys
+from dataclasses import replace
 from pathlib import Path
 
 import numpy as np
@@ -184,3 +185,54 @@ def test_preparation_saves_clean_labels_without_deciding_splits(tmp_path):
     assert (out / "preview/sewer2403__a.jpg").is_file()
     with pytest.raises(FileExistsError):
         m.write_preparation(out, [row], [0], [], [])
+
+
+def test_final_selection_excludes_other_only_and_mixed_keeps_empty(tmp_path):
+    m = module()
+    rows = [
+        m.read_sample(*fixture(tmp_path, "positive"), "sewer2403"),
+        m.read_sample(*fixture(tmp_path, "empty", objects=[]), "sewer2403"),
+        m.read_sample(*fixture(tmp_path, "other", objects=[("SG", (0, 0, 10, 10))]), "sewer2403"),
+        m.read_sample(
+            *fixture(tmp_path, "mixed", objects=[("PL", (10, 10, 40, 40)), ("SG", (0, 0, 10, 10))]),
+            "sewer2403",
+        ),
+    ]
+    kept, rejected = m.select_five_only(rows)
+    assert [r.image.stem for r in kept] == ["positive", "empty"]
+    assert {r["reason"] for r in rejected} == {"non_target_only", "mixed_non_target"}
+
+
+def test_reload_preserves_group_even_when_linking_sample_is_excluded(tmp_path):
+    m = module()
+    a = m.read_sample(*fixture(tmp_path, "a"), "sewer2403")
+    b = m.read_sample(*fixture(tmp_path, "b"), "sewer2403")
+    out = tmp_path / "prepared"
+    m.write_preparation(out, [a, b], [7, 7], [], [])
+    rows, rejected = m.load_preparation(out)
+    assert rejected == []
+    assert rows[0].labels == a.labels
+    assert m.connected_groups([r.aliases for r in rows], []) == [0, 0]
+
+
+def test_export_writes_source_specific_eval_lists_without_renumbering(tmp_path):
+    m = module()
+    sewer = m.read_sample(*fixture(tmp_path, "sewer"), "sewer2403")
+    sedd = m.read_sample(*fixture(tmp_path, "sedd", objects=[("deposit", (0, 0, 10, 10))]), "sedd")
+    out = tmp_path / "out"
+    m.export_dataset(out, [sewer, sedd], [0, 1], ["val", "test"], [], [], seed=7)
+    assert "sewer2403__sewer.png" in (out / "eval/sewer2403_val.txt").read_text()
+    assert "sedd__sedd.png" in (out / "eval/sedd_test.txt").read_text()
+    assert "3 " == (out / "labels/test/sedd__sedd.txt").read_text()[:2]
+    metadata = json.loads((out / "summary.json").read_text())
+    assert metadata["evaluation_scope"]["sedd"] == ["PL", "BLOCK"]
+
+
+def test_split_balances_sources_even_when_they_share_a_common_class(tmp_path):
+    m = module()
+    base = m.read_sample(*fixture(tmp_path), "sewer2403")
+    rows = [replace(base, dataset="sewer2403" if i < 200 else "sedd") for i in range(250)]
+    splits = m.split_rows(rows, list(range(250)), seed=20260916)
+    for split in ("val", "test"):
+        assert 1 <= sum(r.dataset == "sedd" and s == split for r, s in zip(rows, splits)) <= 4
+        assert 8 <= sum(r.dataset == "sewer2403" and s == split for r, s in zip(rows, splits)) <= 12

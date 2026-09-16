@@ -2,8 +2,8 @@
   "id": "merged-five-dataset",
   "name": "merged-five-dataset",
   "title": "Clean and merge Sewer2403 and SEDD five-class dataset",
-  "description": "Cleaned and grouped 19431 five-class candidates; final 90/5/5 export awaits SEDD evaluation-scope choice; no training",
-  "status": "in_progress",
+  "description": "Exported 12120 strictly five-class-selected images, grouped 10908/606/606; source-specific evaluation lists; awaiting training approval",
+  "status": "completed",
   "dev_type": null,
   "scope": null,
   "package": null,
@@ -11,7 +11,7 @@
   "creator": "huicod",
   "assignee": "huicod",
   "createdAt": "2026-09-16",
-  "completedAt": null,
+  "completedAt": "2026-09-16",
   "branch": "data/merged-five-dataset",
   "base_branch": "fix/review-provenance-scale",
   "worktree_path": null,
@@ -21,6 +21,6 @@
   "children": [],
   "parent": null,
   "relatedFiles": [],
-  "notes": "Preparation saved in var/datasets/merged_five_v1_preparation. 18 focused tests and independent review; no final data.yaml/splits. Resume from report.md after user selects SEDD train-only or PL/BLOCK-only evaluation scope.",
+  "notes": "Final dataset var/datasets/merged_five_v1/data.yaml; checkpoint retained. 22 focused tests, full output validation and independent review passed. Exclude all annotated other/mixed classes; SEDD missing XML/filename conflicts remain held out. Read report.md and Session43. Training, services and GitHub pushes are NOT authorized by this completion.",
   "meta": {}
 }
