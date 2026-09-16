@@ -737,7 +737,7 @@ VLM 只能复核证据和生成受约束的语义结论；框、轨迹、掩膜�
 
 当前实施只遵循[总体开发计划](DEVELOPMENT_PLAN.md)的 M0～M5，不在治理文档重复维护任务表。已有五类权重不再训练；LLM/VLM 使用 API，本地部署后端与视觉工具。原先 E0～E9 的训练/蒸馏顺序不再作为首版排期。
 
-架构见[主方案](../vlm_review/VLM_YOLO_ARCHITECTURE_AND_RESEARCH_SUMMARY.md)，活动任务与交接由初始化后的 Trellis 保存。当前待用户批准计划，不启动正式开发。
+架构见[主方案](../vlm_review/VLM_YOLO_ARCHITECTURE_AND_RESEARCH_SUMMARY.md)，活动任务与交接由 Trellis 保存。总体计划已于 2026-09-09 获批；按任务范围实施，重新训练仍需用户另行决定。
 
 ## 7. 实际执行检查表
 

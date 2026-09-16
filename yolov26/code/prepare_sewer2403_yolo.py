@@ -57,6 +57,7 @@ AUGMENTED_SET_RE = re.compile(
 VIDEO_FRAME_RES = (
     re.compile(r"^(.*?-(?:mp4|mpg|avi|mov))-t-\d", re.IGNORECASE),
     re.compile(r"^(.*?-(?:mp4|mpg|avi|mov))[_-]\d{6}[-_]", re.IGNORECASE),
+    re.compile(r"^(.*?)[_-]frame\d+$", re.IGNORECASE),
 )
 
 

@@ -6,6 +6,7 @@ from uuid import UUID
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import HTMLResponse, JSONResponse
 
+from pipe_inspector.api.image_evidence import load_image_evidence
 from pipe_inspector.api.inspection import load_enhancement_detail, load_geometry_detail
 from pipe_inspector.contracts.planning import ActionKind
 from pipe_inspector.contracts.reports import TaskReport
@@ -38,6 +39,11 @@ def report_router(repository) -> APIRouter:
             if any(call.tool_name in geometry_actions for call in calls)
             else None
         )
+        image_evidence = load_image_evidence(repository, task)
+        # Whole-video runs have video checkpoints, not image lineage. Failed
+        # images with no saved observation/review likewise have nothing to attach.
+        if image_evidence.observation is None and image_evidence.review is None:
+            image_evidence = None
         report = TaskReport(
             task=task,
             tool_calls=calls,
@@ -45,6 +51,7 @@ def report_router(repository) -> APIRouter:
             enhancement=enhancement.result,
             enhancement_review=enhancement.review,
             geometry=geometry,
+            image_evidence=image_evidence,
         )
         headers = {
             "X-Content-Type-Options": "nosniff",

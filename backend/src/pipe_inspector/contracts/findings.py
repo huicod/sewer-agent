@@ -44,8 +44,11 @@ class Finding(ContractModel):
     canonical_label: DetectionLabel | Literal["OTHER"] | None = None
     open_label: NonEmptyStr | None = None
     review_status: ReviewStatus = ReviewStatus.TENTATIVE
-    source: FindingSource
-    score: Probability | None = None
+    source: FindingSource = Field(description="Origin of the candidate, not final label authority")
+    score: Probability | None = Field(
+        default=None,
+        description="Original candidate model score; not confidence of a revised/fused label",
+    )
     evidence: tuple[EvidenceRef, ...] = Field(min_length=1)
     confirmed_by: Literal["rules", "human"] | None = None
 

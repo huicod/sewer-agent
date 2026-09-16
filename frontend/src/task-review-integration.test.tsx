@@ -147,5 +147,6 @@ describe("TaskCard review and evidence integration", () => {
     await user.click(mediaButton);
 
     expect(await screen.findByRole("button", { name: "展开视频候选时间线" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "展开检查依据" })).toBeNull();
   });
 });

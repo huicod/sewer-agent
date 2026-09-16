@@ -4,6 +4,7 @@ from uuid import UUID
 
 from fastapi import APIRouter
 
+from pipe_inspector.api.image_evidence import load_image_evidence
 from pipe_inspector.contracts.assets import AssetKind
 from pipe_inspector.contracts.enhancement import (
     EnhancementDetail,
@@ -17,6 +18,7 @@ from pipe_inspector.contracts.geometry import (
     RelativeDepthResult,
     SegmentationResult,
 )
+from pipe_inspector.contracts.image_evidence import ImageEvidence
 from pipe_inspector.contracts.intake import TaskRecord
 from pipe_inspector.contracts.tools import ToolCall
 from pipe_inspector.workflow.start import InspectionStartError
@@ -109,6 +111,10 @@ def inspection_router(repository, starter) -> APIRouter:
     def enhancement_detail(task_id: UUID):
         task = repository.get_task(task_id)
         return load_enhancement_detail(repository, task)
+
+    @router.get("/{task_id}/image-evidence", response_model=ImageEvidence)
+    def image_evidence(task_id: UUID):
+        return load_image_evidence(repository, repository.get_task(task_id))
 
     @router.get("/{task_id}/geometry", response_model=GeometryDetail)
     def geometry_detail(task_id: UUID):

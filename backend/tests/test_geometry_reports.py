@@ -103,7 +103,7 @@ async def test_json_and_html_report_load_stored_geometry_without_private_config(
                 "measurements": measurement.model_dump(mode="json"),
             },
         }
-        return values[step]
+        return values.get(step)
 
     repo = SimpleNamespace(
         get_task=lambda _: task,

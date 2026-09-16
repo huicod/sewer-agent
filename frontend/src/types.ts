@@ -209,6 +209,71 @@ export type ImageRegion = {
   bbox_xyxy: [number, number, number, number];
 };
 
+export type OriginalDetection = {
+  label: DetectorLabel;
+  native_label: string;
+  score: number;
+  bbox_xyxy: [number, number, number, number];
+};
+
+export type ImageObservation = {
+  detection: {
+    detector_id: string;
+    model_version: string;
+    label_space_version: string;
+    width: number;
+    height: number;
+    detections: OriginalDetection[];
+  };
+  quality: QualitySummary;
+};
+
+export type EvidenceStrength = "clear" | "uncertain" | null;
+export type ReviewVerdict = "accept" | "revise" | "reject" | "abstain" | "need_more_context";
+
+export type EvidenceReview = {
+  image_assessable: boolean;
+  full_image_audited: boolean;
+  candidates: Array<{
+    index: number;
+    verdict: ReviewVerdict;
+    proposed_label: DetectorLabel | null;
+    reason: string;
+    evidence_strength: EvidenceStrength;
+  }>;
+  additional_anomalies: Array<{
+    label: DetectionLabel;
+    name: string | null;
+    bbox_xyxy: [number, number, number, number] | null;
+    reason: string;
+    evidence_strength: EvidenceStrength;
+  }>;
+  summary: string;
+};
+
+export type FusionChange = {
+  index: number | null;
+  additional_index: number | null;
+  action: string;
+  pending: boolean;
+  label: DetectionLabel;
+  bbox_xyxy: [number, number, number, number] | null;
+  reason: string;
+  vlm_verdict: string | null;
+  proposed_label: DetectorLabel | null;
+  gate: string | null;
+};
+
+export type ImageEvidenceDetail = {
+  task_id: string;
+  input_asset: AssetRef;
+  parent_task_id: string | null;
+  observation: ImageObservation | null;
+  review: EvidenceReview | null;
+  fusion_changes: FusionChange[];
+  findings: Finding[];
+};
+
 export type EnhancementKind = "low_light" | "dehaze" | "deblur" | "super_resolution";
 
 export type EnhancementOptions = {

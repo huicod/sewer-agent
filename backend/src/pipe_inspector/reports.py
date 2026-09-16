@@ -62,6 +62,63 @@ def _quality(label: str, quality: QualitySummary) -> str:
     )
 
 
+def _image_evidence_section(report: TaskReport) -> list[str]:
+    detail = report.image_evidence
+    if detail is None or (detail.observation is None and detail.review is None):
+        return []
+    lines = ["<h2>图片检测与复核溯源</h2>", "<h3>YOLO / 主检测器原始结果</h3>"]
+    if detail.observation is not None:
+        detection = detail.observation.detection
+        lines.append(
+            f"<p>检测器：{escape(detection.detector_id)}；"
+            f"模型：{escape(detection.model_version)}；"
+            f"原图 {detection.width}×{detection.height}</p>"
+        )
+        for index, item in enumerate(detection.detections):
+            lines.append(
+                f"<p>候选 #{index}：{item.label.value}；原检测分数 {item.score:.4f}；"
+                f"原图像素框 {item.bbox_xyxy}</p>"
+            )
+        if not detection.detections:
+            lines.append("<p>主检测器零候选，不等于整图正常。</p>")
+    lines.append("<h3>VLM 复核意见</h3>")
+    if detail.review is None:
+        lines.append("<p>本任务没有已保存的图片 VLM 复核意见。</p>")
+    else:
+        review = detail.review
+        lines.append(f"<p>{escape(review.summary)}</p>")
+        lines.append(
+            f"<p>可判读：{'是' if review.image_assessable else '否'}；"
+            f"全图审计完成：{'是' if review.full_image_audited else '否'}</p>"
+        )
+        for item in review.candidates:
+            proposed = item.proposed_label.value if item.proposed_label else "—"
+            lines.append(
+                f"<p>候选 #{item.index}：{item.verdict}；建议类别 {proposed}；"
+                f"证据 {item.evidence_strength or '旧记录未提供'}；{escape(item.reason)}</p>"
+            )
+        for index, item in enumerate(review.additional_anomalies):
+            lines.append(
+                f"<p>补充 #{index}：{escape(str(item.label))}；{escape(item.name or '')}；"
+                f"新增证据强度：{item.evidence_strength or '旧记录未提供'}；"
+                f"原图像素框 {item.bbox_xyxy}；{escape(item.reason)}；无数值置信度</p>"
+            )
+    lines.append("<h3>已保存的融合动作</h3>")
+    for item in detail.fusion_changes:
+        origin = (
+            f"候选 #{item.index}" if item.index is not None else f"补充 #{item.additional_index}"
+        )
+        lines.append(
+            f"<p>{origin}：{escape(item.action)} → {escape(str(item.label))}；"
+            f"融合状态：{'待人工处理' if item.pending else '已自动处理'}；"
+            f"{escape(item.reason)}；{escape(item.gate or '')}</p>"
+        )
+    if not detail.fusion_changes:
+        lines.append("<p>没有已保存的逐项融合动作，不重新推算历史结果。</p>")
+    lines.append("<p>以上是原始复核与融合记录；当前状态（含人工审核）以下方发现项为准。</p>")
+    return lines
+
+
 def _enhancement_section(report: TaskReport) -> list[str]:
     selection = report.enhancement_selection
     result = report.enhancement
@@ -74,9 +131,7 @@ def _enhancement_section(report: TaskReport) -> list[str]:
     if selection is not None:
         if selection.status == "selected":
             kind = ENHANCEMENTS[selection.options.kind.value]
-            lines.append(
-                f"<p>自动增强已选择：{kind}；理由：{escape(selection.reason)}</p>"
-            )
+            lines.append(f"<p>自动增强已选择：{kind}；理由：{escape(selection.reason)}</p>")
         else:
             lines.append(f"<p>自动增强已跳过；理由：{escape(selection.reason)}</p>")
         if selection.proposal is not None:
@@ -248,6 +303,7 @@ def render_html(report: TaskReport) -> str:
         lines.append("<p>限制/待处理：" + escape(snapshot.waiting_reason) + "</p>")
     lines.extend(_enhancement_section(report))
     lines.extend(_geometry_section(report))
+    lines.extend(_image_evidence_section(report))
     lines.append("<h2>检测发现</h2>")
     if not snapshot.findings:
         lines.append("<p>没有已保存的缺陷发现；是否正常以任务结论和覆盖条件为准。</p>")
@@ -257,13 +313,16 @@ def render_html(report: TaskReport) -> str:
             [
                 "<section>",
                 f"<h3>{label} — {REVIEWS[finding.review_status]}</h3>",
-                f"<p>发现 ID：{finding.finding_id}；来源：{finding.source.value}</p>",
+                f"<p>发现 ID：{finding.finding_id}；候选来源：{finding.source.value}</p>",
             ]
         )
         if finding.open_label:
             lines.append("<p>候选名称：" + escape(finding.open_label) + "</p>")
         if finding.score is not None:
-            lines.append(f"<p>模型分数：{finding.score:.4f}（非准确率）</p>")
+            lines.append(
+                f"<p>原检测候选分数：{finding.score:.4f}"
+                "（非准确率，不是融合类别置信度）</p>"
+            )
         if finding.confirmed_by:
             lines.append("<p>确认依据：" + escape(finding.confirmed_by) + "</p>")
         for evidence in finding.evidence:

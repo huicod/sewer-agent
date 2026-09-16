@@ -7,6 +7,7 @@ from pydantic import model_validator
 from .common import ContractModel
 from .enhancement import EnhancementResult, EnhancementReview, EnhancementSelection
 from .geometry import GeometryDetail
+from .image_evidence import ImageEvidence
 from .intake import TaskRecord
 from .tools import ToolCall
 
@@ -19,6 +20,7 @@ class TaskReport(ContractModel):
     enhancement: EnhancementResult | None = None
     enhancement_review: EnhancementReview | None = None
     geometry: GeometryDetail | None = None
+    image_evidence: ImageEvidence | None = None
 
     @model_validator(mode="after")
     def validate_source(self):
@@ -26,6 +28,12 @@ class TaskReport(ContractModel):
             raise ValueError("reports require a terminal snapshot")
         if any(call.task_id != self.task.snapshot.task_id for call in self.tool_calls):
             raise ValueError("report calls must belong to the reported task")
+        if self.image_evidence is not None and (
+            self.image_evidence.task_id != self.task.snapshot.task_id
+            or self.image_evidence.input_asset != self.task.input_asset
+            or self.image_evidence.findings != self.task.snapshot.findings
+        ):
+            raise ValueError("report image evidence must match the reported task")
         if self.enhancement is not None and self.enhancement.input_asset != self.task.input_asset:
             raise ValueError("enhancement input must belong to the reported task")
         if self.enhancement_review is not None and self.enhancement is None:

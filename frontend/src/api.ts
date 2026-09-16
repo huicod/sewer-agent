@@ -6,6 +6,7 @@ import type {
   HumanReviewDetail,
   HumanReviewRecord,
   HumanReviewSubmission,
+  ImageEvidenceDetail,
   SessionDetail,
   SessionRecord,
   TaskRecord,
@@ -21,6 +22,7 @@ import {
   isGeometryDetail,
   isHumanReviewDetail,
   isHumanReviewRecord,
+  isImageEvidenceDetail,
   isSessionDetail,
   isSessionRecord,
   isTaskRecord,
@@ -168,6 +170,14 @@ export function getGeometry(taskId: string): Promise<GeometryDetail> {
     `/api/tasks/${encodeURIComponent(taskId)}/geometry`,
     (payload): payload is GeometryDetail =>
       isGeometryDetail(payload) && payload.task_id === taskId,
+  );
+}
+
+export function getImageEvidence(taskId: string): Promise<ImageEvidenceDetail> {
+  return requestJson<ImageEvidenceDetail>(
+    `/api/tasks/${encodeURIComponent(taskId)}/image-evidence`,
+    (payload): payload is ImageEvidenceDetail =>
+      isImageEvidenceDetail(payload) && payload.task_id === taskId,
   );
 }
 

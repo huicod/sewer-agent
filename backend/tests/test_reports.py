@@ -158,7 +158,7 @@ def report_app(tmp_path):
             "enhance": result.model_dump(mode="json"),
             "enhancement_review": review.model_dump(mode="json"),
             "enhancement_selection": {"selection": selection.model_dump(mode="json")},
-        }[step]
+        }.get(step)
 
     # No create/start/model methods: report generation must be strictly read-only.
     repo = SimpleNamespace(get_task=get_task, list_calls=list_calls, load_step=load_step)
@@ -180,7 +180,15 @@ async def test_json_report_preserves_stored_evidence_and_unresolved_result(repor
     )
     assert payload["enhancement"] == result.model_dump(mode="json")
     assert payload["enhancement_review"] == review.model_dump(mode="json")
-    assert reads == ["task", "enhance", "enhancement_review", "enhancement_selection", "calls"]
+    assert reads == [
+        "task",
+        "enhance",
+        "enhancement_review",
+        "enhancement_selection",
+        "calls",
+        "detect",
+        "verify",
+    ]
 
 
 async def test_html_report_escapes_text_and_keeps_review_coverage_and_tool_failure(report_app):
@@ -276,11 +284,13 @@ def test_report_contract_rejects_cross_task_enhancement_and_review_without_resul
 
 def test_old_report_payload_defaults_enhancement_fields_to_null():
     task, call = report_fixture()
-    report = TaskReport.model_validate({
-        "schema_version": "1",
-        "task": task.model_dump(mode="json"),
-        "tool_calls": [call.model_dump(mode="json")],
-    })
+    report = TaskReport.model_validate(
+        {
+            "schema_version": "1",
+            "task": task.model_dump(mode="json"),
+            "tool_calls": [call.model_dump(mode="json")],
+        }
+    )
     assert report.enhancement is None
     assert report.enhancement_review is None
     assert report.enhancement_selection is None

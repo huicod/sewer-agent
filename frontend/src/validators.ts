@@ -9,6 +9,7 @@ import type {
   HumanReviewDetail,
   HumanReviewRecord,
   HumanReviewSubmission,
+  ImageEvidenceDetail,
   ImageRegion,
   RuntimeStatus,
   SessionDetail,
@@ -471,6 +472,31 @@ const ASSET_RECORD_FIELDS = new Set([
 const ASSET_REF_FIELDS = new Set(["asset_id", "version"]);
 const REGION_FIELDS = new Set(["width", "height", "bbox_xyxy"]);
 const QUALITY_FIELDS = new Set(["mean_luminance", "contrast", "sharpness", "adequate", "reasons"]);
+const IMAGE_EVIDENCE_FIELDS = new Set([
+  "task_id", "input_asset", "parent_task_id", "observation", "review", "fusion_changes", "findings",
+]);
+const OBSERVATION_FIELDS = new Set(["detection", "quality"]);
+const DETECTION_BATCH_FIELDS = new Set([
+  "detector_id", "model_version", "label_space_version", "width", "height", "detections",
+]);
+const ORIGINAL_DETECTION_FIELDS = new Set(["label", "native_label", "score", "bbox_xyxy"]);
+const EVIDENCE_REVIEW_FIELDS = new Set([
+  "image_assessable", "full_image_audited", "candidates", "additional_anomalies", "summary",
+]);
+const EVIDENCE_CANDIDATE_FIELDS = new Set([
+  "index", "verdict", "proposed_label", "reason", "evidence_strength",
+]);
+const EVIDENCE_ANOMALY_FIELDS = new Set([
+  "label", "name", "bbox_xyxy", "reason", "evidence_strength",
+]);
+const FUSION_CHANGE_FIELDS = new Set([
+  "index", "additional_index", "action", "pending", "label", "bbox_xyxy", "reason",
+  "vlm_verdict", "proposed_label", "gate",
+]);
+const IMAGE_EVIDENCE_FINDING_FIELDS = new Set([
+  "finding_id", "task_id", "canonical_label", "open_label", "review_status", "source", "score",
+  "evidence", "confirmed_by",
+]);
 const ENHANCEMENT_RESULT_FIELDS = new Set([
   "schema_version", "input_asset", "output_asset", "kind", "model_id", "model_version",
   "source_region", "quality_before", "quality_after", "review_required",
@@ -501,6 +527,100 @@ function isExactAssetRef(value: unknown): value is AssetRef {
 function isExactAssetRecord(value: unknown): value is AssetRecord {
   return isRecord(value) && hasExactFields(value, ASSET_RECORD_FIELDS) && isAssetRecord(value) &&
     isExactAssetRef(value.ref) && (value.parent === null || isExactAssetRef(value.parent));
+}
+
+function isFiniteBox(value: unknown): value is [number, number, number, number] {
+  return Array.isArray(value) && value.length === 4 && value.every(
+    (coordinate) => typeof coordinate === "number" && Number.isFinite(coordinate),
+  );
+}
+
+function isBoundedBox(value: unknown, width: number, height: number): boolean {
+  if (!isFiniteBox(value)) return false;
+  const [x1, y1, x2, y2] = value;
+  return 0 <= x1 && x1 < x2 && x2 <= width && 0 <= y1 && y1 < y2 && y2 <= height;
+}
+
+function isEvidenceStrength(value: unknown): boolean {
+  return value === null || value === "clear" || value === "uncertain";
+}
+
+function isImageObservation(value: unknown): boolean {
+  if (
+    !isRecord(value) || !hasExactFields(value, OBSERVATION_FIELDS) ||
+    !isRecord(value.detection) || !hasExactFields(value.detection, DETECTION_BATCH_FIELDS) ||
+    !isNonEmptyString(value.detection.detector_id) ||
+    !isNonEmptyString(value.detection.model_version) ||
+    !isNonEmptyString(value.detection.label_space_version) ||
+    !Number.isInteger(value.detection.width) || (value.detection.width as number) <= 0 ||
+    !Number.isInteger(value.detection.height) || (value.detection.height as number) <= 0 ||
+    !Array.isArray(value.detection.detections) ||
+    !isRecord(value.quality) || !hasExactFields(value.quality, QUALITY_FIELDS) || !isQuality(value.quality)
+  ) return false;
+  const width = value.detection.width as number;
+  const height = value.detection.height as number;
+  return value.detection.detections.every((detection) =>
+    isRecord(detection) && hasExactFields(detection, ORIGINAL_DETECTION_FIELDS) &&
+    typeof detection.label === "string" && VIDEO_LABELS.has(detection.label) &&
+    isNonEmptyString(detection.native_label) && isProgress(detection.score) &&
+    isBoundedBox(detection.bbox_xyxy, width, height),
+  );
+}
+
+function isEvidenceReview(value: unknown): boolean {
+  if (
+    !isRecord(value) || !hasExactFields(value, EVIDENCE_REVIEW_FIELDS) ||
+    typeof value.image_assessable !== "boolean" || typeof value.full_image_audited !== "boolean" ||
+    !Array.isArray(value.candidates) || !Array.isArray(value.additional_anomalies) ||
+    !isNonEmptyString(value.summary) || value.summary.length > 2_000
+  ) return false;
+  const verdicts = new Set(["accept", "revise", "reject", "abstain", "need_more_context"]);
+  return value.candidates.every((candidate) =>
+    isRecord(candidate) && hasExactFields(candidate, EVIDENCE_CANDIDATE_FIELDS) &&
+    isNonNegativeInteger(candidate.index) && typeof candidate.verdict === "string" &&
+    verdicts.has(candidate.verdict) &&
+    (candidate.proposed_label === null ||
+      (typeof candidate.proposed_label === "string" && VIDEO_LABELS.has(candidate.proposed_label))) &&
+    isNonEmptyString(candidate.reason) && candidate.reason.length <= 1_000 &&
+    isEvidenceStrength(candidate.evidence_strength),
+  ) && value.additional_anomalies.every((anomaly) =>
+    isRecord(anomaly) && hasExactFields(anomaly, EVIDENCE_ANOMALY_FIELDS) &&
+    typeof anomaly.label === "string" && DETECTION_LABELS.has(anomaly.label) &&
+    (anomaly.name === null || typeof anomaly.name === "string") &&
+    (anomaly.bbox_xyxy === null || isFiniteBox(anomaly.bbox_xyxy)) &&
+    isNonEmptyString(anomaly.reason) && anomaly.reason.length <= 1_000 &&
+    isEvidenceStrength(anomaly.evidence_strength),
+  );
+}
+
+function isFusionChange(value: unknown): boolean {
+  return isRecord(value) && hasExactFields(value, FUSION_CHANGE_FIELDS) &&
+    (value.index === null || isNonNegativeInteger(value.index)) &&
+    (value.additional_index === null || isNonNegativeInteger(value.additional_index)) &&
+    typeof value.action === "string" && typeof value.pending === "boolean" &&
+    typeof value.label === "string" && DETECTION_LABELS.has(value.label) &&
+    (value.bbox_xyxy === null || isFiniteBox(value.bbox_xyxy)) &&
+    typeof value.reason === "string" &&
+    (value.vlm_verdict === null || typeof value.vlm_verdict === "string") &&
+    (value.proposed_label === null ||
+      (typeof value.proposed_label === "string" && VIDEO_LABELS.has(value.proposed_label))) &&
+    (value.gate === null || typeof value.gate === "string");
+}
+
+export function isImageEvidenceDetail(value: unknown): value is ImageEvidenceDetail {
+  if (
+    !isRecord(value) || !hasExactFields(value, IMAGE_EVIDENCE_FIELDS) || !isUuid(value.task_id) ||
+    !isExactAssetRef(value.input_asset) ||
+    !(value.parent_task_id === null ||
+      (isUuid(value.parent_task_id) && value.parent_task_id !== value.task_id)) ||
+    !(value.observation === null || isImageObservation(value.observation)) ||
+    !(value.review === null || isEvidenceReview(value.review)) ||
+    !Array.isArray(value.fusion_changes) || !value.fusion_changes.every(isFusionChange) ||
+    !Array.isArray(value.findings) || !value.findings.every((finding) =>
+      isRecord(finding) && hasExactFields(finding, IMAGE_EVIDENCE_FINDING_FIELDS) &&
+      isFinding(finding) && finding.task_id === value.task_id)
+  ) return false;
+  return true;
 }
 
 function isEnhancementQuality(value: unknown): boolean {

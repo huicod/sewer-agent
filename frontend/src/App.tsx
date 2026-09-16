@@ -27,6 +27,7 @@ import { ReviewPanel } from "./ReviewPanel";
 import { VideoTimeline } from "./VideoTimeline";
 import { EnhancementPanel } from "./EnhancementPanel";
 import { GeometryPanel } from "./GeometryPanel";
+import { ImageEvidencePanel } from "./ImageEvidencePanel";
 import { ComparisonPanel } from "./ComparisonPanel";
 
 const SESSION_KEY = "pipe-inspector.session-id";
@@ -366,6 +367,12 @@ function TaskCard({
         runtimeStatus={task.snapshot.runtime_status}
         findingIds={task.snapshot.findings.map((finding) => finding.finding_id)}
       />
+      {task.frame_source || (mediaKind !== null && mediaKind !== "video") ? (
+        <ImageEvidencePanel
+          taskId={task.snapshot.task_id}
+          snapshotRevision={task.snapshot.updated_at}
+        />
+      ) : null}
       {!task.frame_source && (hasVideoLocator || mediaKind === "video") ? (
         <VideoTimeline
           taskId={task.snapshot.task_id}
