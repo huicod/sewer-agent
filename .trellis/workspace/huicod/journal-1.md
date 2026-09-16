@@ -1425,3 +1425,28 @@ SEDD官方资料/包结构未明确5001缺XML逐文件正常约定；924内部�
 **Status: Completed — dataset preparation only; awaiting user training approval.**
 恢复先读任务report.md与数据README，不使用旧preparation当训练入口。不再继续后台清洗、模型调用或训练。
 未来确认模型/训练参数后另行开训练任务，测试集不调参。服务仍暂停；未推GitHub，未改权重/VLM策略。
+
+## Session 44: YOLO26m与5090配置就绪，显存及单图并发预检通过
+
+**Date**: 2026-09-16
+**Task**: `.trellis/tasks/09-16-yolo26m-5090-config`
+**Change**: `tlqvooko` / `train/yolo26m-5090-config`（本地）
+
+用户指定YOLO26m，确认服务器切回RTX5090，并要求给前端调试预留资源。
+实测5090总32607MiB；Torch2.8.0+cu128支持sm120，不需换环境。CPU容器配额25核、RAM90GiB。
+新增profile入口（保留旧CLI）及dryrun；固定batch正整数、禁止profile混用旧覆盖flag及缩写绕过。
+当前配置位于`yolov26/configs/merged_five_yolo26m_5090.yaml`：m/960/batch8/AMP/MuSGD、
+100轮上限/早停30、workers4、CPU线程4、禁RAM缓存/多尺度/compile、allocator16GiB、启动至少18GiB空闲。
+官方m通用预训练权重已在yolov26/pretrained；旧线上s权重不替换，Session43数据划分保持。
+
+64张train内部密集标注图8个训练batch及batch16验证短程探针通过，包括checkpoint保存/回读。
+训练峰值allocated9.510GiB/reserved12.271GiB；另一进程10GiB模拟占用+旧YOLO单图推理，
+活动窗口55次成功（共71次），整卡采样最低空闲7.599GiB。不是全量训练或完整网页并发验收。
+首轮save=false的probe在训练/验证结束后回读不存在last.pt失败，改探针save=true完整通过；保留两轮证据。
+正式配置一直save=true；探针产物不可部署/当正式模型。证据位于var/training_preflight/2026-09-16-yolo26m。
+
+TDD、39相关测试、Ruff、实际dryrun/get_cfg/GPU资源门及独立只读审查通过；未运行无关全栈回归。
+配置与边界入口`yolov26/docs/merged_five_yolo26m_5090.md`，不在多处复制参数表。
+**Status: Completed — configuration/preflight only, awaiting formal training start approval.**
+不声称任意并发永无OOM；allocator限制不是显存硬分区或算力配额。前端轻量调试可作为共存目标，
+高分辨率增强/超分/分割/长视频错峰。服务未恢复，API未调用，正式训练未启动，未推送GitHub。

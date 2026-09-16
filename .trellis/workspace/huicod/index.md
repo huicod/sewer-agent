@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 43
+- **Total Sessions**: 44
 - **Last Active**: 2026-09-16
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~1440 | Active |
+| `journal-1.md` | ~1455 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 44 | 2026-09-16 | YOLO26m与5090资源配置和并发预检，等待正式训练 | jj `tlqvooko` | `train/yolo26m-5090-config` |
 | 43 | 2026-09-16 | 五类严格筛选与90/5/5数据集完成，等待训练确认 | jj `orkqmomu` | `data/merged-five-dataset` |
 | 42 | 2026-09-16 | 清洗合并五类候选，等待SEDD评估范围选择 | jj `rzktnoru` | `data/merged-five-dataset` |
 | 41 | 2026-09-16 | 修复复核溯源与分组，完成尺度对照并等待重训决定 | `fefc3ff9` | `fix/review-provenance-scale` |
@@ -78,7 +79,7 @@
 
 ## Notes
 
-- 最新恢复入口：Session43、`09-16-merged-five-dataset/report.md`。五类外及混合标注图整张排除；最终`var/datasets/merged_five_v1/data.yaml`已生成，12,120图，10,908/606/606，22定向测试/全量产物检查/独立审查通过。两来源均划分，SEDD仅评PL/BLOCK。无XML/配对冲突保留待核实，不能充当正常；BX稀少且背景仅32图，边界见报告。数据任务完成，等待训练确认，不再后台清洗或调用模型。服务仍暂停，未训练/API/推送；线上保持Session41，原训练manifest未找回，旧best.pt不能用于新split独立测试。T14-B规范输入仍待提供。
+- 最新恢复入口：Session44、`09-16-yolo26m-5090-config/report.md`及`yolov26/docs/merged_five_yolo26m_5090.md`。GPU已换回5090；YOLO26m/960/batch8/AMP/100epoch上限/早停30，16GiB allocator预算及18GiB启动空闲门已配置；64图短程训练验证与10GiB占用+旧YOLO单图并发预检通过，峰值reserved12.271GiB，39相关测试通过。正式训练尚未开始，等待启动确认；不自行恢复服务或推送。数据沿用Session43：merged_five_v1的12,120图、10,908/606/606，SEDD只评PL/BLOCK，缺XML/冲突保留待核实。线上仍用原s权重/VLM策略。大型GPU调试错峰；T14-B规范输入仍待提供。
 
 - Sessions are appended to journal files
 - New journal file created when current exceeds 2000 lines

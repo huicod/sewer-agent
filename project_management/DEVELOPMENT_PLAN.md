@@ -8,6 +8,8 @@
 使用SEDD和sewer2403，目标train/val/test为90/5/5，不下载额外数据；本阶段不启动训练或替换线上权重。
 已按用户后续要求排除五类外及混合图片，输出12,120图，实际10,908/606/606；两来源共同分组划分，SEDD只评PL/BLOCK，不能当完整五类真值。完整数据入口`var/datasets/merged_five_v1/data.yaml`，统计与边界见[训练前交接](../.trellis/tasks/09-16-merged-five-dataset/report.md)。原始数据不覆盖；无XML/配对不明样本保留待核实。数据就绪，训练需用户另行确认。
 
+用户随后指定YOLO26m与RTX5090：已保存[训练配置与资源预检](../yolov26/docs/merged_five_yolo26m_5090.md)，960/batch8/AMP，PyTorch allocator预算16GiB；短程训练与并行单图检测通过。正式训练尚未开始，线上YOLO26s/VLM策略不变；全量训练、服务恢复仍需确认。GPU当前已切回5090，下面09-09的3080Ti记录保留为历史环境。
+
 2026-09-16初版后诊断：[SEDD纯YOLO记录](../.trellis/tasks/09-16-sedd-yolo-diagnosis/report.md)确认外域低召回及在线/离线复核未对齐。随后[已认可引导复核在线接入](../.trellis/tasks/09-16-online-guided-review/report.md)并推送独立分支：新图片默认原图＋候选局部图与置信度分层融合，旧任务/视频不变。本轮补齐分阶段溯源，修复显式视频帧分组并保存[尺度对照](../.trellis/tasks/09-16-review-provenance-scale/scale-report.md)：切片未取得可接受综合收益，不进入主流程。原始训练manifest仍未找回；修正后划分只供未来训练，不作为现有权重的独立测试。本轮仅本地保存，服务保持暂停，初版main/标签保留。
 
 交付能够实际运行的完整 Agent 软件原型，而非 YOLO26 调参或训练项目。采用现有五类权重，靠多模型协作、证据复检和可靠工作流改善系统能力；效果必须实测，不预先保证准确率提升。
