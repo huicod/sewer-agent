@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 39
+- **Total Sessions**: 40
 - **Last Active**: 2026-09-16
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~1307 | Active |
+| `journal-1.md` | ~1343 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 40 | 2026-09-16 | 在线图片对齐已认可引导复核并推送独立分支 | `9f46bca0` | `fix/online-guided-review` |
 | 39 | 2026-09-16 | SEDD纯YOLO漏检诊断与在线离线复检差异 | jj mpvvyzmo | `-` |
 | 38 | 2026-09-16 | 暂停人工验收并准备初版GitHub快照 | - | `-` |
 | 37 | 2026-09-14 | 视频帧工具与长片收尾，进入人工试用 | jj sonwsnyp / `da01e199` | `-` |

@@ -1305,3 +1305,39 @@ T12-A 完成，保留五类/VLM/融合及开放补检退出在线的边界；T12
 ### Next Steps
 
 - 恢复读09-16-sedd-yolo-diagnosis/report.md及脚本evaluate.py；输出var/evaluations/2026-09-16-sedd-yolo含manifest/predictions/summary/per-image/uploaded-case-analysis/gallery。summarize仅缓存复算，run拒绝覆盖已有原始结果。下一步用户决定在线guided集成和前端分阶段展示、是否校准模型/候选阈值；无训练授权。API/worker/Temporal保持停止，PG和数据保留。
+
+
+## Session 40: 在线图片对齐已认可引导复核并推送独立分支
+
+**Date**: 2026-09-16
+**Task**: 在线图片对齐已认可引导复核并推送独立分支
+**Branch**: `fix/online-guided-review`
+
+### Summary
+
+用户授权的新图片默认guided接入完成，复用旧离线原图/候选crop/prompt/fusion，不改模型、视频或历史任务；服务保持暂停。
+
+### Main Changes
+
+- 新模式guided_review固定guided-confidence-v2/yolo-guided-review-v2/candidate-context-native-v1；高分保护、低分明确纠错、清晰非重复五类新增；OTHER/不确定/冲突仍人工，VLM分数不伪造。
+- 在线/离线共用fusion，verify保存raw review与fusion；增强/几何/关联复检解析及原结论兼容；旧candidate/discovery按固定版本恢复，不受新默认影响。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `9f46bca0` | (see git log) |
+
+### Testing
+
+- [OK] SEWER_RUN_STORAGE_TEST=1全后端1257 passed/48 skipped；Ruff通过；独立只读审查无问题且45定向测试通过。未调用付费API、未启动Temporal/应用服务。
+- [OK] 48张旧缓存predictions/changes及在线Finding选择投影逐项一致，含1次原失败回退；0新模型调用。回放输出var/evaluations/2026-09-16-online-guided-parity/summary.json。
+- [OK] 扫描43个待推送blob/41路径无真实密钥或禁止工件；远端fix/online-guided-review=9f46bca0已核实，main及初版标签仍b1173b1b，private=true。
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- 用户决定何时恢复人工验收；新建图片任务采用新模式，历史结果及旧人工等待保持不变。前端YOLO/VLM并排阶段展示仍待办；SEDD外域YOLO模型未训练/降阈值。恢复读09-16-online-guided-review/report.md。
