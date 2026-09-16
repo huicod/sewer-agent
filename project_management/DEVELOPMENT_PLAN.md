@@ -4,6 +4,8 @@
 
 ## 1. 目标与范围
 
+2026-09-16初版后诊断：[SEDD纯YOLO记录](../.trellis/tasks/09-16-sedd-yolo-diagnosis/report.md)确认外域低召回；还确认在线`image-review-v2/image-recall-v1`没有接入旧离线`yolo-guided-review-v2/guided-confidence-v2`的局部图与融合方案。此前“保持图片VLM策略”的描述不能视为两条链路已经一致；该集成差异及前端分阶段结果展示留待对齐修复，本轮仅诊断，服务保持暂停。
+
 交付能够实际运行的完整 Agent 软件原型，而非 YOLO26 调参或训练项目。采用现有五类权重，靠多模型协作、证据复检和可靠工作流改善系统能力；效果必须实测，不预先保证准确率提升。
 
 首版最终交互目标是“对话＋文件上传”的任务型 Agent，而非只交付后台流水线。现有计划已包含上传＋文本任务；T04 实现会话关联的提交与查询，T06 接入连续追问、引用既有证据和关联工具操作；不能把当前契约/API 客户端视为已完成对话 Agent。最新进度与恢复入口见 [Trellis 交接记录](../.trellis/workspace/huicod/journal-1.md)。

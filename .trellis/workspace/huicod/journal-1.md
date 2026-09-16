@@ -1270,3 +1270,38 @@ T12-A 完成，保留五类/VLM/融合及开放补检退出在线的边界；T12
 ### Next Steps
 
 - 完成快照文档检查后只快进推送main及新v0.1.0-prototype标签，并核实远端指向。不改仓库可见性，不强推，不上传运行数据；恢复验收由用户决定，下一轮优先处理YOLO/VLM阶段结果可见性。
+
+
+## Session 39: SEDD纯YOLO漏检诊断与在线离线复检差异
+
+**Date**: 2026-09-16
+**Task**: SEDD纯YOLO漏检诊断与在线离线复检差异
+
+### Summary
+
+用户要求仅诊断/纯YOLO测试：1638可靠SEDD全配对图+240固定源域对照完成，0 LLM/VLM调用，产品/权重/阈值未改。初版GitHub标签不动、不推送。
+
+### Main Changes
+
+- 两上传原始字节对应SEDD00002/00016，标注5crack+1deposit/1crack。实际960/.25原生与adapter均零框；低阈值最高分.113922/.004879。640/960/1280在.25均零，降阈值不是足够修复。
+- SEDD排除924 XML filename冲突及5001无XML图；crack->PL1234框、deposit->BLOCK518框、root不入五类；FS/BX/AJ未评分，不把deposit当腐蚀、不把root当正常。源域240可能训练重叠，非独立测试。
+- 关键集成差异：在线每图片verify，但使用ImageReviewer/image-review-v2+image-recall-v1，输入原图+JSON，无候选crop；旧认可实验为GuidedImageReviewer/yolo-guided-review-v2+guided-confidence-v2且有crop。这不是YOLO零框原因，但先前交接把两者一致性说得过满，已在计划/report纠正，未擅自切策略。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `jj mpvvyzmo` | (see git log) |
+
+### Testing
+
+- [OK] SEDD conf.25 IoU.5 TP/FP/FN131/65/1621，P/R66.84/7.48%；conf.05为225/302/1527，P/R42.69/12.84%。源域同PL/BLOCK83/28/13，P/R74.77/86.46%；源域五类197/41/31，82.77/86.40%。独立matcher/逐XML核验无重要问题。
+- [OK] 1878图主检测91.825秒；44相关测试通过、脚本Ruff通过；12例原标注/025/005图库和两上传尺寸对照保存，Chromium截图查看成功。无逐图VLM审查，未重跑整套产品或付费实验。
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- 恢复读09-16-sedd-yolo-diagnosis/report.md及脚本evaluate.py；输出var/evaluations/2026-09-16-sedd-yolo含manifest/predictions/summary/per-image/uploaded-case-analysis/gallery。summarize仅缓存复算，run拒绝覆盖已有原始结果。下一步用户决定在线guided集成和前端分阶段展示、是否校准模型/候选阈值；无训练授权。API/worker/Temporal保持停止，PG和数据保留。
