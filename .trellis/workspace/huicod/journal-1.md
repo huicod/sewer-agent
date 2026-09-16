@@ -1485,3 +1485,23 @@ CPU当前仍25核、RAM90GiB；用户后续改配额后正式启动前重查。s
 
 **Status: Launch completed; training RUNNING at handoff, not evaluated or deployed.**
 后续先查tmux/日志，不重复启动。SSH断开可继续，关机不能自动续训。线上权重/服务/API未动，未推送。
+
+## Session 47: YOLO26m训练结束，固定留出集评估与606图对照完成
+
+**Date**: 2026-09-17
+**Task**: `.trellis/tasks/09-17-yolo26m-posttrain-eval`
+**Change**: `uxttykpz` / `eval/yolo26m-posttrain`（本地）
+
+tmux退出0，84轮/4.070小时，best54轮；最后30轮未改善正常早停。无OOM/非有限loss，后段有过拟合。
+独立CPU审计epoch80的EMA/optimizer/scaler完整，9份周期快照齐全；best/last已strip，未实际恢复训练。
+冻结606图（sewer562/SEDD44），新best做mixed val/test、sewer test、SEDD PL/BLOCK test四项原生val。
+test mAP50/mAP50-95：混合63.20/42.20%，sewer63.18/42.47%，SEDD76.11/42.35%。
+真实适配器conf.25/960逐图新旧各606次，IoU.5匹配：SEDD新P64.47/R71.01%，旧P40/R5.80%；
+sewer新P68.85/R65.17%，旧参考P83.01/R87.57%但可能见过新holdout，不作独立基线。BX/FS偏弱。
+全量GT/old/new图片/JSON/HTML在var/evaluations/2026-09-17-yolo26m/gallery；83相关测试和Ruff通过。
+新m真实单图中位12.76ms/P95 27.88ms；4图批量及卸载通过。评估结束GPU0MiB。
+初次val指标导出误读model.validator导致中止，依据源码改on_val_end采集seen后全流程通过，初始证据保留。
+抽图发现FS部分GT落在文字遮挡区；不修改GT或测试阈值。完整报告yolov26/docs/merged_five_yolo26m_evaluation_20260917.md。
+
+**Status: Evaluation completed; no retraining/deployment/API calls/service restart/push.**
+下一步由用户人工看图后决定模型/数据处理；不以SEDD同来源提升宣称第三方泛化，不自动替换线上s权重。

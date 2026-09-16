@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 46
-- **Last Active**: 2026-09-16
+- **Total Sessions**: 47
+- **Last Active**: 2026-09-17
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~1492 | Active |
+| `journal-1.md` | ~1512 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 47 | 2026-09-17 | YOLO26m训练完成，606图新旧评估与图库交接 | jj `uxttykpz` | `eval/yolo26m-posttrain` |
 | 46 | 2026-09-16 | 正式YOLO26m训练已在tmux启动，交接后台运行 | jj `mptpuplr` | `train/yolo26m-5090-config` |
 | 45 | 2026-09-16 | 撤销前端预留，整卡训练参数短测通过 | jj `mynlmlty` | `train/yolo26m-5090-config` |
 | 44 | 2026-09-16 | YOLO26m与5090资源配置和并发预检，等待正式训练 | jj `tlqvooko` | `train/yolo26m-5090-config` |
@@ -81,7 +82,7 @@
 
 ## Notes
 
-- 最新恢复入口：Session46、`09-16-yolo26m-training-launch/report.md`及`yolov26/docs/merged_five_yolo26m_5090.md`。用户已批准正式训练；2026-09-16 14:21 UTC交接时tmux `sewer-yolo26m`正在第1/100轮运行，先查会话/日志，不重复启动。日志`var/training_logs/merged_five_yolo26m_960_5090.log`，产物`var/training/merged_five_yolo26m_960_5090/`。m/960/batch16/AMP/早停30、30GiB allocator、workers8/主线程8、save_period10，CPU25核。39测试通过、全量train/val扫描0损坏，启动无OOM。数据沿用Session43的12,120图，SEDD只评PL/BLOCK；训练未完成或部署，完成后分来源评估。线上仍用原s权重/VLM策略，服务未恢复、未推送；GPU调试错峰，T14-B规范输入仍待提供。
+- 最新恢复入口：Session47、`09-17-yolo26m-posttrain-eval/report.md`及`yolov26/docs/merged_five_yolo26m_evaluation_20260917.md`。训练正常早停84轮、best54、4.070h，tmux已退出0；四项标准val及606图新旧固定阈值对照完成。SEDD新P64.47/R71.01%，旧40/5.80%；sewer新68.85/65.17%，旧参考有holdout污染，BX/FS偏弱。结果/606图完整图库位于`var/evaluations/2026-09-17-yolo26m/`；83相关测试通过，GPU已释放。数据不改，用户人工看图后再决定下一步，不重新启动训练或自动部署。线上仍用原s权重/VLM策略，服务未恢复、未调用API、未推送；T14-B规范输入仍待提供。
 
 - Sessions are appended to journal files
 - New journal file created when current exceeds 2000 lines

@@ -1,6 +1,6 @@
 # YOLO26m / RTX 5090：整卡训练配置
 
-2026-09-16。配置和短程显存预检完成，用户已批准，**正式训练已在tmux启动**；训练完成情况以日志为准。
+2026-09-17状态：**正式训练正常早停于84轮，best为54轮**，训练及测试已完成、未部署。结果见[训练后评估](merged_five_yolo26m_evaluation_20260917.md)。以下保留实际训练参数和启动说明。
 配置唯一入口：[merged_five_yolo26m_5090.yaml](../configs/merged_five_yolo26m_5090.yaml)。
 原线上YOLO26s权重不替换，数据划分不变；本次不重启前后端服务。
 
@@ -61,7 +61,7 @@
   --profile yolov26/configs/merged_five_yolo26m_5090.yaml --dry-run
 ```
 
-下面是训练入口；本轮已启动，**不要重复执行**：
+下面是训练入口；本轮已完成，**不要重复执行**：
 
 ```bash
 .venv/bin/python -u yolov26/code/train_detect.py \

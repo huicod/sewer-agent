@@ -1,14 +1,14 @@
 # 管网检测 Agent：总体开发计划
 
-更新：2026-09-16；负责人：huicod。初版服务按用户要求暂停；图片引导复核已在线对齐，原检测/VLM/融合结果溯源展示和文档已补齐。最新后端1267通过/48跳过、前端122通过，存储回归、构建和独立审查通过，详见[本轮收尾](../.trellis/tasks/09-16-review-provenance-scale/report.md)。权重及已认可融合规则不变，开放补检停用；是否重训由用户决定。首版全项仍缺T14-B规范输入，四组状态见4.1；[运行手册与人工验收清单](../RUNNING.md)为使用入口。
+更新：2026-09-17；负责人：huicod。初版服务按用户要求暂停；图片引导复核已在线对齐，原检测/VLM/融合结果溯源展示和文档已补齐。最近全栈回归为后端1267通过/48跳过、前端122通过，存储回归、构建和独立审查通过，详见[初版收尾](../.trellis/tasks/09-16-review-provenance-scale/report.md)。线上权重及已认可融合规则不变，开放补检停用；新YOLO26m训练和离线测试已完成，尚未部署。首版全项仍缺T14-B规范输入，四组状态见4.1；[运行手册与人工验收清单](../RUNNING.md)为使用入口。
 
 ## 1. 目标与范围
 
 2026-09-16用户追加授权[五类数据清洗合并](../.trellis/tasks/09-16-merged-five-dataset/prd.md)：
 使用SEDD和sewer2403，目标train/val/test为90/5/5，不下载额外数据；本阶段不启动训练或替换线上权重。
-已按用户后续要求排除五类外及混合图片，输出12,120图，实际10,908/606/606；两来源共同分组划分，SEDD只评PL/BLOCK，不能当完整五类真值。完整数据入口`var/datasets/merged_five_v1/data.yaml`，统计与边界见[训练前交接](../.trellis/tasks/09-16-merged-five-dataset/report.md)。原始数据不覆盖；无XML/配对不明样本保留待核实。数据就绪，训练需用户另行确认。
+已按用户后续要求排除五类外及混合图片，输出12,120图，实际10,908/606/606；两来源共同分组划分，SEDD只评PL/BLOCK，不能当完整五类真值。完整数据入口`var/datasets/merged_five_v1/data.yaml`，统计与边界见[训练前交接](../.trellis/tasks/09-16-merged-five-dataset/report.md)。原始数据不覆盖；无XML/配对不明样本保留待核实。数据准备完成后，用户已另行批准训练，状态如下。
 
-用户随后指定YOLO26m与RTX5090，并撤销前端并发资源预留：当前[训练配置与资源预检](../yolov26/docs/merged_five_yolo26m_5090.md)为960/batch16/AMP、PyTorch allocator预算30GiB，workers8/主线程8、save_period=10；短程训练和验证通过，峰值reserved20.311GiB。2026-09-16用户批准后，正式训练已在tmux会话`sewer-yolo26m`启动，结果待完成后评估；线上YOLO26s/VLM策略不变，不自动恢复服务或部署新权重。GPU当前已切回5090，下面09-09的3080Ti记录保留为历史环境。
+用户随后指定YOLO26m与RTX5090，并撤销前端并发资源预留：[训练配置](../yolov26/docs/merged_five_yolo26m_5090.md)为960/batch16/AMP、allocator30GiB、workers8/主线程8、save_period10。用户批准tmux训练后已正常早停84轮，best54轮、4.070小时。[训练后评估](../yolov26/docs/merged_five_yolo26m_evaluation_20260917.md)完成四项原生验证、606图新旧对照和83相关测试：SEDD适配提升，但BX/FS仍弱、旧sewer对照有holdout污染风险，先人工复核、不直接上线。线上YOLO26s/VLM策略不变，不恢复服务。GPU为5090，下面09-09的3080Ti为历史记录。
 
 2026-09-16初版后诊断：[SEDD纯YOLO记录](../.trellis/tasks/09-16-sedd-yolo-diagnosis/report.md)确认外域低召回及在线/离线复核未对齐。随后[已认可引导复核在线接入](../.trellis/tasks/09-16-online-guided-review/report.md)并推送独立分支：新图片默认原图＋候选局部图与置信度分层融合，旧任务/视频不变。本轮补齐分阶段溯源，修复显式视频帧分组并保存[尺度对照](../.trellis/tasks/09-16-review-provenance-scale/scale-report.md)：切片未取得可接受综合收益，不进入主流程。原始训练manifest仍未找回；修正后划分只供未来训练，不作为现有权重的独立测试。本轮仅本地保存，服务保持暂停，初版main/标签保留。
 
