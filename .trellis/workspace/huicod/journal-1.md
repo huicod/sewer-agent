@@ -1341,3 +1341,38 @@ T12-A 完成，保留五类/VLM/融合及开放补检退出在线的边界；T12
 ### Next Steps
 
 - 用户决定何时恢复人工验收；新建图片任务采用新模式，历史结果及旧人工等待保持不变。前端YOLO/VLM并排阶段展示仍待办；SEDD外域YOLO模型未训练/降阈值。恢复读09-16-online-guided-review/report.md。
+
+
+## Session 41: 修复复核溯源与分组，完成尺度对照并等待重训决定
+
+**Date**: 2026-09-16
+**Task**: 修复复核溯源与分组，完成尺度对照并等待重训决定
+**Branch**: `fix/review-provenance-scale`
+
+### Summary
+
+按用户批准完成审查修正与有限纯YOLO诊断；权重/VLM策略不变，本地保存，服务暂停，是否重训等待用户。
+
+### Main Changes
+
+- 图片证据API/面板/HTML-JSON报告分别展示原检测类别分数、VLM意见、保存融合动作及当前人工状态；旧记录不重算，零候选和待审可查看。文档同步每图guided与视频条件复核。
+- 显式_frameNN分组修复；旧规则重建43/72视频帧家族跨集，新规则0/72。保存两份19049图清单，均不宣称现有权重独立测试；固定80SEDD+40source的原图/切片120图本地诊断与6例图库保存。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `fefc3ff9` | (see git log) |
+
+### Testing
+
+- [OK] SEWER_RUN_STORAGE_TEST=1全后端1267 passed/48 skipped；前端122 tests及tsc/vite build；Ruff、分组尺度9tests；独立报告审查2项问题已修复并确认。48旧guided缓存预测/动作一致。
+- [OK] 真实两上传任务只读API验证通过；切片四组TP/FP/FN由原评测器独立复算一致：SEDD8/6/87→17/164/78，source39/8/7→39/56/7，不接入线上。0外部API，无训练/服务重启。
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- 恢复读本任务report.md和scale-report.md；输出var/evaluations/2026-09-16-scale-followup。用户决定是否重训，先解决目标域标注/真正未见且分组的评估集；不要把重建/新划分算成已证明独立test。不擅自训练、推送或恢复服务。

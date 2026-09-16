@@ -35,4 +35,4 @@
 - 前端 14 文件 / 122 测试及 TypeScript/Vite 构建通过；分组/尺度 9 测试通过。Ruff 通过。
 - 一次独立产品审查发现视频报告无效溯源引用、HTML遗漏证据强度/待审状态；已补3个先红后绿回归并修正。无图片检查点的报告不附伪图片溯源，模型分数不指向不存在段落；HTML补齐已存字段。相关报告测试22通过。
 - 最终 `SEWER_RUN_STORAGE_TEST=1 .venv/bin/python -m pytest backend/tests -q --tb=short`：1267 passed / 48 skipped；独立审查确认原两项已关闭。前述前端/构建/Ruff结果均来自本轮实跑。
-- 本地 jj change `nsssuvmk` 保存实现；未推送，服务继续暂停，未重新开展付费 API / 浏览器人工验收，未训练。当前阶段结束，下一步是用户决定是否投入重训/域适配及独立评估集准备。
+- 本地提交 `fefc3ff9`（jj change `nsssuvmk`）保存实现，分支 `fix/review-provenance-scale`；未推送，服务继续暂停，未重新开展付费 API / 浏览器人工验收，未训练。当前阶段结束，下一步是用户决定是否投入重训/域适配及独立评估集准备。

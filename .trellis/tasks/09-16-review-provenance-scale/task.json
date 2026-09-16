@@ -15,7 +15,7 @@
   "branch": "fix/review-provenance-scale",
   "base_branch": "fix/online-guided-review",
   "worktree_path": null,
-  "commit": null,
+  "commit": "fefc3ff9e9f3582f830d0a9c7cb382b34eaec1c8",
   "pr_url": null,
   "subtasks": [],
   "children": [],
