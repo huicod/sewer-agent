@@ -1,4 +1,4 @@
-# YOLO26m / RTX 5090：训练配置与调试余量
+# YOLO26m / RTX 5090：整卡训练配置
 
 2026-09-16。配置和短程显存预检完成，**正式训练尚未启动**。
 配置唯一入口：[merged_five_yolo26m_5090.yaml](../configs/merged_five_yolo26m_5090.yaml)。
@@ -13,19 +13,19 @@
 | train / val / test | 10,908 / 606 / 606 |
 | GPU / 框架 | RTX5090，nvidia-smi总显存32607MiB；Torch2.8.0+cu128 / Ultralytics8.4.46 |
 | 输入 | imgsz=960，训练960×960，不启用多尺度 |
-| Batch | **固定8**；当前Ultralytics训练内验证自动为16 |
+| Batch | **固定16**；当前Ultralytics训练内验证自动为32 |
 | 轮次 / 早停 | 最多100epoch；patience=30；best.pt按验证表现选择，不认定第100轮最好 |
 | 优化器 | MuSGD；显式固定，旧YOLO26s训练日志的auto实际也选MuSGD |
 | 学习率 | lr0=0.01、lrf=0.01；cos_lr=false，基础终值0.0001（参数组可有倍率） |
 | 动量 / 权重衰减 | momentum=0.9 / weight_decay=0.0005 |
-| Warmup / 名义batch | warmup_epochs=3 / nbs=64，稳定阶段梯度累积约8步；预热期由框架调整 |
+| Warmup / 名义batch | warmup_epochs=3 / nbs=64，稳定阶段梯度累积约4步；预热期由框架调整 |
 | 混合精度 | AMP=true，真实AMP检查通过 |
-| CPU | 主进程Torch/OMP/MKL线程4；DataLoader训练workers4，当前框架验证workers8 |
-| 显存预算 | PyTorch allocator上限16GiB；启动时要求GPU空闲至少18GiB |
+| CPU | 主进程Torch/OMP/MKL线程8；DataLoader训练workers8，当前框架验证workers16 |
+| 显存预算 | 整卡供训练；PyTorch allocator上限30GiB；启动时要求GPU空闲至少30.5GiB |
 | 缓存 / 编译 | cache=false、compile=false |
 | 增强 | mosaic=1.0，最后10轮关闭；scale=0.5、translate=0.1、左右翻转0.5；不旋转/上下翻转；HSV0.015/0.7/0.4；mixup/cutmix关闭 |
 | 随机种子 | 20260916；deterministic=true |
-| 保存 | 每轮last/best，额外每10轮checkpoint；plots=true |
+| 保存 | 每轮更新last，达到最佳验证表现时更新best；save_period=10；plots=true |
 | 正式产物目录 | `var/training/merged_five_yolo26m_960_5090/`，权重在`weights/` |
 
 环境已经支持5090的sm_120，CUDA矩阵运算、真实前向/反向/MuSGD更新通过，不需要更换Torch。
@@ -33,25 +33,24 @@
 
 ## 显存预检证据
 
-`var/training_preflight/2026-09-16-yolo26m/result_saved.json`和`probe_saved.log`：
+`var/training_preflight/2026-09-16-yolo26m-full/result.json`和`probe.log`：
 
-- 从**训练集内部**固定取64张框较多的图片；完成8个训练batch及验证batch16的完整短程回合，并验证checkpoint保存/回读。测试集未使用，小子集指标不作为准确率结果。
-- 采用配置中的YOLO26m、960、batch8、AMP、MuSGD、16GiB allocator预算。为限制时间，回调在第8个训练batch后停止；预检关闭plots，与正式训练的报告绘图不同。
-- 另一独立进程保留**10GiB模拟显存占用**，同时持续运行现有YOLO26s的960单图预测。
-- 训练进程峰值allocated **9.510GiB**，峰值reserved **12.271GiB**；并发进程峰值reserved **10.201GiB**（包含模拟占用）。采样到的整卡最低空闲 **7.599GiB**。
-- 并发期间55次单图预测成功，端到端调用中位数约33.8ms、P95约40.3ms；仅此探针场景，不是完整网页/API/VLM响应时间。探针总计约21秒，不据此精确推算完整训练时长。
-- 首次预检关闭save后，训练/验证已通过，但库在结束时回读不存在的last.pt报错；修正为保存预检checkpoint后完整通过。失败记录`result.json`与`probe.log`保留；正式配置原本就是save=true。预检权重不用于部署或正式训练初始化。
+- 从**训练集内部**取128张框较多的图片，验证资源检查复用其中64张；完成8个训练batch、完整验证及checkpoint保存/回读。测试集未使用，指标不能作为准确率结果。
+- 实际训练batch16、验证batch32，AMP检查通过，MuSGD更新正常，8个loss均有限，无OOM或自动降批。训练workers8、验证workers16、主线程8与配置一致。
+- 峰值allocated **18.490GiB**，峰值reserved **20.311GiB**；总计约21秒。不据此精确推算全量训练耗时或保证所有数据批次的峰值。
+- 回调在8个训练batch后停止，预检关闭plots；没有模拟占用或并发推理。预检权重不用于部署或正式训练初始化。
+- 之前的batch8并发调试预检保留在`var/training_preflight/2026-09-16-yolo26m/`，仅作历史证据，原资源预留方案已被用户撤销。
 
-## 如何为调试留资源
+## 资源与checkpoint注意事项
 
-不使用AutoBatch，避免按空闲整卡自动扩大批量。固定batch8的实测缓存峰值距离16GiB预算还有约3.7GiB余量；整卡另外规划至少约12GiB供推理和运行时使用。
+不使用AutoBatch，固定batch16。用户已选择前端调试与训练错峰，不再为前端预留显存。32GB标称容量不能直接当作32GiB可分配容量；30GiB预算保留CUDA运行时余量，短测缓存峰值距离预算约9.7GiB，不为用满显存而盲目增大batch。
 
-16GiB是[PyTorch缓存分配器限制](https://docs.pytorch.org/docs/2.8/generated/torch.cuda.memory.set_per_process_memory_fraction.html)，**不是硬件显存分区、全部CUDA分配上限或GPU算力配额**。达到该限制也会抛OOM，不能把“设了上限”理解成“绝不OOM”；防范依靠固定批量、实测余量与启动检查共同完成。
+30GiB是[PyTorch缓存分配器限制](https://docs.pytorch.org/docs/2.8/generated/torch.cuda.memory.set_per_process_memory_fraction.html)，**不是硬件显存分区、全部CUDA分配上限或GPU算力配额**。达到该限制也会抛OOM，不能把“设了上限”理解成“绝不OOM”；防范依靠固定批量、实测余量与启动检查共同完成。
 
-- 页面、上传、任务状态、CPU/API和单张检测/VLM联调可作为共存目标；LLM/VLM仍走外部API。此次验证的是本地单图推理，不是整套前后端并发验收。
-- 高分辨率超分、增强、分割/深度或连续视频检测可能占用更多显存和算力，先与训练错峰；不要承诺所有视觉工具同时运行仍无OOM或无延迟。
-- 如果后续实测资源不足，先停止新增重型调试任务；再经确认降batch至4重新预检，不优先降低960分辨率，不自动放宽显存预算。
-- 当前容器CPU配额约25核、RAM上限90GiB；不缓存全部训练图，控制worker和线程。可用`nice -n 10`降低训练CPU调度优先级，但它不限制GPU算力。
+- 训练期间不并发启动其他GPU重任务。若全量训练仍OOM，先检查其他占用，再降低batch并重新预检，不自动放宽显存预算。
+- 当前容器CPU配额仍约25核、RAM上限90GiB；用户调整配额后，正式启动前重新核实，不能把宿主机208核亲和性当成容器配额。cache=false避免整集缓存。
+- 当前Ultralytics8.4.46使用零基epoch：save_period=10生成`epoch0.pt`、`epoch10.pt`、`epoch20.pt`等，实际对应完成第1、11、21轮，间隔10轮。每轮另有`last.pt`，最佳指标更新`best.pt`。
+- 已检查周期快照包含optimizer和scaler恢复状态。正常结束时框架会精简last/best；需要完整续训状态时保留周期快照，不要只保留部署用best。当前剩余磁盘约56GB，足以容纳本轮周期权重，但正式启动前仍检查剩余空间。
 
 ## 使用命令
 
@@ -65,7 +64,7 @@
 **下面的命令仅在用户确认正式训练后执行：**
 
 ```bash
-nice -n 10 .venv/bin/python -u yolov26/code/train_detect.py \
+.venv/bin/python -u yolov26/code/train_detect.py \
   --profile yolov26/configs/merged_five_yolo26m_5090.yaml
 ```
 

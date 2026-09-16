@@ -8,8 +8,8 @@ train:
   epochs: 100
   patience: 30
   imgsz: 960
-  batch: 8
-  workers: 4
+  batch: 16
+  workers: 8
   amp: true
   cache: false
   multi_scale: 0.0
@@ -44,6 +44,6 @@ train:
   plots: true
   exist_ok: false
 resources:
-  gpu_memory_gib: 16
-  min_free_gpu_gib: 18
-  cpu_threads: 4
+  gpu_memory_gib: 30
+  min_free_gpu_gib: 30.5
+  cpu_threads: 8

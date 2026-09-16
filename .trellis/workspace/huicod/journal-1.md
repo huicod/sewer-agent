@@ -1450,3 +1450,23 @@ TDD、39相关测试、Ruff、实际dryrun/get_cfg/GPU资源门及独立只读�
 **Status: Completed — configuration/preflight only, awaiting formal training start approval.**
 不声称任意并发永无OOM；allocator限制不是显存硬分区或算力配额。前端轻量调试可作为共存目标，
 高分辨率增强/超分/分割/长视频错峰。服务未恢复，API未调用，正式训练未启动，未推送GitHub。
+
+## Session 45: 撤销前端预留，整卡训练参数短测通过
+
+**Date**: 2026-09-16
+**Task**: `.trellis/tasks/09-16-yolo26m-full-gpu`
+**Change**: `mynlmlty` / `train/yolo26m-5090-config`（本地）
+
+用户改为之后再调试前端，替代Session44资源策略。当前唯一profile改为batch16、workers8、
+主线程8、allocator30GiB/启动空闲门30.5GiB，960/AMP/100轮/早停30和数据划分不变。
+CPU当前仍25核、RAM90GiB；用户后续改配额后正式启动前重查。save_period=10已保留，
+框架零基命名epoch0/10/20，周期快照保留优化器/scaler；last每轮，best按最佳指标更新。
+
+128张训练内部图8个batch和64张资源验证通过，实际train16/val32，无自动降批，loss有限。
+峰值allocated18.490GiB、reserved20.311GiB，保存及回读完成，结束显存归零。
+证据`var/training_preflight/2026-09-16-yolo26m-full/result.json`，不用于准确率或部署。
+39相关测试、Ruff、dry-run和diff检查通过。说明与路线图同步，不新增训练机制。
+
+**Status: Completed — configuration/preflight only; formal training not started.**
+恢复入口为本任务report及`yolov26/docs/merged_five_yolo26m_5090.md`。不再预留前端并发资源；
+短测不是绝无OOM保证。正式启动仍待用户确认，未恢复服务、未调用API、未推送GitHub。

@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 44
+- **Total Sessions**: 45
 - **Last Active**: 2026-09-16
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~1455 | Active |
+| `journal-1.md` | ~1477 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 45 | 2026-09-16 | 撤销前端预留，整卡训练参数短测通过 | jj `mynlmlty` | `train/yolo26m-5090-config` |
 | 44 | 2026-09-16 | YOLO26m与5090资源配置和并发预检，等待正式训练 | jj `tlqvooko` | `train/yolo26m-5090-config` |
 | 43 | 2026-09-16 | 五类严格筛选与90/5/5数据集完成，等待训练确认 | jj `orkqmomu` | `data/merged-five-dataset` |
 | 42 | 2026-09-16 | 清洗合并五类候选，等待SEDD评估范围选择 | jj `rzktnoru` | `data/merged-five-dataset` |
@@ -79,7 +80,7 @@
 
 ## Notes
 
-- 最新恢复入口：Session44、`09-16-yolo26m-5090-config/report.md`及`yolov26/docs/merged_five_yolo26m_5090.md`。GPU已换回5090；YOLO26m/960/batch8/AMP/100epoch上限/早停30，16GiB allocator预算及18GiB启动空闲门已配置；64图短程训练验证与10GiB占用+旧YOLO单图并发预检通过，峰值reserved12.271GiB，39相关测试通过。正式训练尚未开始，等待启动确认；不自行恢复服务或推送。数据沿用Session43：merged_five_v1的12,120图、10,908/606/606，SEDD只评PL/BLOCK，缺XML/冲突保留待核实。线上仍用原s权重/VLM策略。大型GPU调试错峰；T14-B规范输入仍待提供。
+- 最新恢复入口：Session45、`09-16-yolo26m-full-gpu/report.md`及`yolov26/docs/merged_five_yolo26m_5090.md`。用户撤销前端预留；YOLO26m/960/batch16/AMP/100epoch上限/早停30，30GiB allocator及30.5GiB启动空闲门，workers8/主线程8。128图短测训练验证通过，峰值reserved20.311GiB，39相关测试通过；周期快照间隔10轮、零基命名。CPU当前仍25核，调整后启动前重查。正式训练尚未开始，等待确认；不自行恢复服务或推送。数据沿用Session43：merged_five_v1共12,120图、10,908/606/606，SEDD只评PL/BLOCK，缺XML/冲突保留待核实。线上仍用原s权重/VLM策略。GPU调试与训练错峰；T14-B规范输入仍待提供。
 
 - Sessions are appended to journal files
 - New journal file created when current exceeds 2000 lines
