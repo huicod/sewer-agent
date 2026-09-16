@@ -1239,3 +1239,34 @@ T12-A 完成，保留五类/VLM/融合及开放补检退出在线的边界；T12
 ### Next Steps
 
 - 用户按RUNNING.md清单人工审查并反馈任务ID；规范需编号、版本及PDF/官方来源，收到后只补T14-B和相关验收。不得再扩开发阶段、改已接受图片策略、重复付费长片或自动推送。总体计划4.1唯一收尾表；进度/证据均已保存。
+
+
+## Session 38: 暂停人工验收并准备初版GitHub快照
+
+**Date**: 2026-09-16
+**Task**: 暂停人工验收并准备初版GitHub快照
+
+### Summary
+
+用户明确授权停止在线测试并上传huicod/sewer-agent私有仓库，版本v0.1.0-prototype；不是正式生产验收。
+
+### Main Changes
+
+- 受管API/CPU/GPU及Temporal已正常停止，PG保留运行，业务任务/图片/结果未删。不修改YOLO/VLM策略；README记录独立阶段结果展示不足和规范资料缺口。
+
+### Git Commits
+
+(No commits - planning session)
+
+### Testing
+
+- [OK] 本轮后端1127 passed/159 skipped（28.43秒）、前端111 passed。只运行本地回归，未重跑付费API/GPU实验。
+- [OK] 已检查待推送38个提交的1274个blob版本：未命中本地真实密钥、常见供应商token或私钥；8处凭据URL命中经查均为测试假值/插值。跟踪文件中无.env/var/工具环境/私钥/权重，.env.example仅占位；远端确认huicod/sewer-agent、private=true、main为本地祖先。
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- 完成快照文档检查后只快进推送main及新v0.1.0-prototype标签，并核实远端指向。不改仓库可见性，不强推，不上传运行数据；恢复验收由用户决定，下一轮优先处理YOLO/VLM阶段结果可见性。

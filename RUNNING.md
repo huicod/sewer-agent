@@ -3,6 +3,8 @@
 适用于这台已配置的GPU服务器，项目目录 `/root/autodl-tmp/server`。
 这是对话＋文件上传的Agent原型：LLM/VLM调用已有Qwen API，本地GPU执行检测及视觉工具。
 
+2026-09-16：按用户要求暂停人工验收，API、CPU/GPU worker及Temporal已停止，PostgreSQL保留运行；任务、原图和结果未删除。需要恢复时执行下方`start`，不必重新构建。初版快照及已知限制见[README](README.md#初版原型快照v010-prototype)。
+
 ## 启动
 
 在服务器终端执行：
