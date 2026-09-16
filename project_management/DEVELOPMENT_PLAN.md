@@ -4,6 +4,10 @@
 
 ## 1. 目标与范围
 
+2026-09-16用户追加授权[五类数据清洗合并](../.trellis/tasks/09-16-merged-five-dataset/prd.md)：
+使用SEDD和sewer2403，目标train/val/test为90/5/5，不下载额外数据；本阶段不启动训练或替换线上权重。
+SEDD缺少完整五类标注，是否进入val/test待用户选择；准备结果与排除记录独立保存，原始数据不覆盖。
+
 2026-09-16初版后诊断：[SEDD纯YOLO记录](../.trellis/tasks/09-16-sedd-yolo-diagnosis/report.md)确认外域低召回及在线/离线复核未对齐。随后[已认可引导复核在线接入](../.trellis/tasks/09-16-online-guided-review/report.md)并推送独立分支：新图片默认原图＋候选局部图与置信度分层融合，旧任务/视频不变。本轮补齐分阶段溯源，修复显式视频帧分组并保存[尺度对照](../.trellis/tasks/09-16-review-provenance-scale/scale-report.md)：切片未取得可接受综合收益，不进入主流程。原始训练manifest仍未找回；修正后划分只供未来训练，不作为现有权重的独立测试。本轮仅本地保存，服务保持暂停，初版main/标签保留。
 
 交付能够实际运行的完整 Agent 软件原型，而非 YOLO26 调参或训练项目。采用现有五类权重，靠多模型协作、证据复检和可靠工作流改善系统能力；效果必须实测，不预先保证准确率提升。

@@ -1376,3 +1376,24 @@ T12-A 完成，保留五类/VLM/融合及开放补检退出在线的边界；T12
 ### Next Steps
 
 - 恢复读本任务report.md和scale-report.md；输出var/evaluations/2026-09-16-scale-followup。用户决定是否重训，先解决目标域标注/真正未见且分组的评估集；不要把重建/新划分算成已证明独立test。不擅自训练、推送或恢复服务。
+
+## Session 42: 清洗合并五类候选，等待SEDD评估范围选择
+
+**Date**: 2026-09-16
+**Task**: `.trellis/tasks/09-16-merged-five-dataset`
+**Change**: `rzktnoru`
+
+用户授权清洗SEDD+sewer2403，保留五类，目标train/val/test=90/5/5；本阶段不训练。
+已保存`var/datasets/merged_five_v1_preparation/`：19,431候选（sewer18,320+SEDD1,111），
+7,181排除记录，13,487组、1,214近似对，7图标注预览。原文件不改不删，不运行模型/API。
+恢复XML内原视频名参与分组，1px越界裁边；既有预增强、配对不明、缺标、重复冲突隔离。
+
+18项定向测试、Ruff、diff检查通过；实际清单独立复算行数/类别框/边界/路径/同别名同组通过，
+查看3张转换图；独立只读代码审查无阻塞问题。保持线上服务暂停、现有权重/VLM不变。
+
+**Status: In progress — awaiting user split-policy choice.**
+SEDD只有PL/BLOCK可映射标注，缺FS/BX/AJ完整真值；已询问是否只补训练（推荐，val/test用sewer，
+全局90/5/5），还是两来源都拆分、SEDD只评PL/BLOCK。不把缺XML全当正常。
+还没有最终split、data.yaml或训练图片目录；不要宣称完整训练集已完成。
+后续从cleaned_manifest恢复Record/group_id即可，避免重做全量解码和近邻搜索。
+详细计数、限制和继续步骤见任务report.md；不自行推送GitHub、重训或启动服务。

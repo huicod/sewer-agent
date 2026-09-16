@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 41
+- **Total Sessions**: 42
 - **Last Active**: 2026-09-16
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~1378 | Active |
+| `journal-1.md` | ~1400 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 42 | 2026-09-16 | 清洗合并五类候选，等待SEDD评估范围选择 | jj `rzktnoru` | `data/merged-five-dataset` |
 | 41 | 2026-09-16 | 修复复核溯源与分组，完成尺度对照并等待重训决定 | `fefc3ff9` | `fix/review-provenance-scale` |
 | 40 | 2026-09-16 | 在线图片对齐已认可引导复核并推送独立分支 | `9f46bca0` | `fix/online-guided-review` |
 | 39 | 2026-09-16 | SEDD纯YOLO漏检诊断与在线离线复检差异 | jj mpvvyzmo | `-` |
@@ -76,7 +77,7 @@
 
 ## Notes
 
-- 最新恢复入口：Session41、`09-16-review-provenance-scale/report.md` 与 `scale-report.md`。`fefc3ff9` 已本地修复前端/报告原YOLO、VLM、融合结果溯源，显式frame分组43/72跨集变0/72；固定80 SEDD切片R8.42→17.89%、P57.14→9.39%，未推广。后端1267通过/48跳过、前端122/build通过、48旧guided缓存一致。Session40已完成在线guided对齐并推送；本轮`fix/review-provenance-scale`仅本地保存。服务仍暂停，PG及原任务保留；旧任务不重算，未训练/调用付费API。用户下一步决定是否重训；独立原训练manifest未找回，新划分不能作为现有权重未见测试。T14-B规范输入仍待提供，初版main/标签未变。
+- 最新恢复入口：Session42、`09-16-merged-five-dataset/report.md`。用户授权两套数据清洗、五类、90/5/5；已保存19,431候选及分组/排除记录于`var/datasets/merged_five_v1_preparation`，18测试通过。等待用户决定SEDD只训练或入评估但仅评PL/BLOCK，最终split/data.yaml尚未生成。复用cleaned_manifest，勿重复全量解码/近邻搜索。数据任务保留in_progress。服务仍暂停，未训练/API/推送；在线策略保持Session41，原训练manifest未找回，不能以旧best.pt在新split报告独立测试。T14-B规范输入仍待提供。
 
 - Sessions are appended to journal files
 - New journal file created when current exceeds 2000 lines
