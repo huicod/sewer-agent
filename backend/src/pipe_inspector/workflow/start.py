@@ -15,9 +15,10 @@ from temporalio.common import WorkflowIDReusePolicy
 from temporalio.exceptions import WorkflowAlreadyStartedError
 from temporalio.service import RPCError
 
-from pipe_inspector.agent.image_discovery import DISCOVERY_PROMPT_VERSION, VIEW_POLICY_VERSION
+from pipe_inspector.agent.image_discovery import DISCOVERY_PROMPT_VERSION
 from pipe_inspector.agent.image_review import IMAGE_REVIEW_PROMPT_VERSION
 from pipe_inspector.agent.recall_policy import RECALL_POLICY_VERSION
+from pipe_inspector.agent.review_pipeline import review_pins
 from pipe_inspector.agent.supplement_policy import SUPPLEMENT_POLICY_VERSION
 from pipe_inspector.config import Settings
 from pipe_inspector.contracts.assets import AssetKind, AssetRef
@@ -63,7 +64,6 @@ def run_config(
     detector = detector or UltralyticsDetector(
         settings.detector_path, device=settings.detector_device
     )
-    independent = settings.image_review_mode == "independent_discovery"
     _reject_retired_plan(plan)
     config = {
         "detector_id": detector.detector_id,
@@ -71,10 +71,7 @@ def run_config(
         "label_space_version": detector.label_space_version,
         "vlm_model": settings.vlm_model,
         "vlm_base_url": settings.vlm_base_url,
-        "policy_version": POLICY_VERSION,
-        "prompt_version": PROMPT_VERSION if independent else IMAGE_REVIEW_PROMPT_VERSION,
-        "view_policy_version": VIEW_POLICY_VERSION if independent else None,
-        "image_review_mode": settings.image_review_mode,
+        **review_pins(settings.image_review_mode),
         "human_review_version": "human-review-v1",
         "api_timeout_seconds": settings.api_timeout_seconds,
         "api_enable_thinking": settings.api_enable_thinking,

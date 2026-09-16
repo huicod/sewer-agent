@@ -7,7 +7,7 @@ from uuid import UUID, uuid5
 from temporalio import activity
 from temporalio.exceptions import ApplicationError
 
-from pipe_inspector.agent.recall_policy import decide_image_recall
+from pipe_inspector.agent.review_pipeline import decide_for_run, parse_image_review
 from pipe_inspector.contracts.findings import Finding
 from pipe_inspector.contracts.geometry import (
     GeometryOptions,
@@ -15,7 +15,7 @@ from pipe_inspector.contracts.geometry import (
     SegmentationRequest,
     SegmentationResult,
 )
-from pipe_inspector.contracts.inspection import ImageObservation, ImageReview, InspectionDecision
+from pipe_inspector.contracts.inspection import ImageObservation, InspectionDecision
 from pipe_inspector.contracts.intake import TaskRecord
 from pipe_inspector.contracts.tasks import TaskSnapshot
 from pipe_inspector.contracts.tools import ToolCall
@@ -62,7 +62,7 @@ def geometry_baseline(repo, run, task, observation, review) -> InspectionDecisio
     if run["config"].get("operation") == "supplement_review":
         parent = TaskRecord.model_validate(repo.load_step(task_id, "source")["task"])
         return _linked_baseline(task_id, parent)
-    return decide_image_recall(task_id, task.input_asset, observation, review)
+    return decide_for_run(run["config"], task_id, task.input_asset, observation, review)
 
 
 class GeometryActivities(ImageActivities):
@@ -181,7 +181,7 @@ class GeometryActivities(ImageActivities):
             observation = ImageObservation.model_validate(self.repo.load_step(task_id, "detect"))
             saved = self.repo.load_step(task_id, "verify")
             review = (
-                ImageReview.model_validate(saved["review"])
+                parse_image_review(saved["review"])
                 if saved and saved.get("review")
                 else None
             )

@@ -1,4 +1,4 @@
-"""Experimental YOLO-guided review; never selects final application findings."""
+"""YOLO-guided review shared by online images and the accepted offline evaluator."""
 
 from __future__ import annotations
 

@@ -8,18 +8,20 @@ from temporalio import activity
 from temporalio.exceptions import ApplicationError
 
 from pipe_inspector.agent.api_client import APIClientError, OpenAICompatibleClient
-from pipe_inspector.agent.image_discovery import VIEW_POLICY_VERSION, IndependentImageReviewer
+from pipe_inspector.agent.guided_fusion import fuse_guided
+from pipe_inspector.agent.guided_review import GuidedImageReviewer
+from pipe_inspector.agent.image_discovery import IndependentImageReviewer
 from pipe_inspector.agent.image_review import IMAGE_REVIEW_PROMPT_VERSION, ImageReviewer
-from pipe_inspector.agent.recall_policy import decide_image_recall
+from pipe_inspector.agent.review_pipeline import decide_for_run, parse_image_review, review_pins
 from pipe_inspector.agent.supplement_policy import SUPPLEMENT_POLICY_VERSION
 from pipe_inspector.contracts.common import ImageRegion
 from pipe_inspector.contracts.findings import EvidenceRef, Finding, FindingSource, ReviewStatus
-from pipe_inspector.contracts.inspection import ImageObservation, ImageReview
+from pipe_inspector.contracts.inspection import ImageObservation
 from pipe_inspector.contracts.tasks import CoverageSummary, TaskSnapshot
 from pipe_inspector.contracts.tools import ToolCall, ToolCallStatus, ToolError
 from pipe_inspector.vision.detector import UltralyticsDetector
 from pipe_inspector.vision.quality import analyze_quality
-from pipe_inspector.workflow.start import DETECT_TIMEOUT, POLICY_VERSION, PROMPT_VERSION
+from pipe_inspector.workflow.start import DETECT_TIMEOUT
 
 
 class ImageActivities:
@@ -40,7 +42,7 @@ class ImageActivities:
             idempotency_key=f"{run['run_id']}:{step}",
             attempt=activity.info().attempt,
             tool_name=step,
-            tool_version="1",
+            tool_version=config["prompt_version"] if step == "verify" else "1",
             resource="gpu" if step == "detect" else "api",
             model_version=config["model_version" if step == "detect" else "vlm_model"],
             timeout_seconds=DETECT_TIMEOUT if step == "detect" else config["api_timeout_seconds"],
@@ -49,13 +51,14 @@ class ImageActivities:
         )
 
     def _check_versions(self, config, *, detector=False, vlm=False):
-        independent = self.settings.image_review_mode == "independent_discovery"
-        expected = {
-            "policy_version": POLICY_VERSION,
-            "prompt_version": PROMPT_VERSION if independent else IMAGE_REVIEW_PROMPT_VERSION,
-            "view_policy_version": VIEW_POLICY_VERSION if independent else None,
-            "image_review_mode": self.settings.image_review_mode,
-        }
+        # Admission defaults may change during deployment. Existing runs execute
+        # their supported, immutable policy tuple, never the worker's new default.
+        try:
+            expected = review_pins(config.get("image_review_mode"))
+        except ValueError:
+            raise ApplicationError(
+                "Unsupported pinned review mode", type="configuration_changed", non_retryable=True
+            ) from None
         if config.get("operation") == "video_inspection":
             expected = {
                 "policy_version": "image-policy-v1",
@@ -222,11 +225,11 @@ class ImageActivities:
             if reviewer is None:
                 if not self.settings.vlm_configured:
                     raise APIClientError("vlm_not_configured", retryable=False)
-                reviewer_type = (
-                    IndependentImageReviewer
-                    if run["config"]["image_review_mode"] == "independent_discovery"
-                    else ImageReviewer
-                )
+                reviewer_type = {
+                    "guided_review": GuidedImageReviewer,
+                    "independent_discovery": IndependentImageReviewer,
+                    "candidate_review": ImageReviewer,
+                }[run["config"]["image_review_mode"]]
                 reviewer = reviewer_type(
                     OpenAICompatibleClient(
                         self.settings.vlm_base_url,
@@ -240,6 +243,9 @@ class ImageActivities:
                 )
             task = await asyncio.to_thread(self.repo.get_task, task_id)
             review = await reviewer.review(self.media.path_for(task.input_asset), observation)
+            review = parse_image_review(
+                review.model_dump(mode="json"), mode=run["config"]["image_review_mode"]
+            )
         except APIClientError as exc:
             error = await asyncio.to_thread(
                 self._error,
@@ -259,17 +265,25 @@ class ImageActivities:
                 self._error, run, "verify", "review_input_invalid"
             ) from None
         call = await asyncio.to_thread(self._call, run, "verify", status="succeeded")
+        saved = {"review": review.model_dump(mode="json"), "skipped": False}
+        if run["config"]["image_review_mode"] == "guided_review":
+            saved["fusion"] = fuse_guided(observation, review)
         return await asyncio.to_thread(
             self.repo.save_step,
             task_id,
             "verify",
-            {"review": review.model_dump(mode="json"), "skipped": False},
+            saved,
             call,
         )
 
     def _decide(self, run, task, observation, review, error):
-        return decide_image_recall(
-            task.snapshot.task_id, task.input_asset, observation, review, review_error=error
+        return decide_for_run(
+            run["config"],
+            task.snapshot.task_id,
+            task.input_asset,
+            observation,
+            review,
+            review_error=error,
         )
 
     @activity.defn(name="finish_image")
@@ -339,7 +353,7 @@ class ImageActivities:
             else:
                 saved_review = self.repo.load_step(task_id, "verify")
                 review = (
-                    ImageReview.model_validate(saved_review["review"])
+                    parse_image_review(saved_review["review"])
                     if saved_review and saved_review.get("review")
                     else None
                 )

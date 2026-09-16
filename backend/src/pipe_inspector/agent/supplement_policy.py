@@ -18,9 +18,19 @@ def _opinion(candidate, original_label):
 
 
 def decide_supplement(
-    task_id, asset, observation, review, *, previous, previous_review, review_error=None
+    task_id,
+    asset,
+    observation,
+    review,
+    *,
+    previous,
+    previous_review,
+    review_error=None,
+    fresh_decision=None,
 ):
-    fresh = decide_image_recall(task_id, asset, observation, review, review_error=review_error)
+    fresh = fresh_decision or decide_image_recall(
+        task_id, asset, observation, review, review_error=review_error
+    )
     findings = list(fresh.findings)
     reasons = list(fresh.reasons)
     if (

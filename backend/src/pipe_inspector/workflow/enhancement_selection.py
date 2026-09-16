@@ -12,8 +12,9 @@ from pipe_inspector.agent.enhancement_selection import (
     EnhancementSelector,
     gate_proposal,
 )
+from pipe_inspector.agent.review_pipeline import parse_image_review
 from pipe_inspector.contracts.enhancement import EnhancementProposal, EnhancementSelection
-from pipe_inspector.contracts.inspection import ImageObservation, ImageReview
+from pipe_inspector.contracts.inspection import ImageObservation
 from pipe_inspector.contracts.tools import ToolCall
 from pipe_inspector.workflow.enhancement_activities import (
     EnhancementActivities,
@@ -90,7 +91,7 @@ class EnhancementSelectionActivities(EnhancementActivities):
             )
             saved = await asyncio.to_thread(self.repo.load_step, task_id, "verify")
             review = (
-                ImageReview.model_validate(saved["review"])
+                parse_image_review(saved["review"])
                 if saved and saved.get("review")
                 else None
             )

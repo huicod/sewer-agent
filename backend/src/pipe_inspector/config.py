@@ -48,7 +48,9 @@ class Settings(BaseSettings):
     api_max_output_tokens: int | None = Field(default=None, ge=1, le=8192)
     api_timeout_seconds: float = Field(default=60, gt=0, allow_inf_nan=False)
     vlm_max_image_bytes: int = Field(default=8 * 1024**2, gt=0)
-    image_review_mode: Literal["candidate_review", "independent_discovery"] = "candidate_review"
+    image_review_mode: Literal["guided_review", "candidate_review", "independent_discovery"] = (
+        "guided_review"
+    )
 
     @model_validator(mode="after")
     def paired_open_models(self):

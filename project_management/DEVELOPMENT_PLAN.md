@@ -4,7 +4,7 @@
 
 ## 1. 目标与范围
 
-2026-09-16初版后诊断：[SEDD纯YOLO记录](../.trellis/tasks/09-16-sedd-yolo-diagnosis/report.md)确认外域低召回；还确认在线`image-review-v2/image-recall-v1`没有接入旧离线`yolo-guided-review-v2/guided-confidence-v2`的局部图与融合方案。此前“保持图片VLM策略”的描述不能视为两条链路已经一致；该集成差异及前端分阶段结果展示留待对齐修复，本轮仅诊断，服务保持暂停。
+2026-09-16初版后诊断：[SEDD纯YOLO记录](../.trellis/tasks/09-16-sedd-yolo-diagnosis/report.md)确认外域低召回及在线/离线复核未对齐。用户随后批准[在线接入已认可引导复核](../.trellis/tasks/09-16-online-guided-review/report.md)：新图片默认原图＋候选局部图与置信度分层融合，旧任务/视频不变。前端分阶段结果展示仍待改进；服务保持暂停，初版main/标签保留，修正推送独立分支。
 
 交付能够实际运行的完整 Agent 软件原型，而非 YOLO26 调参或训练项目。采用现有五类权重，靠多模型协作、证据复检和可靠工作流改善系统能力；效果必须实测，不预先保证准确率提升。
 

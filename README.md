@@ -27,6 +27,8 @@ server/
 
 ## 1. 本次 YOLO26 取舍
 
+初版后的图片链路修正见[在线引导复核记录](.trellis/tasks/09-16-online-guided-review/report.md)：新图片任务默认复用已认可的离线引导复核（原图＋候选局部图、置信度分层融合），旧任务仍执行固定的旧版本。此修正不改变上述初版标签，也未恢复暂停的服务。
+
 主版本采用 `Sewer2403 五类 YOLO26s + 960`，因为它是当前本地最新且产物完整的实验，包含 `best.pt`、`last.pt`、逐轮指标、曲线、混淆矩阵和验证集预测图。
 
 同时保留 Sewer2403 17 类实验的训练配置与完整日志，用于读取逐类结果和后续复现。17 类的 `best.pt`、`results.csv` 和曲线当时没有同步回本机，因此没有伪装成完整 checkpoint 放入交付包。
@@ -49,7 +51,7 @@ scp -P <端口> -r .\server root@<服务器IP>:/root/autodl-tmp/
 
 - 总体开发计划与阶段验收：[DEVELOPMENT_PLAN.md](project_management/DEVELOPMENT_PLAN.md)；本机使用见 [运行手册](RUNNING.md)，开发与实验命令见 [后端入口](backend/README.md)。T14-B等待规范文档，整体首版验收尚未完成；开放补检已停用。
 - 当前视频运行与恢复证据：[T08 runtime report](.trellis/tasks/09-10-m2-video-workflow/runtime-report.md)；复检实测结果：[paired pilot](.trellis/tasks/09-10-m2-video-workflow/data-report.md)。工程闭环可用不代表准确率已提升。
-- 当前图片召回与复检结论：[召回保护及独立扫描实测](.trellis/tasks/09-11-image-recall/report.md)。默认保留候选复核并防止原检测丢失；独立扫描因误报回退仅供实验，不代表整体准确率已提高。
+- 当前图片策略：[置信度分层离线实测](.trellis/tasks/09-11-confidence-review/report.md)及[在线接入验证](.trellis/tasks/09-16-online-guided-review/report.md)。高置信度保留、低置信度明确纠错、可定位非重复缺陷补充；不确定/其他类别交人工。独立扫描保留为旧实验模式。
 - 开发规则：[AGENTS.md](AGENTS.md)
 
 - YOLO26 数据准备、训练和评估：`yolov26/README.md`

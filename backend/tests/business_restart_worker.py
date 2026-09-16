@@ -94,17 +94,26 @@ class DeterministicReviewer:
         self.trace = trace
 
     async def review(self, _path: Path, observation) -> ImageReview:
+        from pipe_inspector.agent.guided_review import GuidedReview
+
         count = len(observation.detection.detections)
         self.trace.append(
             "review",
             input_kind="image_original" if count else "video_frame",
             detection_count=count,
         )
-        return ImageReview(
+        return GuidedReview(
             image_assessable=True,
             full_image_audited=True,
             candidates=(
-                ({"index": 0, "verdict": "abstain", "reason": "fixture ambiguity"},)
+                (
+                    {
+                        "index": 0,
+                        "verdict": "abstain",
+                        "reason": "fixture ambiguity",
+                        "evidence_strength": "uncertain",
+                    },
+                )
                 if count
                 else ()
             ),

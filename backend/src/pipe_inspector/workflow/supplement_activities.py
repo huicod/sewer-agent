@@ -4,9 +4,9 @@ from uuid import uuid4
 
 from temporalio import activity
 
+from pipe_inspector.agent.review_pipeline import decide_for_run, parse_image_review
 from pipe_inspector.agent.supplement_policy import decide_supplement
 from pipe_inspector.contracts.findings import Finding
-from pipe_inspector.contracts.inspection import ImageReview
 from pipe_inspector.contracts.intake import TaskRecord
 from pipe_inspector.workflow.activities import ImageActivities
 
@@ -44,7 +44,7 @@ class SupplementActivities(ImageActivities):
         parent = TaskRecord.model_validate(source["task"])
         prior = source.get("verify")
         prior_review = (
-            ImageReview.model_validate(prior["review"]) if prior and prior.get("review") else None
+            parse_image_review(prior["review"]) if prior and prior.get("review") else None
         )
         return decide_supplement(
             task.snapshot.task_id,
@@ -54,6 +54,14 @@ class SupplementActivities(ImageActivities):
             previous=parent.snapshot,
             previous_review=prior_review,
             review_error=error,
+            fresh_decision=decide_for_run(
+                run["config"],
+                task.snapshot.task_id,
+                task.input_asset,
+                observation,
+                review,
+                review_error=error,
+            ),
         )
 
     @activity.defn(name="finish_image_supplement")

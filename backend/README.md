@@ -278,11 +278,11 @@ SEWER_RUN_STORAGE_TEST=1 .venv/bin/python -m pytest backend/tests/integration/te
 
 - 页面启动按钮或 POST /api/tasks/{id}/start 显式启动图片/视频检查，返回 202。相同任务重复点击沿用固定工作流 ID 与首次落盘配置；启动请求超时可重试，不另建任务；终态重处理需新建任务。
 - GET /api/tasks/{id} 的 snapshot 包含实际阶段、重试次数、结论和证据；GET /api/tasks/{id}/calls 查看每个工具的各次尝试。成功 Activity 结果落检查点，可跨 worker 重启复用。
-- 图片默认采用 `candidate_review`：保留已有 v2 候选复核并加入召回保护，所有图片审核一次，高置信检测也不跳过。代码保留全部原始检测类别/框/分数，VLM 分歧不能删除它们，新增和未决发现保持待审。视频仍沿用原条件式候选复核，不受本次策略修改影响。
+- 新图片默认采用 `guided_review`，所有图片审核一次（包括零框、高置信检测）。复用已接受离线规则：score≥0.85 的原类别/框/分数受保护，分歧交人工；低分允许明确拒绝或原框改类；明确、可定位、不重复的五类新增纳入融合。质量足够时明确接受/改类/新增可由规则确认，OTHER/不确定/冲突待审；拒绝证据保留为 rejected，不作为有效缺陷。VLM 新增 finding 的 score 为 null，不把离线评分占位值 1.0 冒充置信度。视频策略不变。
 - 正常必须满足画质、全图检测覆盖和完成的全图阴性审核。OTHER、冲突或不能判断的候选为待复核；T09 新任务进入真正的人工等待，旧 pinless 任务维持历史 partial 行为，详见下节。
 - VLM 传输最多 3 次尝试；鉴权/配置/结构错误不重试，超时/网络失败标记 uncertain。检测端的可恢复传输失败最多重试 3 次；本地最终落库可耐久重试，但不会再执行检测或 VLM。供应商可能已处理请求，不能保证无重复计费。当前只记录次数与状态，未计量真实 token/金额。
-- VLM 使用原图（默认最多 8 MiB）。可选实验模式 `SEWER_IMAGE_REVIEW_MODE=independent_discovery` 不提供检测器答案；大于 1024 像素且短边至少 256 时，同一次 API 请求加入最多四个重叠原生裁剪，不进行超分或增强。裁剪超出单图/总字节预算时省略该裁剪，保留整图。实验输出使用归一化坐标，由后端换算；原件不修改。API 失败保留检测证据，不报告正常。
-- 两种图片模式均固定 `image-recall-v1`；默认候选复核为 `image-review-v2`，实验独检为 `image-discovery-v2` + `native-quadrants-v1`。模式及版本固定入任务；已有结果不改写，旧版本未完成任务/运行中切模式不会被新 worker 悄悄换规则执行，配置不符将明确失败。
+- 默认 VLM 输入为未经画框/增强的原图＋YOLO 类别/分数/坐标 JSON＋最多 8 个候选上下文原生裁剪，同一次 API 请求发送；单图最多 8 MiB，总原始图像字节预算为单图的三倍，超限省略裁剪。零框仍审计原图。新增框按完整原图 0～1000 坐标返回并换算成像素。API 失败保留检测证据，不报告正常。旧 `candidate_review`（仅原图＋候选 JSON）与 `independent_discovery`（无候选答案，可带四个局部图）保留兼容。
+- 新任务固定 `guided-confidence-v2` / `yolo-guided-review-v2` / `candidate-context-native-v1`。旧 candidate/discovery 任务仍执行自身固定的 `image-recall-v1` 及对应 prompt，不因新默认值失败或改写；未知/混合版本及模型/API 配置漂移仍明确拒绝。verify 检查点保存原始复核及 `fusion.predictions/changes`；增强、几何工具沿用原结论，关联工具冻结父任务结论。已有结果和人工审核不重算。
 - 独检模式因真实评测中误报/重复候选和自动确认退化，未获默认启用验收；只有显式设置才使用。相近 VLM 框作为定位备选保留待审，候选召回不等于最终准确率。当前 `.env` 未改动、服务未重启。
 - 恢复时要求检测器/标签空间及规则、Prompt、VLM 配置版本一致；不要原地覆盖同版本权重。视频恢复/取消已接通；图片仅支持取消人工等待，活动中的图片 GPU 调用取消和开机自启尚未提供。
 
@@ -374,7 +374,7 @@ SEWER_RUN_STORAGE_TEST=1 SEWER_RUN_HUMAN_REVIEW_WORKFLOW_TEST=1 .venv/bin/pytest
 
 已完成真实 Sewer2403 配对试验，但原训练划分清单缺失，不能称为独立泛化测试；五类空标签也不等于管道正常。历史数据要求见[评估说明](../.trellis/tasks/09-10-m2-video-core/evaluation-report.md)。
 
-YOLO 引导复核仍仅用于实验，不替换 worker 默认策略：`scripts/guided_review_eval.py --baseline <已有 state.json> --output <新实验目录> --live` 复用完全相同的检测/画质缓存，每张一次 VLM 请求，保存输入视图、逐框回答和融合预测。当前 `yolo-guided-review-v2` / `guided-confidence-v2` 将 score≥0.85 的原类别、框和分数保留，VLM 否决/改类仅记录待审；低分候选仍允许明确证据下的删除/原框改类，不确定保留。新增须可定位且无重复/类别冲突。去掉 `--live` 只复算同版本已存结果；新版本必须用新目录，不能把旧响应冒充新 Prompt 实测。
+2026-09-16 起，已认可的 YOLO 引导复核成为新图片任务默认策略，与离线共用 reviewer 和 fusion 实现。离线入口 `scripts/guided_review_eval.py --baseline <已有 state.json> --output <新实验目录> --live` 仍复用检测/画质缓存，每张一次 VLM 请求，保存输入视图、逐框回答和融合预测。去掉 `--live` 只复算同版本已存结果；新版本必须用新目录，不能把旧响应冒充新 Prompt 实测。在线集成证据见[任务记录](../.trellis/tasks/09-16-online-guided-review/report.md)。
 
 `evaluation.gallery.export_gallery(manifest, records, output_dir)` 导出全部图片的原图、YOLO、VLM 新增建议（融合前）、实际融合预测、标注及逐框理由。SVG 嵌入未经改写的原始图片；GT 只参与评分和展示，不进入模型。P/R 按同一原标注计算，未匹配框不等于人工确认误报；高分保留也不等于 VLM 确认正确。最新实验及逐图入口见[置信度分层复核记录](../.trellis/tasks/09-11-confidence-review/report.md)，[上轮结果](../.trellis/tasks/09-11-guided-review/report.md)保持不变。
 

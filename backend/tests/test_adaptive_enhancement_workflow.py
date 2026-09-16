@@ -144,8 +144,8 @@ async def test_linked_selector_uses_frozen_parent_baseline_without_child_verify(
 
 
 def test_selector_failure_keeps_successful_original_review_confirmations(monkeypatch):
+    from pipe_inspector.agent.guided_review import GuidedReview
     from pipe_inspector.contracts.detection import Detection
-    from pipe_inspector.contracts.inspection import ImageReview
     from temporalio.testing import ActivityEnvironment
     from test_image_workflow_faults import make_case
 
@@ -157,10 +157,17 @@ def test_selector_failure_keeps_successful_original_review_confirmations(monkeyp
     env = ActivityEnvironment()
     env.run(original.detect_image, run)
     store.steps["verify"] = {
-        "review": ImageReview(
+        "review": GuidedReview(
             image_assessable=True,
             full_image_audited=True,
-            candidates=({"index": 0, "verdict": "accept", "reason": "接口边缘清楚"},),
+            candidates=(
+                {
+                    "index": 0,
+                    "verdict": "accept",
+                    "reason": "接口边缘清楚",
+                    "evidence_strength": "clear",
+                },
+            ),
             additional_anomalies=(),
             summary="原图确认支管暗接",
         ).model_dump(mode="json"),

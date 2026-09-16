@@ -23,7 +23,6 @@ from pipe_inspector.contracts.enhancement import (
 )
 from pipe_inspector.contracts.human_review import FindingReview, HumanReviewSubmission
 from pipe_inspector.contracts.inspection import (
-    CandidateReview,
     ImageObservation,
     ImageReview,
     QualitySummary,
@@ -85,13 +84,24 @@ class FixtureReviewer:
         self.conflict = conflict
 
     async def review(self, *args):
+        from pipe_inspector.agent.guided_review import GuidedCandidate, GuidedReview
+
         if len(args) == 2:
             self.trace.append("verify")
             observation = args[1]
             candidates = (
-                CandidateReview(index=0, verdict="accept", reason="fixture accepts candidate"),
-            ) if observation.detection.detections else ()
-            return ImageReview(
+                (
+                    GuidedCandidate(
+                        index=0,
+                        verdict="accept",
+                        reason="fixture accepts candidate",
+                        evidence_strength="clear",
+                    ),
+                )
+                if observation.detection.detections
+                else ()
+            )
+            return GuidedReview(
                 image_assessable=True,
                 full_image_audited=True,
                 candidates=candidates,
