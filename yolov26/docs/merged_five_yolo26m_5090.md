@@ -1,6 +1,6 @@
 # YOLO26m / RTX 5090：整卡训练配置
 
-2026-09-16。配置和短程显存预检完成，**正式训练尚未启动**。
+2026-09-16。配置和短程显存预检完成，用户已批准，**正式训练已在tmux启动**；训练完成情况以日志为准。
 配置唯一入口：[merged_five_yolo26m_5090.yaml](../configs/merged_five_yolo26m_5090.yaml)。
 原线上YOLO26s权重不替换，数据划分不变；本次不重启前后端服务。
 
@@ -61,7 +61,7 @@
   --profile yolov26/configs/merged_five_yolo26m_5090.yaml --dry-run
 ```
 
-**下面的命令仅在用户确认正式训练后执行：**
+下面是训练入口；本轮已启动，**不要重复执行**：
 
 ```bash
 .venv/bin/python -u yolov26/code/train_detect.py \
@@ -71,3 +71,11 @@
 profile中的model/data/project相对仓库根目录解析；不能同时传旧CLI的batch/model等覆盖参数。
 必须通过该profile入口启动，直接使用`yolo train`或旧CLI不会应用这里的资源限制。
 此轮只保存配置及本地交接，未推送GitHub。
+
+## 本轮运行入口
+
+- tmux会话：`sewer-yolo26m`，查看：`tmux attach -t sewer-yolo26m`；按`Ctrl+b`再按`d`退出查看，训练继续。
+- 日志：`var/training_logs/merged_five_yolo26m_960_5090.log`。
+- 指标/图：`var/training/merged_five_yolo26m_960_5090/`；权重在其中`weights/`。
+- tmux会话在命令结束后保留，可用`tmux list-panes -t sewer-yolo26m -F '#{pane_dead} #{pane_dead_status}'`查看退出状态；dead=0为仍运行。
+- SSH/对话断开不影响训练，服务器关机则会中断，需要从checkpoint恢复；不自动替换线上模型。

@@ -1470,3 +1470,18 @@ CPU当前仍25核、RAM90GiB；用户后续改配额后正式启动前重查。s
 **Status: Completed — configuration/preflight only; formal training not started.**
 恢复入口为本任务report及`yolov26/docs/merged_five_yolo26m_5090.md`。不再预留前端并发资源；
 短测不是绝无OOM保证。正式启动仍待用户确认，未恢复服务、未调用API、未推送GitHub。
+
+## Session 46: 正式YOLO26m训练已在tmux启动
+
+**Date**: 2026-09-16 14:21 UTC
+**Task**: `.trellis/tasks/09-16-yolo26m-training-launch`
+**Change**: `mptpuplr` / `train/yolo26m-5090-config`（本地）
+
+用户授权review后直接tmux启动，不等待训练完成。39相关测试通过，资源/数据路径/组隔离检查无阻塞。
+安装原缺失的tmux3.2a后，以Session45配置启动会话`sewer-yolo26m`（pane13403，dead=0）。
+第1/100轮已推进至少64/682 batch；AMP通过、train10908/val606均0损坏、无OOM，显存约21437MiB。
+入口代码及参数基线7b609c44，实际args.yaml确认m/960/batch16/AMP/MuSGD/workers8/save_period10。
+日志`var/training_logs/merged_five_yolo26m_960_5090.log`；产物`var/training/merged_five_yolo26m_960_5090/`。
+
+**Status: Launch completed; training RUNNING at handoff, not evaluated or deployed.**
+后续先查tmux/日志，不重复启动。SSH断开可继续，关机不能自动续训。线上权重/服务/API未动，未推送。
