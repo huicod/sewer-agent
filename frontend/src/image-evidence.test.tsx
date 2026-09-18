@@ -227,6 +227,18 @@ describe("image evidence HTTP boundary", () => {
 });
 
 describe("stored image inspection provenance panel", () => {
+  it("loads and displays coexisting labels without replacing the original class", async () => {
+    const payload = detail();
+    Object.assign(payload.review!.candidates[0], { coexisting_labels: ["PL"] });
+    Object.assign(payload.fusion_changes[0], { coexisting_labels: ["PL"] });
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(response(payload)));
+    const user = userEvent.setup();
+    render(<ImageEvidencePanel taskId={taskId} snapshotRevision={createdAt} />);
+    await user.click(screen.getByRole("button", { name: "展开检查依据" }));
+    expect(await screen.findAllByText(/共存建议 PL/)).toHaveLength(2);
+    expect(screen.getByText(/候选 #0 · FS · 原始检测器分数 0.8038/)).toBeTruthy();
+  });
+
   it("separates the original FS score, indexed VLM revision/addition, fusion, and current findings", async () => {
     const fetchMock = vi.fn().mockResolvedValue(response(detail()));
     vi.stubGlobal("fetch", fetchMock);

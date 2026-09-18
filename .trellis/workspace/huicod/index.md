@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 47
-- **Last Active**: 2026-09-17
+- **Total Sessions**: 48
+- **Last Active**: 2026-09-23
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~1512 | Active |
+| `journal-1.md` | ~1538 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 48 | 2026-09-23 | 记录60图图像级多标签复算与框级口径对照 | - | `-` |
 | 47 | 2026-09-17 | YOLO26m训练完成，606图新旧评估与图库交接 | jj `uxttykpz` | `eval/yolo26m-posttrain` |
 | 46 | 2026-09-16 | 正式YOLO26m训练已在tmux启动，交接后台运行 | jj `mptpuplr` | `train/yolo26m-5090-config` |
 | 45 | 2026-09-16 | 撤销前端预留，整卡训练参数短测通过 | jj `mynlmlty` | `train/yolo26m-5090-config` |
@@ -82,7 +83,9 @@
 
 ## Notes
 
-- 最新恢复入口：Session47、`09-17-yolo26m-posttrain-eval/report.md`及`yolov26/docs/merged_five_yolo26m_evaluation_20260917.md`。训练正常早停84轮、best54、4.070h，tmux已退出0；四项标准val及606图新旧固定阈值对照完成。SEDD新P64.47/R71.01%，旧40/5.80%；sewer新68.85/65.17%，旧参考有holdout污染，BX/FS偏弱。结果/606图完整图库位于`var/evaluations/2026-09-17-yolo26m/`；83相关测试通过，GPU已释放。数据不改，用户人工看图后再决定下一步，不重新启动训练或自动部署。线上仍用原s权重/VLM策略，服务未恢复、未调用API、未推送；T14-B规范输入仍待提供。
+- 最新恢复入口：Session48、`.trellis/tasks/09-18-vlm-calibration-run/image_level_report.md`及同目录原框级`report.md`。2026-09-23仅记录60图缓存复算：YOLO/保守融合图像级P98.33/R84.29/F190.77%，不是模型变强或框级达标。来源掩码、四组对照、逐类指标、sample-0018与后续边界均已记录；原始标注和融合未变。纯YOLO/VLM模式选择尚未开发，75%验收口径尚待确认；用户本轮要求先归档，后续再开发。
+
+- 训练阶段历史入口：Session47、`09-17-yolo26m-posttrain-eval/report.md`及`yolov26/docs/merged_five_yolo26m_evaluation_20260917.md`。训练正常早停84轮、best54、4.070h；冻结606图结果位于`var/evaluations/2026-09-17-yolo26m/`。该训练评估与后来的60图VLM校准不是同一份样本，部署状态不能由离线报告推断。
 
 - Sessions are appended to journal files
 - New journal file created when current exceeds 2000 lines

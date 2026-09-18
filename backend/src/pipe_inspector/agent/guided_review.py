@@ -15,6 +15,7 @@ from pydantic import Field, ValidationError
 from pipe_inspector.agent.api_client import APIClientError
 from pipe_inspector.agent.image_review import REVIEW_SCORE_THRESHOLD, ImageReviewer
 from pipe_inspector.contracts.common import ImageRegion
+from pipe_inspector.contracts.detection import DetectionLabel
 from pipe_inspector.contracts.inspection import (
     AdditionalAnomaly,
     CandidateReview,
@@ -22,10 +23,18 @@ from pipe_inspector.contracts.inspection import (
     ImageReview,
 )
 
-GUIDED_PROMPT_VERSION = "yolo-guided-review-v2"
+GUIDED_PROMPT_VERSION = "yolo-guided-review-v4"
 GUIDED_HIGH_SCORE_THRESHOLD = REVIEW_SCORE_THRESHOLD
 VIEW_POLICY_VERSION = "candidate-context-native-v1"
 MAX_CROPS = 8
+GUIDED_CLASS_PROTECTION_THRESHOLDS = {
+    "AJ": 0.02,
+    "BLOCK": 0.17,
+    "BX": 0.72,
+    "FS": 0.77,
+    "PL": 0.43,
+}
+GUIDED_PROTECTION_POLICY_VERSION = "validation-calibrated-v1"
 
 SYSTEM_PROMPT = """你是 Sewer2403 管道 CCTV 图片的检测结果复核助手。
 目标是保住已有可靠检测、审查低置信度误报并补回漏报。遵守 label_guidance 的五类视觉定义。
@@ -38,12 +47,18 @@ views 标明局部图对应 candidate_index、原图起点及尺寸；candidates
 分数用于决定复核侧重点，不能单独作为视觉证据。不要为了每类都有结果而强行报缺陷。
 
 按 confidence_policy 和每项 protected_by_detector_prior 区分复核职责：
+必须分别回答 original_presence（原类别在原框内 present/absent/uncertain）和
+coexisting_labels（同一区域同时可见的其他类别）；不能用一个 revise/reject 结果代替
+这两个判断。
 高置信度候选优先核实、接受原检测；原区域有兼容的可见形态就保留该类别的判断，
 不要求严重损伤才接受。远处管口圆整不能否定近处局部 BX，侧壁支管接入 AJ 不要求
 证明违规或破损。另一个 BLOCK 等异常更明显，不是删除原候选或改成该类别的理由。
-同时存在的不同异常应分开理解。仅缺少更强证据或存在透视/遮挡歧义时用 abstain，
+同时存在的不同异常应分开理解。若原候选类别与另一五类在同一区域同时可见，
+将另一类写入 coexisting_labels，保留原候选；不要因为另一类更明显就 revise。
+只有原类别有明确反证且另一类别独立明确时才使用 revise。仅缺少更强证据或存在
+透视/遮挡歧义时用 abstain，
 不要自行改类。确有明确反证仍如实给 reject/revise 并说明，不能为了迎合检测器编造证据；
-这类分歧仅交人工复审，融合不会自动删除或改写高置信度的原类别和原框。
+这类分歧仅交人工复审；当前保守融合不会自动删除或改写任何原候选的类别和原框。
 低置信度候选是重点鉴别对象：结合局部图核查材料/轮廓特征，排除字幕、反光、污渍等
 干扰；明确反证可 reject，同一区域确有另一类形态可 revise。低分本身不代表错误。
 整图补漏是独立职责，不能因接受已有框就省略；无候选时也必须检查。
@@ -62,7 +77,9 @@ evidence_strength=clear 只用于有可观察形态支持判断的情况，不�
 additional_anomalies 只报原候选未覆盖的独立异常。一个连续缺陷只报一次，不将同一处
 轻易拆成多个类别，不把改类框当新增。优先检查细裂纹、材料侵蚀、局部凹陷、侧壁接入
 以及沉积/结垢/杂物；已有明显异常也要检查剩余区域。无原候选时仍须完整检查。
-每项注明 evidence_strength，只有明确形态才能为 clear。仅颜色、脏污、水位、模糊、
+每项注明 evidence_strength，只有明确形态才能为 clear；同时填写 confirmation_status：
+只有在独立回看该异常的位置、边界和类别后才能写 confirmed，否则写 uncertain。
+confirmation_status 是新增异常的第二道证据门，不等同于最终人工确认。仅颜色、脏污、水位、模糊、
 字幕、设备线缆不能作为缺陷。五类外可用 OTHER，但仍交人工确认。
 所有新增 bbox_xyxy 必须基于第一张完整原图的 0~1000 归一化坐标，
 coordinate_space=normalized_0_1000。不得返回局部图坐标或像素坐标。
@@ -76,10 +93,13 @@ image_assessable 表示可进行有意义判断，不等于所有区域清晰。
 
 class GuidedCandidate(CandidateReview):
     evidence_strength: Literal["clear", "uncertain"]
+    coexisting_labels: tuple[DetectionLabel, ...] = Field(default=(), max_length=4)
+    original_presence: Literal["present", "absent", "uncertain"] = "uncertain"
 
 
 class GuidedAnomaly(AdditionalAnomaly):
     evidence_strength: Literal["clear", "uncertain"]
+    confirmation_status: Literal["confirmed", "uncertain"] = "uncertain"
 
 
 class GuidedReview(ImageReview):
@@ -149,20 +169,26 @@ class GuidedImageReviewer(ImageReviewer):
             view_policy_version=VIEW_POLICY_VERSION,
             confidence_policy={
                 "high_score_threshold": GUIDED_HIGH_SCORE_THRESHOLD,
-                "protected_when": "score >= high_score_threshold",
+                "class_protection_thresholds": GUIDED_CLASS_PROTECTION_THRESHOLDS,
+                "protection_policy_version": GUIDED_PROTECTION_POLICY_VERSION,
+                "protected_when": "score >= class_protection_thresholds[label]",
                 "high_score": (
                     "prefer_accept_with_visual_support; disagreements_keep_original_pending"
                 ),
-                "low_score": "clear_evidence_may_reject_or_revise; uncertainty_keeps_original",
+                "low_score": "review_critically; disagreements_keep_original_pending",
+                "additional_anomalies": "advice_only_pending_human_review",
+                "addition_confirmation": "confirmed_status_required; still_pending_by_default",
             },
             coordinate_space="normalized_0_1000",
             views=views,
             response_schema=GuidedResponse.model_json_schema(),
         )
         for candidate in metadata["candidates"]:
-            candidate["protected_by_detector_prior"] = (
-                candidate["score"] >= GUIDED_HIGH_SCORE_THRESHOLD
+            threshold = GUIDED_CLASS_PROTECTION_THRESHOLDS.get(
+                candidate["label"], GUIDED_HIGH_SCORE_THRESHOLD
             )
+            candidate["protection_threshold"] = threshold
+            candidate["protected_by_detector_prior"] = candidate["score"] >= threshold
             box = candidate["bbox_xyxy"]
             candidate["bbox_normalized_0_1000"] = [
                 box[i] / (width if i % 2 == 0 else height) * 1000 for i in range(4)
@@ -190,6 +216,9 @@ class GuidedImageReviewer(ImageReviewer):
             invalid = (
                 (candidate.verdict == "revise" and proposed in (None, label))
                 or (candidate.verdict == "accept" and proposed not in (None, label))
+                or (candidate.verdict == "accept" and candidate.original_presence == "absent")
+                or (candidate.verdict == "reject" and candidate.original_presence == "present")
+                or (candidate.verdict == "revise" and candidate.original_presence == "present")
                 or (
                     candidate.verdict in ("reject", "abstain", "need_more_context")
                     and proposed is not None

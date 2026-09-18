@@ -256,13 +256,14 @@ def test_resume_only_executes_unfinished_sample_after_interruption(tmp_path):
 def test_guided_loader_requires_exact_records_and_accepted_cached_predictions(tmp_path):
     from pipe_inspector.agent.guided_review import GuidedReview
     from pipe_inspector.contracts.inspection import ImageObservation
-    from pipe_inspector.evaluation.guided import fuse_guided
+    from pipe_inspector.evaluation.guided import LEGACY_FUSION_VERSION, fuse_guided
     from pipe_inspector.evaluation.incremental import load_guided_samples
 
     item = sample(tmp_path)
     fused = fuse_guided(
         ImageObservation.model_validate(item["observation"]),
         GuidedReview.model_validate(item["review"]),
+        policy=LEGACY_FUSION_VERSION,
     )
     state = dict(
         schema_version="guided-cached-evaluation-v1",

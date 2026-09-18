@@ -52,6 +52,7 @@ def _candidate(
         "verdict": verdict,
         "proposed_label": proposed_label,
         "evidence_strength": strength,
+        "original_presence": "present" if verdict == "accept" else "uncertain",
         "reason": "可见证据",
     }
 
@@ -95,7 +96,7 @@ def test_high_score_conflict_keeps_literal_detector_evidence_pending(verdict: st
     assert decision.inspection_result is InspectionResult.INCONCLUSIVE
 
 
-def test_low_score_clear_rejection_is_retained_as_rejected_audit_evidence() -> None:
+def test_low_score_clear_rejection_is_retained_as_pending_audit_evidence() -> None:
     from pipe_inspector.agent.guided_policy import decide_image_guided
 
     decision = decide_image_guided(
@@ -106,14 +107,15 @@ def test_low_score_clear_rejection_is_retained_as_rejected_audit_evidence() -> N
     )
 
     finding = decision.findings[0]
-    assert finding.review_status is ReviewStatus.REJECTED
+    assert finding.review_status is ReviewStatus.NEEDS_REVIEW
     assert finding.canonical_label is DetectionLabel.PL
     assert finding.score == 0.8499
     assert finding.evidence[0].region.bbox_xyxy == (10, 10, 30, 30)
-    assert decision.inspection_result is InspectionResult.NORMAL
+    assert decision.inspection_result is InspectionResult.INCONCLUSIVE
+    assert decision.needs_review is True
 
 
-def test_clear_revision_confirms_revised_label_but_keeps_original_score_and_box() -> None:
+def test_clear_revision_keeps_original_label_pending_and_preserves_score_and_box() -> None:
     from pipe_inspector.agent.guided_policy import decide_image_guided
 
     decision = decide_image_guided(
@@ -124,15 +126,16 @@ def test_clear_revision_confirms_revised_label_but_keeps_original_score_and_box(
     )
 
     finding = decision.findings[0]
-    assert finding.canonical_label is DetectionLabel.FS
-    assert finding.review_status is ReviewStatus.CONFIRMED
-    assert finding.confirmed_by == "rules"
+    assert finding.canonical_label is DetectionLabel.PL
+    assert finding.review_status is ReviewStatus.NEEDS_REVIEW
+    assert finding.confirmed_by is None
     assert finding.source is FindingSource.DETECTOR
     assert finding.score == 0.7
     assert finding.evidence[0].region.bbox_xyxy == (10, 10, 30, 30)
+    assert "guided_advice_requires_review" in decision.reasons
 
 
-def test_clear_addition_is_vlm_confirmed_without_synthetic_confidence_and_other_waits() -> None:
+def test_clear_addition_is_vlm_advice_pending_without_synthetic_confidence() -> None:
     from pipe_inspector.agent.guided_policy import decide_image_guided
 
     additions = [
@@ -156,13 +159,13 @@ def test_clear_addition_is_vlm_confirmed_without_synthetic_confidence_and_other_
     assert (added.source, added.score, added.review_status, added.confirmed_by) == (
         FindingSource.VLM,
         None,
-        ReviewStatus.CONFIRMED,
-        "rules",
+        ReviewStatus.NEEDS_REVIEW,
+        None,
     )
     assert other.canonical_label == "OTHER"
     assert other.open_label == "树根"
     assert other.review_status is ReviewStatus.NEEDS_REVIEW
-    assert decision.inspection_result is InspectionResult.DEFECTS_FOUND
+    assert decision.inspection_result is InspectionResult.INCONCLUSIVE
     assert decision.needs_review is True
 
 
@@ -252,3 +255,44 @@ def test_semantically_invalid_received_review_fails_closed() -> None:
 
     assert decision.findings[0].review_status is ReviewStatus.NEEDS_REVIEW
     assert "review_invalid" in decision.reasons
+
+
+@pytest.mark.parametrize(
+    ("verdict", "original_presence"),
+    [("accept", "absent"), ("reject", "present"), ("revise", "present")],
+)
+def test_original_presence_contradiction_fails_closed(
+    verdict: str, original_presence: str
+) -> None:
+    from pipe_inspector.agent.guided_policy import decide_image_guided
+
+    payload = _candidate(verdict=verdict, proposed_label="FS" if verdict == "revise" else None)
+    payload["original_presence"] = original_presence
+    decision = decide_image_guided(
+        TASK_ID,
+        ASSET,
+        _observation(_detection()),
+        _review([payload]),
+    )
+
+    assert decision.findings[0].review_status is ReviewStatus.NEEDS_REVIEW
+    assert "review_invalid" in decision.reasons
+
+
+def test_unconfirmed_addition_is_explicitly_gated() -> None:
+    from pipe_inspector.agent.guided_fusion import fuse_guided
+
+    review = _review(
+        additions=[
+            {
+                "label": "FS",
+                "bbox_xyxy": [40, 40, 60, 60],
+                "evidence_strength": "clear",
+                "reason": "可见腐蚀",
+            }
+        ]
+    )
+    fused = fuse_guided(_observation(), review)
+
+    assert fused["changes"][0]["action"] == "add_pending"
+    assert "二次确认不足" in fused["changes"][0]["gate"]

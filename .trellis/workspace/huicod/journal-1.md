@@ -1505,3 +1505,34 @@ sewer新P68.85/R65.17%，旧参考P83.01/R87.57%但可能见过新holdout，不�
 
 **Status: Evaluation completed; no retraining/deployment/API calls/service restart/push.**
 下一步由用户人工看图后决定模型/数据处理；不以SEDD同来源提升宣称第三方泛化，不自动替换线上s权重。
+
+
+## Session 48: 记录60图图像级多标签复算与框级口径对照
+
+**Date**: 2026-09-23
+**Task**: 记录60图图像级多标签复算与框级口径对照
+
+### Summary
+
+仅归档现有实验结果，不开发模式切换；原框级基线保留，指标变化不作为模型提升。
+
+### Main Changes
+
+- .trellis/tasks/09-18-vlm-calibration-run/image_level_report.md：协议、来源、四组总体/逐源/逐类指标、sample-0018和开发交接。
+- 原report.md新增互链；YOLO和保守融合图像级P98.33/R84.29/F190.77，首轮新增P80.26/R87.14/F183.56，二次确认P/R/F184.29。
+
+### Git Commits
+
+(No commits - planning session)
+
+### Testing
+
+- [OK] 从两份state.json只读复算；28行指标算术、完全匹配率及文档链接检查通过。
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- 用户后续授权再继续开发：纯YOLO/VLM模式选择、评测实现及人工校准；75%指标定义仍待确认。

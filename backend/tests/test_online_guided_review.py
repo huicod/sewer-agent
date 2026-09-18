@@ -69,6 +69,7 @@ async def test_default_online_crops_and_confidence_fusion_survive_checkpoint_rep
                     "reason": "fixture conflict",
                     "proposed_label": None,
                     "evidence_strength": "clear",
+                    "original_presence": "absent",
                 }
             ],
             "additional_anomalies": [
@@ -104,27 +105,34 @@ async def test_default_online_crops_and_confidence_fusion_survive_checkpoint_rep
     env = ActivityEnvironment()
     saved = await env.run(activities.verify_image, run)
     metadata = json.loads(requests[0]["messages"][1]["content"][0]["text"])
-    assert metadata["prompt_version"] == "yolo-guided-review-v2"
+    assert metadata["prompt_version"] == "yolo-guided-review-v4"
     images = [c for c in requests[0]["messages"][1]["content"] if c["type"] == "image_url"]
     assert len(images) == (1 if score is None else 2)
-    assert saved["fusion"]["predictions"][-1]["bbox_xyxy"] == [224, 168, 288, 216]
+    expected_predictions = (
+        []
+        if score is None
+        else [{"label": "BX", "bbox_xyxy": [20, 30, 80, 100], "score": score}]
+    )
+    assert saved["fusion"]["predictions"] == expected_predictions
+    assert saved["fusion"]["changes"][-1]["action"] == "add_pending"
     if score is not None:
         assert saved["fusion"]["changes"][0]["action"] == (
-            "retain_high_confidence" if score == 0.95 else "reject"
+            "retain_high_confidence" if score == 0.95 else "retain_pending"
         )
     # Cached success must precede changed provider/default configuration checks.
     activities.settings = Settings(_env_file=None, image_review_mode="candidate_review")
     assert await env.run(activities.verify_image, run) == saved
     assert len(requests) == 1
     result = env.run(activities.finish_image, {"run": run})
-    assert result["inspection_result"] == "defects_found"
-    assert result["runtime_status"] == ("waiting_review" if score == 0.95 else "completed")
+    assert result["inspection_result"] == "inconclusive"
+    assert result["runtime_status"] == "waiting_review"
     added = result["findings"][-1]
     assert (added["canonical_label"], added["source"], added["score"]) == ("PL", "vlm", None)
+    assert added["review_status"] == "needs_review"
     if score is not None:
         original = result["findings"][0]
         assert original["canonical_label"] == "BX"
-        assert original["review_status"] == ("needs_review" if score == 0.95 else "rejected")
+        assert original["review_status"] == "needs_review"
 
 
 @pytest.mark.parametrize("mode", ["candidate_review", "independent_discovery"])
@@ -183,5 +191,5 @@ def test_optional_tools_keep_guided_low_confidence_rejection(tool):
     run = {"config": run_config(Settings(_env_file=None), observation.detection)}
     baseline = enhancement_baseline if tool == "enhancement" else geometry_baseline
     decision = baseline(store, run, store.task, observation, review)
-    assert decision.findings[0].review_status == "rejected"
-    assert decision.inspection_result == "normal"
+    assert decision.findings[0].review_status == "needs_review"
+    assert decision.inspection_result == "inconclusive"

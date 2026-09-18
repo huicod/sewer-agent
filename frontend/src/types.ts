@@ -240,6 +240,8 @@ export type EvidenceReview = {
     proposed_label: DetectorLabel | null;
     reason: string;
     evidence_strength: EvidenceStrength;
+    coexisting_labels?: DetectionLabel[];
+    original_presence?: "present" | "absent" | "uncertain";
   }>;
   additional_anomalies: Array<{
     label: DetectionLabel;
@@ -247,6 +249,7 @@ export type EvidenceReview = {
     bbox_xyxy: [number, number, number, number] | null;
     reason: string;
     evidence_strength: EvidenceStrength;
+    confirmation_status?: "confirmed" | "uncertain";
   }>;
   summary: string;
 };
@@ -262,6 +265,9 @@ export type FusionChange = {
   vlm_verdict: string | null;
   proposed_label: DetectorLabel | null;
   gate: string | null;
+  coexisting_labels?: DetectionLabel[];
+  original_presence?: "present" | "absent" | "uncertain";
+  confirmation_status?: "confirmed" | "uncertain" | null;
 };
 
 export type ImageEvidenceDetail = {

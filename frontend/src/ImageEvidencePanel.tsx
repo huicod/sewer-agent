@@ -223,6 +223,12 @@ export function ImageEvidencePanel({ taskId, snapshotRevision }: ImageEvidencePa
                           <li key={candidate.index}>
                             VLM 候选 #{candidate.index} · {VERDICT_TEXT[candidate.verdict]}
                             {candidate.proposed_label ? ` · 建议 ${candidate.proposed_label}` : ""}
+                            {candidate.coexisting_labels?.length
+                              ? ` · 共存建议 ${candidate.coexisting_labels.join("、")}`
+                              : ""}
+                            {candidate.original_presence
+                              ? ` · 原类别${candidate.original_presence === "present" ? "存在" : candidate.original_presence === "absent" ? "不存在" : "不确定"}`
+                              : ""}
                             · {strengthText(candidate.evidence_strength)}：{candidate.reason}
                           </li>
                         ))}
@@ -235,6 +241,7 @@ export function ImageEvidencePanel({ taskId, snapshotRevision }: ImageEvidencePa
                           {detail.review.additional_anomalies.map((anomaly, index) => (
                             <li key={index}>
                               新增 #{index} · {anomaly.label}{anomaly.name ? ` · ${anomaly.name}` : ""}
+                              {anomaly.confirmation_status ? ` · 二次确认${anomaly.confirmation_status === "confirmed" ? "通过" : "不确定"}` : ""}
                               · {strengthText(anomaly.evidence_strength)} ·
                               {anomaly.bbox_xyxy ? ` 原图框 (${anomaly.bbox_xyxy.join(", ")}) ·` : " 无定位框 ·"}
                               {anomaly.reason}
@@ -260,6 +267,11 @@ export function ImageEvidencePanel({ taskId, snapshotRevision }: ImageEvidencePa
                       <li key={position}>
                         {change.index !== null ? `候选 #${change.index}` : `新增 #${change.additional_index}`}
                         {` · ${change.action} · 输出标签 ${change.label} · ${change.pending ? "待人工处理" : "已自动处理"}`}
+                        {change.coexisting_labels?.length
+                          ? ` · 共存建议 ${change.coexisting_labels.join("、")}`
+                          : ""}
+                        {change.original_presence ? ` · 原类别${change.original_presence}` : ""}
+                        {change.confirmation_status ? ` · 二次确认 ${change.confirmation_status}` : ""}
                         {`：${change.reason}`}{change.gate ? `；门控：${change.gate}` : ""}
                       </li>
                     ))}

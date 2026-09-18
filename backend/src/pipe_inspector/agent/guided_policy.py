@@ -1,4 +1,4 @@
-"""Online decision adapter for guided-confidence-v2 review."""
+"""Online decision adapter for conservative guided review."""
 
 from __future__ import annotations
 
@@ -47,6 +47,9 @@ def _valid_review(review: GuidedReview, observation: ImageObservation) -> bool:
         if (
             (candidate.verdict == "revise" and proposed in (None, original))
             or (candidate.verdict == "accept" and proposed not in (None, original))
+            or (candidate.verdict == "accept" and candidate.original_presence == "absent")
+            or (candidate.verdict == "reject" and candidate.original_presence == "present")
+            or (candidate.verdict == "revise" and candidate.original_presence == "present")
             or (
                 candidate.verdict in ("reject", "abstain", "need_more_context")
                 and proposed is not None

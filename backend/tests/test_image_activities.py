@@ -279,8 +279,8 @@ def test_default_pins_accepted_guided_review_and_rejects_mixed_versions():
         detector_id="fixture", model_version="v1", label_space_version="five"
     )
     config = run_config(settings, detector)
-    assert config["prompt_version"] == "yolo-guided-review-v2"
-    assert config["policy_version"] == "guided-confidence-v2"
+    assert config["prompt_version"] == "yolo-guided-review-v4"
+    assert config["policy_version"] == "guided-conservative-v1"
     assert config["view_policy_version"] == "candidate-context-native-v1"
     activities = ImageActivities(settings, Store(), None, detector=detector)
     with pytest.raises(ApplicationError):

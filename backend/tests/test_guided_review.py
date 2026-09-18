@@ -28,12 +28,14 @@ def observation(count=1, score=0.9):
     )
 
 
-def candidate(index=0, verdict="accept", strength="clear", label=None):
+def candidate(index=0, verdict="accept", strength="clear", label=None, coexisting=()):
     return dict(
         index=index,
         verdict=verdict,
         evidence_strength=strength,
         proposed_label=label,
+        coexisting_labels=list(coexisting),
+        original_presence="present" if verdict == "accept" else "uncertain",
         reason="候选区域可见证据",
     )
 
@@ -118,6 +120,19 @@ async def test_additional_box_maps_from_whole_image_normalized_coordinates(tmp_p
 
 
 @pytest.mark.asyncio
+async def test_original_presence_contradiction_fails_closed(tmp_path):
+    from pipe_inspector.agent.guided_review import GuidedImageReviewer
+
+    path = tmp_path / "image.png"
+    Image.new("RGB", (640, 480)).save(path)
+    payload = response([candidate(verdict="accept")])
+    payload["candidates"][0]["original_presence"] = "absent"
+    with pytest.raises(APIClientError) as caught:
+        await GuidedImageReviewer(Client(payload)).review(path, observation())
+    assert caught.value.code == "response_schema_invalid"
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     "payload",
     [
@@ -146,17 +161,113 @@ async def test_invalid_indices_contradictory_labels_or_coordinates_fail_closed(t
 
 def test_fusion_revises_in_place_and_rejects_without_mutating_observation():
     from pipe_inspector.agent.guided_review import GuidedReview
-    from pipe_inspector.evaluation.guided import fuse_guided
+    from pipe_inspector.evaluation.guided import LEGACY_FUSION_VERSION, fuse_guided
 
     obs = observation(2, score=0.7)
     before = obs.model_dump()
     payload = response([candidate(0, "revise", label="BLOCK"), candidate(1, "reject")])
     payload.pop("coordinate_space")
-    result = fuse_guided(obs, GuidedReview.model_validate(payload))
+    result = fuse_guided(obs, GuidedReview.model_validate(payload), policy=LEGACY_FUSION_VERSION)
     assert [p["label"] for p in result["predictions"]] == ["BLOCK"]
     assert result["predictions"][0]["bbox_xyxy"] == [200, 100, 300, 200]
     assert [c["action"] for c in result["changes"]] == ["revise", "reject"]
     assert obs.model_dump() == before
+
+
+def test_conservative_default_keeps_disagreement_and_pending_addition():
+    from pipe_inspector.agent.guided_review import GuidedReview
+    from pipe_inspector.evaluation.guided import fuse_guided
+
+    payload = response(
+        [candidate(0, "revise", label="BLOCK")],
+        additions=(
+            dict(
+                label="FS",
+                bbox_xyxy=[400, 300, 450, 350],
+                reason="新增可见腐蚀",
+                evidence_strength="clear",
+            ),
+        ),
+    )
+    payload.pop("coordinate_space")
+    result = fuse_guided(observation(score=0.7), GuidedReview.model_validate(payload))
+
+    assert result["predictions"] == [
+        {"label": "PL", "bbox_xyxy": [200, 100, 300, 200], "score": 0.7}
+    ]
+    assert [change["action"] for change in result["changes"]] == [
+        "retain_high_confidence",
+        "add_pending",
+    ]
+    assert all(change["pending"] for change in result["changes"])
+
+
+def test_coexisting_label_prevents_automatic_relabel_and_is_retained_in_audit():
+    from pipe_inspector.agent.guided_review import GuidedReview
+    from pipe_inspector.evaluation.guided import fuse_guided
+
+    payload = response([candidate(0, "revise", label="BLOCK", coexisting=("FS",))])
+    payload.pop("coordinate_space")
+    review = GuidedReview.model_validate(payload)
+    result = fuse_guided(observation(score=0.7), review)
+
+    assert review.candidates[0].coexisting_labels == ("FS",)
+    assert result["predictions"][0]["label"] == "PL"
+    assert result["changes"][0]["action"] == "retain_high_confidence"
+    assert "共存" in result["changes"][0]["gate"]
+
+
+def test_guided_review_separates_original_presence_and_addition_confirmation():
+    from pipe_inspector.agent.guided_review import GuidedReview
+
+    payload = response(
+        [candidate(verdict="revise", label="BLOCK")],
+        additions=[
+            {
+                "label": "FS",
+                "bbox_xyxy": [400, 300, 450, 350],
+                "reason": "局部材料剥蚀",
+                "evidence_strength": "clear",
+                "confirmation_status": "confirmed",
+            }
+        ],
+    )
+    payload["candidates"][0]["original_presence"] = "absent"
+    payload.pop("coordinate_space")
+    review = GuidedReview.model_validate(payload)
+
+    assert review.candidates[0].original_presence == "absent"
+    assert review.candidates[0].coexisting_labels == ()
+    assert review.additional_anomalies[0].confirmation_status == "confirmed"
+
+
+@pytest.mark.asyncio
+async def test_guided_prompt_exposes_class_specific_protection_thresholds(tmp_path):
+    from pipe_inspector.agent.guided_review import GuidedImageReviewer
+
+    path = tmp_path / "image.png"
+    Image.new("RGB", (640, 480)).save(path)
+    client = Client(response())
+    await GuidedImageReviewer(client).review(path, observation())
+    metadata = json.loads(client.requests[0][1]["content"][0]["text"])
+    assert metadata["confidence_policy"]["class_protection_thresholds"]["PL"] == pytest.approx(0.43)
+
+
+def test_legacy_fusion_has_exact_historical_change_keys():
+    from pipe_inspector.agent.guided_fusion import LEGACY_FUSION_VERSION, fuse_guided
+    from pipe_inspector.agent.guided_review import GuidedReview
+
+    payload = response([candidate(verdict="reject")])
+    payload.pop("coordinate_space")
+    fused = fuse_guided(
+        observation(score=0.7), GuidedReview.model_validate(payload),
+        policy=LEGACY_FUSION_VERSION,
+    )
+    assert fused["changes"] == [{
+        "index": 0, "action": "reject", "pending": False, "label": "PL",
+        "bbox_xyxy": [200, 100, 300, 200], "reason": "候选区域可见证据",
+        "vlm_verdict": "reject", "proposed_label": None, "gate": None,
+    }]
 
 
 @pytest.mark.parametrize("score", [0.85, 0.8661702871, 0.9408751130, 0.9433636069])
@@ -183,11 +294,15 @@ def test_high_confidence_disagreement_keeps_exact_detector_evidence(score, verdi
 @pytest.mark.parametrize("score", [0.8499, 0.7123959661, 0.5573102832, 0.3012649715])
 def test_low_confidence_clear_rejection_remains_available(score):
     from pipe_inspector.agent.guided_review import GuidedReview
-    from pipe_inspector.evaluation.guided import fuse_guided
+    from pipe_inspector.evaluation.guided import LEGACY_FUSION_VERSION, fuse_guided
 
     payload = response([candidate(verdict="reject")])
     payload.pop("coordinate_space")
-    result = fuse_guided(observation(score=score), GuidedReview.model_validate(payload))
+    result = fuse_guided(
+        observation(score=score),
+        GuidedReview.model_validate(payload),
+        policy=LEGACY_FUSION_VERSION,
+    )
     assert result["predictions"] == []
     assert result["changes"][0]["action"] == "reject"
     assert result["changes"][0]["pending"] is False
@@ -201,13 +316,14 @@ async def test_prompt_and_candidate_metadata_expose_confidence_policy(tmp_path):
     Image.new("RGB", (640, 480)).save(path)
     obs = observation(2).model_dump()
     obs["detection"]["detections"][0]["score"] = 0.85
-    obs["detection"]["detections"][1]["score"] = 0.8499
+    obs["detection"]["detections"][1]["score"] = 0.3
     client = Client(response([candidate(0), candidate(1)]))
     await GuidedImageReviewer(client).review(path, ImageObservation.model_validate(obs))
     messages = client.requests[0]
     metadata = json.loads(messages[1]["content"][0]["text"])
     assert metadata["confidence_policy"]["high_score_threshold"] == 0.85
     assert [c["protected_by_detector_prior"] for c in metadata["candidates"]] == [True, False]
+    assert [c["protection_threshold"] for c in metadata["candidates"]] == [pytest.approx(0.43)] * 2
     assert "高置信度" in messages[0]["content"]
     assert "低置信度" in messages[0]["content"]
     assert len(metadata["views"]) == 3
@@ -236,7 +352,7 @@ def test_uncertainty_and_failure_keep_raw_in_scoring_denominator(review_type):
 
 def test_only_clear_localized_nonoverlapping_five_class_additions_become_predictions():
     from pipe_inspector.agent.guided_review import GuidedReview
-    from pipe_inspector.evaluation.guided import fuse_guided
+    from pipe_inspector.evaluation.guided import LEGACY_FUSION_VERSION, fuse_guided
 
     def extra(label="FS", box=(400, 300, 450, 350), strength="clear"):
         return dict(label=label, bbox_xyxy=box, evidence_strength=strength, reason="新增可见特征")
@@ -252,14 +368,16 @@ def test_only_clear_localized_nonoverlapping_five_class_additions_become_predict
         ]
     )
     payload.pop("coordinate_space")
-    result = fuse_guided(observation(), GuidedReview.model_validate(payload))
+    result = fuse_guided(
+        observation(), GuidedReview.model_validate(payload), policy=LEGACY_FUSION_VERSION
+    )
     assert [p["label"] for p in result["predictions"]] == ["PL", "FS"]
     assert len(result["changes"]) == 7
 
 
 def test_zero_detector_clear_addition_can_recover_target():
     from pipe_inspector.agent.guided_review import GuidedReview
-    from pipe_inspector.evaluation.guided import fuse_guided
+    from pipe_inspector.evaluation.guided import LEGACY_FUSION_VERSION, fuse_guided
 
     payload = response(
         [],
@@ -271,7 +389,14 @@ def test_zero_detector_clear_addition_can_recover_target():
     )
     payload.pop("coordinate_space")
     assert (
-        len(fuse_guided(observation(0), GuidedReview.model_validate(payload))["predictions"]) == 1
+        len(
+            fuse_guided(
+                observation(0),
+                GuidedReview.model_validate(payload),
+                policy=LEGACY_FUSION_VERSION,
+            )["predictions"]
+        )
+        == 1
     )
 
 

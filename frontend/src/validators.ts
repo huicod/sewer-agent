@@ -484,12 +484,31 @@ const EVIDENCE_REVIEW_FIELDS = new Set([
   "image_assessable", "full_image_audited", "candidates", "additional_anomalies", "summary",
 ]);
 const EVIDENCE_CANDIDATE_FIELDS = new Set([
+  "index", "verdict", "proposed_label", "reason", "evidence_strength", "coexisting_labels",
+  "original_presence",
+]);
+const EVIDENCE_CANDIDATE_FIELDS_V3 = new Set([
+  "index", "verdict", "proposed_label", "reason", "evidence_strength", "coexisting_labels",
+]);
+const LEGACY_EVIDENCE_CANDIDATE_FIELDS = new Set([
   "index", "verdict", "proposed_label", "reason", "evidence_strength",
 ]);
 const EVIDENCE_ANOMALY_FIELDS = new Set([
+  "label", "name", "bbox_xyxy", "reason", "evidence_strength", "confirmation_status",
+]);
+const EVIDENCE_ANOMALY_FIELDS_LEGACY = new Set([
   "label", "name", "bbox_xyxy", "reason", "evidence_strength",
 ]);
 const FUSION_CHANGE_FIELDS = new Set([
+  "index", "additional_index", "action", "pending", "label", "bbox_xyxy", "reason",
+  "vlm_verdict", "proposed_label", "gate", "coexisting_labels", "original_presence",
+  "confirmation_status",
+]);
+const FUSION_CHANGE_FIELDS_V3 = new Set([
+  "index", "additional_index", "action", "pending", "label", "bbox_xyxy", "reason",
+  "vlm_verdict", "proposed_label", "gate", "coexisting_labels",
+]);
+const LEGACY_FUSION_CHANGE_FIELDS = new Set([
   "index", "additional_index", "action", "pending", "label", "bbox_xyxy", "reason",
   "vlm_verdict", "proposed_label", "gate",
 ]);
@@ -576,25 +595,43 @@ function isEvidenceReview(value: unknown): boolean {
   ) return false;
   const verdicts = new Set(["accept", "revise", "reject", "abstain", "need_more_context"]);
   return value.candidates.every((candidate) =>
-    isRecord(candidate) && hasExactFields(candidate, EVIDENCE_CANDIDATE_FIELDS) &&
+    isRecord(candidate) &&
+    (hasExactFields(candidate, EVIDENCE_CANDIDATE_FIELDS) ||
+      hasExactFields(candidate, EVIDENCE_CANDIDATE_FIELDS_V3) ||
+      hasExactFields(candidate, LEGACY_EVIDENCE_CANDIDATE_FIELDS)) &&
     isNonNegativeInteger(candidate.index) && typeof candidate.verdict === "string" &&
     verdicts.has(candidate.verdict) &&
     (candidate.proposed_label === null ||
       (typeof candidate.proposed_label === "string" && VIDEO_LABELS.has(candidate.proposed_label))) &&
     isNonEmptyString(candidate.reason) && candidate.reason.length <= 1_000 &&
+    (candidate.coexisting_labels === undefined ||
+      (Array.isArray(candidate.coexisting_labels) && candidate.coexisting_labels.length <= 4 &&
+        candidate.coexisting_labels.every((label) =>
+          typeof label === "string" && DETECTION_LABELS.has(label)))) &&
+    (candidate.original_presence === undefined ||
+      candidate.original_presence === "present" || candidate.original_presence === "absent" ||
+      candidate.original_presence === "uncertain") &&
     isEvidenceStrength(candidate.evidence_strength),
   ) && value.additional_anomalies.every((anomaly) =>
-    isRecord(anomaly) && hasExactFields(anomaly, EVIDENCE_ANOMALY_FIELDS) &&
+    isRecord(anomaly) &&
+    (hasExactFields(anomaly, EVIDENCE_ANOMALY_FIELDS) ||
+      hasExactFields(anomaly, EVIDENCE_ANOMALY_FIELDS_LEGACY)) &&
     typeof anomaly.label === "string" && DETECTION_LABELS.has(anomaly.label) &&
     (anomaly.name === null || typeof anomaly.name === "string") &&
     (anomaly.bbox_xyxy === null || isFiniteBox(anomaly.bbox_xyxy)) &&
     isNonEmptyString(anomaly.reason) && anomaly.reason.length <= 1_000 &&
+    (anomaly.confirmation_status === undefined ||
+      anomaly.confirmation_status === null || anomaly.confirmation_status === "confirmed" ||
+      anomaly.confirmation_status === "uncertain") &&
     isEvidenceStrength(anomaly.evidence_strength),
   );
 }
 
 function isFusionChange(value: unknown): boolean {
-  return isRecord(value) && hasExactFields(value, FUSION_CHANGE_FIELDS) &&
+  return isRecord(value) &&
+    (hasExactFields(value, FUSION_CHANGE_FIELDS) ||
+      hasExactFields(value, FUSION_CHANGE_FIELDS_V3) ||
+      hasExactFields(value, LEGACY_FUSION_CHANGE_FIELDS)) &&
     (value.index === null || isNonNegativeInteger(value.index)) &&
     (value.additional_index === null || isNonNegativeInteger(value.additional_index)) &&
     typeof value.action === "string" && typeof value.pending === "boolean" &&
@@ -604,7 +641,16 @@ function isFusionChange(value: unknown): boolean {
     (value.vlm_verdict === null || typeof value.vlm_verdict === "string") &&
     (value.proposed_label === null ||
       (typeof value.proposed_label === "string" && VIDEO_LABELS.has(value.proposed_label))) &&
-    (value.gate === null || typeof value.gate === "string");
+    (value.gate === null || typeof value.gate === "string") &&
+    (value.coexisting_labels === undefined ||
+      (Array.isArray(value.coexisting_labels) && value.coexisting_labels.length <= 4 &&
+        value.coexisting_labels.every((label) =>
+        typeof label === "string" && DETECTION_LABELS.has(label)))) &&
+    (value.original_presence === undefined || value.original_presence === null ||
+      value.original_presence === "present" || value.original_presence === "absent" ||
+      value.original_presence === "uncertain") &&
+    (value.confirmation_status === undefined || value.confirmation_status === null ||
+      value.confirmation_status === "confirmed" || value.confirmation_status === "uncertain");
 }
 
 export function isImageEvidenceDetail(value: unknown): value is ImageEvidenceDetail {

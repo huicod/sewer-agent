@@ -125,6 +125,31 @@ async def test_report_embeds_same_stored_lineage_and_html_separates_score_origin
     assert "&lt;script&gt;" in html.text and "<script>" not in html.text
 
 
+async def test_report_renders_coexisting_label_advice_without_relabeling_original():
+    app, task, steps, _ = evidence_app()
+    steps["verify"]["review"]["candidates"][0]["coexisting_labels"] = ["PL"]
+    steps["verify"]["review"]["candidates"][0]["original_presence"] = "present"
+    steps["verify"]["review"]["additional_anomalies"] = [
+        {
+            "label": "FS",
+            "name": None,
+            "bbox_xyxy": [1, 2, 3, 4],
+            "reason": "独立回看",
+            "evidence_strength": "clear",
+            "confirmation_status": "confirmed",
+        }
+    ]
+    steps["verify"]["fusion"]["changes"][0]["coexisting_labels"] = ["PL"]
+    steps["verify"]["fusion"]["changes"][0]["original_presence"] = "present"
+    steps["verify"]["fusion"]["changes"][0]["confirmation_status"] = None
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        html = await client.get(f"/api/tasks/{task.snapshot.task_id}/report?format=html")
+    assert html.status_code == 200
+    assert html.text.count("共存建议 PL") == 2
+    assert "原类别判断 原类别存在" in html.text
+    assert "新增二次确认 已完成独立回看" in html.text
+
+
 async def test_empty_detection_and_vlm_addition_preserve_no_numeric_vlm_score():
     app, task, steps, _ = evidence_app()
     steps["detect"]["detection"]["detections"] = []

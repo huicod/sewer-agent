@@ -14,10 +14,13 @@ from .inspection import AdditionalAnomaly, CandidateReview, ImageObservation, Im
 
 class EvidenceCandidate(CandidateReview):
     evidence_strength: Literal["clear", "uncertain"] | None = None
+    coexisting_labels: tuple[DetectionLabel, ...] = ()
+    original_presence: Literal["present", "absent", "uncertain"] | None = None
 
 
 class EvidenceAnomaly(AdditionalAnomaly):
     evidence_strength: Literal["clear", "uncertain"] | None = None
+    confirmation_status: Literal["confirmed", "uncertain"] | None = None
 
 
 class EvidenceReview(ImageReview):
@@ -35,6 +38,9 @@ class FusionChange(ContractModel):
     reason: str
     vlm_verdict: str | None = None
     proposed_label: DetectionLabel | None = None
+    coexisting_labels: tuple[DetectionLabel, ...] = ()
+    original_presence: Literal["present", "absent", "uncertain"] | None = None
+    confirmation_status: Literal["confirmed", "uncertain"] | None = None
     gate: str | None = None
 
 

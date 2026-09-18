@@ -62,6 +62,39 @@ def _quality(label: str, quality: QualitySummary) -> str:
     )
 
 
+def _coexisting_text(value: object) -> str:
+    labels = getattr(value, "coexisting_labels", ())
+    if not labels:
+        return ""
+    rendered = "、".join(
+        escape(label.value if hasattr(label, "value") else str(label)) for label in labels
+    )
+    return f"；共存建议 {rendered}"
+
+
+def _original_presence_text(value: object) -> str:
+    presence = getattr(value, "original_presence", None)
+    if presence is None:
+        return ""
+    rendered = {
+        "present": "原类别存在",
+        "absent": "原类别未见",
+        "uncertain": "原类别不确定",
+    }.get(str(presence), str(presence))
+    return f"；原类别判断 {escape(rendered)}"
+
+
+def _confirmation_text(value: object) -> str:
+    status = getattr(value, "confirmation_status", None)
+    if status is None:
+        return ""
+    rendered = {
+        "confirmed": "已完成独立回看",
+        "uncertain": "尚未完成独立回看",
+    }.get(str(status), str(status))
+    return f"；新增二次确认 {escape(rendered)}"
+
+
 def _image_evidence_section(report: TaskReport) -> list[str]:
     detail = report.image_evidence
     if detail is None or (detail.observation is None and detail.review is None):
@@ -95,12 +128,14 @@ def _image_evidence_section(report: TaskReport) -> list[str]:
             proposed = item.proposed_label.value if item.proposed_label else "—"
             lines.append(
                 f"<p>候选 #{item.index}：{item.verdict}；建议类别 {proposed}；"
-                f"证据 {item.evidence_strength or '旧记录未提供'}；{escape(item.reason)}</p>"
+                f"证据 {item.evidence_strength or '旧记录未提供'}"
+                f"{_original_presence_text(item)}{_coexisting_text(item)}；{escape(item.reason)}</p>"
             )
         for index, item in enumerate(review.additional_anomalies):
             lines.append(
                 f"<p>补充 #{index}：{escape(str(item.label))}；{escape(item.name or '')}；"
                 f"新增证据强度：{item.evidence_strength or '旧记录未提供'}；"
+                f"{_confirmation_text(item)}；"
                 f"原图像素框 {item.bbox_xyxy}；{escape(item.reason)}；无数值置信度</p>"
             )
     lines.append("<h3>已保存的融合动作</h3>")
@@ -110,8 +145,9 @@ def _image_evidence_section(report: TaskReport) -> list[str]:
         )
         lines.append(
             f"<p>{origin}：{escape(item.action)} → {escape(str(item.label))}；"
-            f"融合状态：{'待人工处理' if item.pending else '已自动处理'}；"
-            f"{escape(item.reason)}；{escape(item.gate or '')}</p>"
+            f"融合状态：{'待人工处理' if item.pending else '已自动处理'}"
+            f"{_original_presence_text(item)}{_confirmation_text(item)}"
+            f"{_coexisting_text(item)}；{escape(item.reason)}；{escape(item.gate or '')}</p>"
         )
     if not detail.fusion_changes:
         lines.append("<p>没有已保存的逐项融合动作，不重新推算历史结果。</p>")

@@ -21,7 +21,11 @@ from pipe_inspector.contracts.findings import EvidenceRef, Finding
 from pipe_inspector.contracts.inspection import ImageObservation, ImageReview, InspectionDecision
 from pipe_inspector.contracts.open_scan import OpenDetectionBatch, OpenScanEvidence
 from pipe_inspector.contracts.tasks import CoverageSummary
-from pipe_inspector.evaluation.guided import FUSION_VERSION, fuse_guided
+from pipe_inspector.evaluation.guided import (
+    FUSION_VERSION,
+    LEGACY_FUSION_VERSION,
+    fuse_guided,
+)
 from pipe_inspector.evaluation.guided_run import _validate_nonsecret_settings, _write_json
 from pipe_inspector.evaluation.review import (
     LABELS,
@@ -35,7 +39,11 @@ MAX_SAMPLES = 56
 
 
 def _review(sample):
-    model = GuidedReview if sample["baseline_policy"] == FUSION_VERSION else ImageReview
+    model = (
+        GuidedReview
+        if sample["baseline_policy"] in (FUSION_VERSION, LEGACY_FUSION_VERSION)
+        else ImageReview
+    )
     return model.model_validate(sample["review"]) if sample.get("review") else None
 
 
@@ -51,7 +59,11 @@ def validate_samples(samples: list[dict]) -> list[dict]:
         ids.add(sample["sample_id"])
         if sample["source_kind"] not in ("image", "video"):
             raise ValueError("invalid source_kind")
-        if sample["baseline_policy"] not in (FUSION_VERSION, "saved-video-review-v1"):
+        if sample["baseline_policy"] not in (
+            FUSION_VERSION,
+            LEGACY_FUSION_VERSION,
+            "saved-video-review-v1",
+        ):
             raise ValueError("unsupported baseline policy")
         validated = EvaluationSample.model_validate(
             {key: sample[key] for key in ("sample_id", "group_id", "image_path", "width", "height")}
@@ -101,7 +113,8 @@ def load_guided_samples(path: Path) -> list[dict]:
     state = json.loads(path.read_text(encoding="utf-8"))
     if state.get("schema_version") != "guided-cached-evaluation-v1":
         raise ValueError("unsupported guided cache")
-    if state.get("run_pins", {}).get("fusion", {}).get("version") != FUSION_VERSION:
+    fusion_version = state.get("run_pins", {}).get("fusion", {}).get("version")
+    if fusion_version not in (FUSION_VERSION, LEGACY_FUSION_VERSION):
         raise ValueError("guided cache fusion pin differs from accepted policy")
     manifest = EvaluationManifest.model_validate(state["manifest"])
     records = {record["sample_id"]: record for record in state["records"]}
@@ -114,7 +127,11 @@ def load_guided_samples(path: Path) -> list[dict]:
         record = records[item.sample_id]
         observation = ImageObservation.model_validate(record["observation"])
         review = GuidedReview.model_validate(record["review"]) if record["review"] else None
-        fused = fuse_guided(observation, None if record["review_error"] else review)
+        fused = fuse_guided(
+            observation,
+            None if record["review_error"] else review,
+            policy=fusion_version,
+        )
         if json.loads(json.dumps(fused)) != {
             key: record[key] for key in ("predictions", "changes")
         }:
@@ -128,7 +145,7 @@ def load_guided_samples(path: Path) -> list[dict]:
                 review_error=record["review_error"],
                 baseline_predictions=record["predictions"],
                 changes=record["changes"],
-                baseline_policy=FUSION_VERSION,
+                baseline_policy=fusion_version,
                 source_pins=dict(
                     path=str(path.resolve()),
                     run_pins=state["run_pins"],
