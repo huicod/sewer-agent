@@ -50,7 +50,7 @@ class Finding(ContractModel):
         description="Original candidate model score; not confidence of a revised/fused label",
     )
     evidence: tuple[EvidenceRef, ...] = Field(min_length=1)
-    confirmed_by: Literal["rules", "human"] | None = None
+    confirmed_by: Literal["rules", "detector_only_rules", "human"] | None = None
 
     @model_validator(mode="after")
     def validate_confirmation(self) -> "Finding":

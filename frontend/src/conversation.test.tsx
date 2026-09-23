@@ -119,6 +119,7 @@ describe("durable conversation panel", () => {
       text: "请检查附件",
       input_asset: null,
       task_id: null,
+      inspection_mode: "yolo_vlm",
     });
     expect((screen.getByLabelText("对话内容") as HTMLTextAreaElement).disabled).toBe(true);
   });

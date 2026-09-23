@@ -24,6 +24,7 @@ export type RuntimeStatus =
   | "cancelled";
 
 export type InspectionResult = "pending" | "normal" | "defects_found" | "inconclusive";
+export type InspectionMode = "yolo_only" | "yolo_vlm";
 export type ReviewStatus = "tentative" | "confirmed" | "rejected" | "needs_review";
 export type DetectionLabel = "AJ" | "BX" | "FS" | "PL" | "BLOCK" | "OTHER";
 export type DetectorLabel = Exclude<DetectionLabel, "OTHER">;
@@ -44,7 +45,7 @@ export type Finding = {
   source: "detector" | "open_detector" | "vlm" | "human";
   score: number | null;
   evidence: EvidenceRef[];
-  confirmed_by: "rules" | "human" | null;
+  confirmed_by: "rules" | "detector_only_rules" | "human" | null;
 };
 
 export type CoverageSummary = {
@@ -79,6 +80,7 @@ export type TaskRecord = {
   session_id: string;
   input_asset: AssetRef;
   instruction: string;
+  inspection_mode?: InspectionMode;
   created_at: string;
   snapshot: TaskSnapshot;
 };
@@ -104,6 +106,7 @@ export type TaskSubmission = {
   session_id: string;
   input_asset: AssetRef;
   instruction: string;
+  inspection_mode: InspectionMode;
 };
 
 export type TurnStatus = "queued" | "running" | "completed" | "failed";
@@ -115,9 +118,11 @@ export type TurnSubmission = {
   input_asset: AssetRef | null;
   task_id: string | null;
   reference_task_id?: string | null;
+  inspection_mode: InspectionMode;
 };
 
-export type TurnRecord = TurnSubmission & {
+export type TurnRecord = Omit<TurnSubmission, "inspection_mode"> & {
+  inspection_mode?: InspectionMode;
   session_id: string;
   created_at: string;
   updated_at: string;
@@ -274,6 +279,8 @@ export type ImageEvidenceDetail = {
   task_id: string;
   input_asset: AssetRef;
   parent_task_id: string | null;
+  inspection_mode?: InspectionMode;
+  review_status?: "completed" | "skipped_by_mode" | "unavailable";
   observation: ImageObservation | null;
   review: EvidenceReview | null;
   fusion_changes: FusionChange[];

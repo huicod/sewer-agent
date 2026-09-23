@@ -231,6 +231,8 @@ class PostgresRepository:
                 asset = AssetRecord.model_validate(asset_row[0])
                 if asset.kind not in {AssetKind.IMAGE, AssetKind.VIDEO} or asset.parent is not None:
                     raise SubmissionConflict
+                if submission.inspection_mode == "yolo_only" and asset.kind is AssetKind.VIDEO:
+                    raise SubmissionConflict
 
                 inserted = connection.execute(
                     sql.SQL(

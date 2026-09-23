@@ -86,6 +86,7 @@ def compile_inspection_plan(
     intent: ConversationIntent,
     *,
     available_actions: Collection[ActionKind],
+    inspection_mode: str = "yolo_vlm",
 ) -> TaskPlan | None:
     """Compile an inspect intent into the existing server-owned task plan."""
     if intent.kind is not ConversationIntentKind.INSPECT:
@@ -119,7 +120,7 @@ def compile_inspection_plan(
 
     actions = [
         ActionKind.DETECT,
-        ActionKind.VERIFY,
+        *([ActionKind.VERIFY] if inspection_mode == "yolo_vlm" else []),
         *requested,
         *([ActionKind.ENHANCE] if ActionKind.ENHANCE in intent.actions else []),
         ActionKind.SUMMARIZE,

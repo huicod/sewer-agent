@@ -22,6 +22,11 @@ const REVIEW_TEXT = {
   rejected: "已排除",
   needs_review: "需复核",
 } as const;
+const CONFIRMATION_TEXT = {
+  rules: "规则确认",
+  detector_only_rules: "纯 YOLO 检测规则确认",
+  human: "人工确认",
+} as const;
 
 function assetUrl(asset: AssetRef): string {
   return `/api/assets/${encodeURIComponent(asset.asset_id)}/versions/${asset.version}/content`;
@@ -253,7 +258,10 @@ export function ImageEvidencePanel({ taskId, snapshotRevision }: ImageEvidencePa
                   </>
                 ) : (
                   <p className="truth-note">
-                    本任务没有已保存的独立 VLM 复核；可能尚未完成，或历史记录不可用。
+                    {(detail.inspection_mode ?? "yolo_vlm") === "yolo_only" &&
+                    detail.review_status === "skipped_by_mode"
+                      ? "纯 YOLO，本次未执行 VLM 复检"
+                      : "本任务没有已保存的独立 VLM 复核；可能尚未完成，或历史记录不可用。"}
                   </p>
                 )}
               </section>
@@ -317,6 +325,7 @@ export function ImageEvidencePanel({ taskId, snapshotRevision }: ImageEvidencePa
                       <li key={finding.finding_id}>
                         {finding.finding_id} · {finding.canonical_label ?? "未分类"}
                         {finding.open_label ? ` · ${finding.open_label}` : ""} · {REVIEW_TEXT[finding.review_status]}
+                        {finding.confirmed_by ? ` · ${CONFIRMATION_TEXT[finding.confirmed_by]}` : ""}
                       </li>
                     ))}
                   </ul>

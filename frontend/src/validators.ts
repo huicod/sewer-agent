@@ -40,6 +40,7 @@ const INSPECTION_RESULTS = new Set([
   "defects_found",
   "inconclusive",
 ]);
+const INSPECTION_MODES = new Set(["yolo_only", "yolo_vlm"]);
 const TURN_STATUSES = new Set<TurnStatus>(["queued", "running", "completed", "failed"]);
 const TURN_STAGES = new Set<TurnStage>(["queued", "planning", "executing", "finished"]);
 const TURN_FIELDS = new Set([
@@ -47,6 +48,10 @@ const TURN_FIELDS = new Set([
   "status", "stage", "reply", "linked_task_id", "error_code", "attempts",
 ]);
 const TURN_FIELDS_WITH_REFERENCE = new Set([...TURN_FIELDS, "reference_task_id"]);
+const TURN_FIELDS_WITH_MODE = new Set([...TURN_FIELDS, "inspection_mode"]);
+const TURN_FIELDS_WITH_REFERENCE_AND_MODE = new Set([
+  ...TURN_FIELDS_WITH_REFERENCE, "inspection_mode",
+]);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -176,6 +181,7 @@ function isFinding(value: unknown): value is Finding {
     value.evidence.every(isEvidenceRef) &&
     (value.confirmed_by === null ||
       value.confirmed_by === "rules" ||
+      value.confirmed_by === "detector_only_rules" ||
       value.confirmed_by === "human")
   );
 }
@@ -221,6 +227,8 @@ export function isTaskRecord(value: unknown): value is TaskRecord {
     isUuid(value.session_id) &&
     isAssetRef(value.input_asset) &&
     isNonEmptyString(value.instruction) &&
+    (value.inspection_mode === undefined ||
+      (typeof value.inspection_mode === "string" && INSPECTION_MODES.has(value.inspection_mode))) &&
     isTimestamp(value.created_at) &&
     isTaskSnapshot(value.snapshot) &&
     (value.parent_task_id === undefined || value.parent_task_id === null ||
@@ -254,7 +262,9 @@ export function isSessionDetail(value: unknown): value is SessionDetail {
 export function isTurnRecord(value: unknown): value is TurnRecord {
   return (
     isRecord(value) &&
-    (hasExactFields(value, TURN_FIELDS) || hasExactFields(value, TURN_FIELDS_WITH_REFERENCE)) &&
+    (hasExactFields(value, TURN_FIELDS) || hasExactFields(value, TURN_FIELDS_WITH_REFERENCE) ||
+      hasExactFields(value, TURN_FIELDS_WITH_MODE) ||
+      hasExactFields(value, TURN_FIELDS_WITH_REFERENCE_AND_MODE)) &&
     isUuid(value.request_id) &&
     isUuid(value.session_id) &&
     typeof value.text === "string" &&
@@ -263,6 +273,8 @@ export function isTurnRecord(value: unknown): value is TurnRecord {
     (value.task_id === null || isUuid(value.task_id)) &&
     (value.reference_task_id === undefined || value.reference_task_id === null ||
       isUuid(value.reference_task_id)) &&
+    (value.inspection_mode === undefined ||
+      (typeof value.inspection_mode === "string" && INSPECTION_MODES.has(value.inspection_mode))) &&
     isTimestamp(value.created_at) &&
     isTimestamp(value.updated_at) &&
     typeof value.status === "string" && TURN_STATUSES.has(value.status as TurnStatus) &&
@@ -475,6 +487,9 @@ const QUALITY_FIELDS = new Set(["mean_luminance", "contrast", "sharpness", "adeq
 const IMAGE_EVIDENCE_FIELDS = new Set([
   "task_id", "input_asset", "parent_task_id", "observation", "review", "fusion_changes", "findings",
 ]);
+const IMAGE_EVIDENCE_FIELDS_WITH_MODE = new Set([
+  ...IMAGE_EVIDENCE_FIELDS, "inspection_mode", "review_status",
+]);
 const OBSERVATION_FIELDS = new Set(["detection", "quality"]);
 const DETECTION_BATCH_FIELDS = new Set([
   "detector_id", "model_version", "label_space_version", "width", "height", "detections",
@@ -654,8 +669,16 @@ function isFusionChange(value: unknown): boolean {
 }
 
 export function isImageEvidenceDetail(value: unknown): value is ImageEvidenceDetail {
+  const hasHistoricalFields = isRecord(value) && hasExactFields(value, IMAGE_EVIDENCE_FIELDS);
+  const hasModeFields = isRecord(value) && hasExactFields(value, IMAGE_EVIDENCE_FIELDS_WITH_MODE);
+  const validModeFields = hasHistoricalFields || (hasModeFields &&
+    typeof value.inspection_mode === "string" && INSPECTION_MODES.has(value.inspection_mode) &&
+    typeof value.review_status === "string" &&
+    ["completed", "skipped_by_mode", "unavailable"].includes(value.review_status) &&
+    ((value.inspection_mode === "yolo_only") === (value.review_status === "skipped_by_mode")));
   if (
-    !isRecord(value) || !hasExactFields(value, IMAGE_EVIDENCE_FIELDS) || !isUuid(value.task_id) ||
+    !isRecord(value) || !(hasHistoricalFields || hasModeFields) || !isUuid(value.task_id) ||
+    !validModeFields ||
     !isExactAssetRef(value.input_asset) ||
     !(value.parent_task_id === null ||
       (isUuid(value.parent_task_id) && value.parent_task_id !== value.task_id)) ||
@@ -900,8 +923,15 @@ const TASK_FIELDS = new Set([
   "request_id", "session_id", "input_asset", "instruction", "created_at", "snapshot",
 ]);
 const TASK_FIELDS_WITH_PARENT = new Set([...TASK_FIELDS, "parent_task_id"]);
+const TASK_FIELDS_WITH_MODE = new Set([...TASK_FIELDS, "inspection_mode"]);
+const TASK_FIELDS_WITH_PARENT_AND_MODE = new Set([
+  ...TASK_FIELDS_WITH_PARENT, "inspection_mode",
+]);
 const TASK_FIELDS_WITH_FRAME_SOURCE = new Set([
   ...TASK_FIELDS_WITH_PARENT, "frame_source",
+]);
+const TASK_FIELDS_WITH_FRAME_SOURCE_AND_MODE = new Set([
+  ...TASK_FIELDS_WITH_FRAME_SOURCE, "inspection_mode",
 ]);
 const SNAPSHOT_FIELDS = new Set([
   "schema_version", "task_id", "runtime_status", "inspection_result", "stage", "stage_progress",
@@ -921,8 +951,11 @@ const EVIDENCE_FIELDS = new Set(["asset", "region", "frame_index", "timestamp_se
 function isExactComparisonTask(value: unknown): value is TaskRecord {
   if (
     !isRecord(value) ||
-    !(hasExactFields(value, TASK_FIELDS) || hasExactFields(value, TASK_FIELDS_WITH_PARENT) ||
-      hasExactFields(value, TASK_FIELDS_WITH_FRAME_SOURCE)) ||
+    !(hasExactFields(value, TASK_FIELDS) || hasExactFields(value, TASK_FIELDS_WITH_MODE) ||
+      hasExactFields(value, TASK_FIELDS_WITH_PARENT) ||
+      hasExactFields(value, TASK_FIELDS_WITH_PARENT_AND_MODE) ||
+      hasExactFields(value, TASK_FIELDS_WITH_FRAME_SOURCE) ||
+      hasExactFields(value, TASK_FIELDS_WITH_FRAME_SOURCE_AND_MODE)) ||
     !isTaskRecord(value) || !isRecord(value.snapshot)
   ) return false;
   const snapshot = value.snapshot;

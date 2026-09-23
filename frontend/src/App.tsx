@@ -16,6 +16,7 @@ import {
 } from "./api";
 import type {
   AssetRef,
+  InspectionMode,
   RuntimeStatus,
   SessionRecord,
   TaskRecord,
@@ -36,6 +37,11 @@ const ACTIVE_TURN_STATUSES = new Set(["queued", "running"]);
 
 const RESULT_TEXT = { pending: "待定", normal: "正常", defects_found: "发现缺陷", inconclusive: "无法确定" } as const;
 const REVIEW_TEXT = { tentative: "暂定", confirmed: "已确认", rejected: "已排除", needs_review: "需复核" } as const;
+const CONFIRMATION_TEXT = {
+  rules: "规则确认",
+  detector_only_rules: "纯 YOLO 检测规则确认",
+  human: "人工确认",
+} as const;
 
 const STATUS_TEXT: Record<RuntimeStatus, string> = {
   queued: "等待处理",
@@ -68,6 +74,11 @@ const ACTIVE_TOOL_TEXT: Record<string, string> = {
   relative_measure: "掩膜与相对深度量化",
 };
 const GEOMETRY_TOOLS = new Set(["segment", "relative_depth", "relative_measure"]);
+const DEFAULT_INSPECTION_MODE: InspectionMode = "yolo_vlm";
+const INSPECTION_MODE_TEXT: Record<InspectionMode, string> = {
+  yolo_vlm: "YOLO＋VLM 复检",
+  yolo_only: "纯 YOLO（不复检）",
+};
 
 type PendingSubmission = {
   file: File;
@@ -75,6 +86,7 @@ type PendingSubmission = {
   instruction: string;
   requestId: string;
   inputAsset: AssetRef;
+  inspectionMode: InspectionMode;
 };
 
 type PendingTurn = TurnSubmission & {
@@ -114,6 +126,17 @@ function sameAssetRef(left: AssetRef | null, right: AssetRef | null): boolean {
   return left.asset_id === right.asset_id && left.version === right.version;
 }
 
+function inspectionModeOf(record: { inspection_mode?: InspectionMode }): InspectionMode {
+  return record.inspection_mode ?? DEFAULT_INSPECTION_MODE;
+}
+
+function isImageFile(file: File | null): boolean {
+  if (!file) return false;
+  if (file.type.startsWith("image/")) return true;
+  if (file.type.startsWith("video/")) return false;
+  return /\.(?:jpe?g|png)$/i.test(file.name);
+}
+
 function upsertTask(tasks: TaskRecord[], next: TaskRecord): TaskRecord[] {
   const index = tasks.findIndex(
     (task) =>
@@ -151,6 +174,36 @@ function taskStageText(task: TaskRecord): string {
   return TASK_STAGE_TEXT[task.snapshot.stage] ?? task.snapshot.stage;
 }
 
+type InspectionModeFieldProps = {
+  value: InspectionMode;
+  disabled: boolean;
+  disabledReason: string;
+  onChange: (mode: InspectionMode) => void;
+};
+
+function InspectionModeField({
+  value,
+  disabled,
+  disabledReason,
+  onChange,
+}: InspectionModeFieldProps) {
+  return (
+    <label className="field">
+      <span>检查模式</span>
+      <select
+        aria-label="检查模式"
+        value={value}
+        disabled={disabled}
+        onChange={(event) => onChange(event.target.value as InspectionMode)}
+      >
+        <option value="yolo_vlm">YOLO＋VLM 复检</option>
+        <option value="yolo_only">纯 YOLO（不复检）</option>
+      </select>
+      <small>{disabled ? disabledReason : "纯 YOLO 跳过 VLM 复检，结果会明确标注未复检。"}</small>
+    </label>
+  );
+}
+
 type TaskCardProps = {
   task: TaskRecord;
   starting: boolean;
@@ -184,6 +237,15 @@ function TaskCard({
   const hasVideoLocator = task.snapshot.findings.some((finding) =>
     finding.evidence.some((evidence) => evidence.frame_index !== null),
   );
+  const inspectionMode = inspectionModeOf(task);
+  const inspectionResult = inspectionMode === "yolo_only" &&
+      task.snapshot.runtime_status === "completed" &&
+      task.snapshot.inspection_result === "inconclusive" &&
+      task.snapshot.processed_frames > 0 &&
+      task.snapshot.coverage.sufficient_coverage &&
+      task.snapshot.findings.length === 0
+    ? "未检出五类缺陷（未复检）"
+    : RESULT_TEXT[task.snapshot.inspection_result];
 
   async function discoverMedia() {
     if (mediaLoading || mediaKind) return;
@@ -219,6 +281,9 @@ function TaskCard({
             : "复用原图片和检测证据，原结果保持不变。"}{" "}
           <a href={reportUrl(task.parent_task_id, "html")} target="_blank" rel="noreferrer">原任务报告</a>
         </p>
+      ) : null}
+      {inspectionMode === "yolo_only" ? (
+        <p className="truth-note">纯 YOLO 模式未执行 VLM 复检；此处仅显示检测器保存结果。</p>
       ) : null}
       {task.frame_source ? (
         <section aria-label="视频证据帧来源">
@@ -288,7 +353,11 @@ function TaskCard({
         </div>
         <div>
           <dt>检查结论</dt>
-          <dd>{RESULT_TEXT[task.snapshot.inspection_result]}</dd>
+          <dd>{inspectionResult}</dd>
+        </div>
+        <div>
+          <dt>检查模式</dt>
+          <dd>{INSPECTION_MODE_TEXT[inspectionMode]}</dd>
         </div>
         <div>
           <dt>活动工具</dt>
@@ -322,6 +391,8 @@ function TaskCard({
                   {finding.open_label ? ` · ${finding.open_label}` : ""}
                 </strong>
                 <span>{REVIEW_TEXT[finding.review_status]}</span>
+                {finding.score === null ? null : <span>原始检测器分数 {finding.score}</span>}
+                {finding.confirmed_by ? <span>{CONFIRMATION_TEXT[finding.confirmed_by]}</span> : null}
                 <code title="对话可引用的发现 ID">{finding.finding_id}</code>
                 <span className="evidence-links">
                   {finding.evidence.map((evidence, index) => (
@@ -442,8 +513,12 @@ export default function App({ pollIntervalMs = 2_000 }: AppProps) {
   const [tasks, setTasks] = useState<TaskRecord[]>([]);
   const [turns, setTurns] = useState<TurnRecord[]>([]);
   const [instruction, setInstruction] = useState("");
+  const [directFile, setDirectFile] = useState<File | null>(null);
+  const [inspectionMode, setInspectionMode] = useState<InspectionMode>(DEFAULT_INSPECTION_MODE);
   const [conversationText, setConversationText] = useState("");
   const [conversationFile, setConversationFile] = useState<File | null>(null);
+  const [conversationInspectionMode, setConversationInspectionMode] =
+    useState<InspectionMode>(DEFAULT_INSPECTION_MODE);
   const [selectedTaskId, setSelectedTaskId] = useState("");
   const [selectedReferenceTaskId, setSelectedReferenceTaskId] = useState("");
   const [selectedVideoFrame, setSelectedVideoFrame] = useState<SelectedVideoFrame | null>(null);
@@ -470,7 +545,10 @@ export default function App({ pollIntervalMs = 2_000 }: AppProps) {
       setSession(next);
       setTasks([]);
       setTurns([]);
+      setDirectFile(null);
+      setInspectionMode(DEFAULT_INSPECTION_MODE);
       setConversationFile(null);
+      setConversationInspectionMode(DEFAULT_INSPECTION_MODE);
       setSelectedTaskId("");
       setSelectedReferenceTaskId("");
       setSelectedVideoFrame(null);
@@ -659,16 +737,21 @@ export default function App({ pollIntervalMs = 2_000 }: AppProps) {
         !pending ||
         pending.file !== file ||
         pending.sessionId !== session.session_id ||
-        pending.instruction !== cleanInstruction
+        pending.instruction !== cleanInstruction ||
+        pending.inspectionMode !== inspectionMode
       ) {
-        pendingSubmission.current = null;
-        const uploaded = await uploadAsset(file);
+        const reusableAsset = pending && pending.file === file &&
+          pending.sessionId === session.session_id && pending.instruction === cleanInstruction
+          ? pending.inputAsset
+          : null;
+        const inputAsset = reusableAsset ?? (await uploadAsset(file)).ref;
         pending = {
           file,
           sessionId: session.session_id,
           instruction: cleanInstruction,
           requestId: crypto.randomUUID(),
-          inputAsset: uploaded.ref,
+          inputAsset,
+          inspectionMode,
         };
         pendingSubmission.current = pending;
       }
@@ -677,10 +760,13 @@ export default function App({ pollIntervalMs = 2_000 }: AppProps) {
         session_id: session.session_id,
         input_asset: pending.inputAsset,
         instruction: cleanInstruction,
+        inspection_mode: pending.inspectionMode,
       });
       pendingSubmission.current = null;
       setTasks((current) => upsertTask(current, created));
       setInstruction("");
+      setDirectFile(null);
+      setInspectionMode(DEFAULT_INSPECTION_MODE);
       form.current?.reset();
     } catch (nextError) {
       setError(formatError(nextError));
@@ -699,6 +785,7 @@ export default function App({ pollIntervalMs = 2_000 }: AppProps) {
         text: submission.text,
         input_asset: submission.input_asset,
         task_id: submission.task_id,
+        inspection_mode: inspectionModeOf(submission),
         ...(submission.reference_task_id
           ? { reference_task_id: submission.reference_task_id }
           : {}),
@@ -707,6 +794,7 @@ export default function App({ pollIntervalMs = 2_000 }: AppProps) {
       pendingTurn.current = null;
       setConversationText("");
       setConversationFile(null);
+      setConversationInspectionMode(DEFAULT_INSPECTION_MODE);
       setSelectedTaskId("");
       setSelectedReferenceTaskId("");
       setSelectedVideoFrame(null);
@@ -743,6 +831,7 @@ export default function App({ pollIntervalMs = 2_000 }: AppProps) {
       pending && pending.sessionId === session.session_id && pending.text === cleanText &&
       pending.task_id === taskId && pending.file === conversationFile &&
       pending.reference_task_id === referenceTaskId &&
+      inspectionModeOf(pending) === conversationInspectionMode &&
       sameAssetRef(pending.frameAsset, selectedFrameAsset),
     );
     if (!sameIntent) {
@@ -760,6 +849,7 @@ export default function App({ pollIntervalMs = 2_000 }: AppProps) {
           input_asset: inputAsset,
           task_id: taskId,
           reference_task_id: referenceTaskId,
+          inspection_mode: conversationInspectionMode,
           file: conversationFile,
           frameAsset: selectedFrameAsset,
         };
@@ -781,6 +871,7 @@ export default function App({ pollIntervalMs = 2_000 }: AppProps) {
     pendingTurn.current.text === conversationText.trim() &&
     pendingTurn.current.task_id === (selectedTaskId || null) &&
     pendingTurn.current.reference_task_id === (selectedReferenceTaskId || null) &&
+    inspectionModeOf(pendingTurn.current) === conversationInspectionMode &&
     pendingTurn.current.file === conversationFile &&
     sameAssetRef(pendingTurn.current.frameAsset, selectedVideoFrame?.frame.asset ?? null),
   );
@@ -790,6 +881,7 @@ export default function App({ pollIntervalMs = 2_000 }: AppProps) {
     setSelectedTaskId(parentTaskId);
     setSelectedReferenceTaskId("");
     setConversationFile(null);
+    setConversationInspectionMode(DEFAULT_INSPECTION_MODE);
     if (conversationFileInput.current) conversationFileInput.current.value = "";
     pendingTurn.current = null;
   }
@@ -890,6 +982,9 @@ export default function App({ pollIntervalMs = 2_000 }: AppProps) {
                   const nextFile = event.target.files?.[0] ?? null;
                   pendingTurn.current = null;
                   setConversationFile(nextFile);
+                  if (!isImageFile(nextFile)) {
+                    setConversationInspectionMode(DEFAULT_INSPECTION_MODE);
+                  }
                   if (nextFile) {
                     setSelectedVideoFrame(null);
                     setSelectedTaskId("");
@@ -899,16 +994,33 @@ export default function App({ pollIntervalMs = 2_000 }: AppProps) {
                 disabled={!session || turnSubmitting || hasActiveTurn}
               />
             </label>
+            <InspectionModeField
+              value={conversationInspectionMode}
+              disabled={!isImageFile(conversationFile) || turnSubmitting || hasActiveTurn}
+              disabledReason={selectedVideoFrame
+                ? "视频证据帧工具仅使用 YOLO＋VLM 复检。"
+                : conversationFile
+                  ? "视频仅使用 YOLO＋VLM 复检。"
+                  : selectedTaskId
+                    ? "关联任务沿用已保存的检查模式，不能在这里改写。"
+                    : "选择新图片后可更改检查模式；视频仅使用 YOLO＋VLM 复检。"}
+              onChange={setConversationInspectionMode}
+            />
             <label className="field">
               <span>关联已有任务（可选）</span>
               <select
                 value={selectedTaskId}
                 onChange={(event) => {
+                  const nextTaskId = event.target.value;
+                  const nextTask = tasks.find((task) => task.snapshot.task_id === nextTaskId);
                   pendingTurn.current = null;
                   setSelectedVideoFrame(null);
-                  setSelectedTaskId(event.target.value);
+                  setSelectedTaskId(nextTaskId);
                   setSelectedReferenceTaskId("");
-                  if (event.target.value) {
+                  setConversationInspectionMode(nextTask
+                    ? inspectionModeOf(nextTask)
+                    : DEFAULT_INSPECTION_MODE);
+                  if (nextTaskId) {
                     setConversationFile(null);
                     if (conversationFileInput.current) conversationFileInput.current.value = "";
                   }
@@ -968,9 +1080,22 @@ export default function App({ pollIntervalMs = 2_000 }: AppProps) {
               ref={fileInput}
               type="file"
               accept=".jpg,.jpeg,.png,.mp4,.mov,.avi,.mkv,image/jpeg,image/png,video/*"
+              onChange={(event) => {
+                const nextFile = event.target.files?.[0] ?? null;
+                setDirectFile(nextFile);
+                if (!isImageFile(nextFile)) setInspectionMode(DEFAULT_INSPECTION_MODE);
+              }}
               disabled={!session || submitting}
             />
           </label>
+          <InspectionModeField
+            value={inspectionMode}
+            disabled={!isImageFile(directFile) || submitting}
+            disabledReason={directFile
+              ? "视频仅使用 YOLO＋VLM 复检。"
+              : "选择图片后可更改检查模式；视频仅使用 YOLO＋VLM 复检。"}
+            onChange={setInspectionMode}
+          />
           <label className="field">
             <span>检查要求</span>
             <textarea

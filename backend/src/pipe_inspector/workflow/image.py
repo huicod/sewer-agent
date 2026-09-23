@@ -55,17 +55,20 @@ class ImageInspectionWorkflow:
                     maximum_interval=timedelta(seconds=5),
                 ),
             )
-            self.stage = "verifying"
-            await workflow.execute_activity(
-                "verify_image",
-                run,
-                start_to_close_timeout=timedelta(seconds=run["config"]["api_timeout_seconds"] + 30),
-                retry_policy=RetryPolicy(
-                    maximum_attempts=3,
-                    initial_interval=timedelta(seconds=1),
-                    maximum_interval=timedelta(seconds=5),
-                ),
-            )
+            if run["config"].get("inspection_mode", "yolo_vlm") == "yolo_vlm":
+                self.stage = "verifying"
+                await workflow.execute_activity(
+                    "verify_image",
+                    run,
+                    start_to_close_timeout=timedelta(
+                        seconds=run["config"]["api_timeout_seconds"] + 30
+                    ),
+                    retry_policy=RetryPolicy(
+                        maximum_attempts=3,
+                        initial_interval=timedelta(seconds=1),
+                        maximum_interval=timedelta(seconds=5),
+                    ),
+                )
         except ActivityError as exc:
             cause = exc.cause
             error = cause.type if isinstance(cause, ApplicationError) else "activity_interrupted"

@@ -83,9 +83,21 @@ class ConversationDispatcher:
                 "已选择比较参考任务，但本条没有明确解析为比较请求；本次未执行工具。"
                 "请明确比较两份检查，或清除比较参考后发送其他操作。"
             )
+        if intent.kind == "supplement" and turn.inspection_mode == "yolo_only":
+            return self._reply(
+                "纯 YOLO 任务未执行 VLM 复检，不能追加复检、增强或几何工具；"
+                "可继续询问或导出已保存结果，也可新建 YOLO＋VLM 图片检查。",
+                turn.task_id,
+            )
         if turn.task_id is not None and turn.input_asset is not None:
             selected_asset = await asyncio.to_thread(self.repo.get_asset, turn.input_asset)
             if selected_asset.kind == "frame":
+                if turn.inspection_mode == "yolo_only":
+                    return self._reply(
+                        "纯 YOLO 模式不能执行视频证据帧增强或几何工具；"
+                        "可继续询问或导出已保存结果。",
+                        turn.task_id,
+                    )
                 return await self._frame_tool(turn, intent, await self._target(turn))
         if intent.kind == "compare":
             from pipe_inspector.agent.comparison import compare_saved_tasks
@@ -99,10 +111,20 @@ class ConversationDispatcher:
             return await compare_saved_tasks(self.repo, turn, intent, task, attempt=attempt)
         task = await self._target(turn)
         if intent.kind == "supplement":
+            if task is not None and task.inspection_mode == "yolo_only":
+                return self._reply(
+                    "纯 YOLO 任务未执行 VLM 复检，不能追加复检、增强或几何工具；"
+                    "可继续询问或导出已保存结果，也可新建 YOLO＋VLM 图片检查。",
+                    task.snapshot.task_id,
+                )
             return await self._supplement(turn, intent, task)
         if intent.kind == "inspect":
             try:
-                plan = compile_inspection_plan(intent, available_actions=AVAILABLE_ACTIONS)
+                plan = compile_inspection_plan(
+                    intent,
+                    available_actions=AVAILABLE_ACTIONS,
+                    inspection_mode=turn.inspection_mode,
+                )
             except IntentPlanningError as exc:
                 if exc.code.startswith("geometry_"):
                     return self._reply(
@@ -133,6 +155,7 @@ class ConversationDispatcher:
                 session_id=turn.session_id,
                 input_asset=asset_ref,
                 instruction=turn.text,
+                inspection_mode=turn.inspection_mode,
             )
             existing = None
             if plan.enhancement is not None or plan.auto_enhancement or plan.geometry is not None:
@@ -142,6 +165,15 @@ class ConversationDispatcher:
                 if existing is not None:
                     validate_existing_admission(existing, submission, parent_task_id=None)
             asset = await asyncio.to_thread(self.repo.get_asset, asset_ref)
+            if turn.inspection_mode == "yolo_only" and asset.kind == "video":
+                return self._reply("纯 YOLO 检查当前仅支持图片；视频仍使用现有 YOLO＋VLM 流程。")
+            if turn.inspection_mode == "yolo_only" and (
+                plan.enhancement is not None or plan.auto_enhancement or plan.geometry is not None
+            ):
+                return self._reply(
+                    "纯 YOLO 模式不支持图片增强或几何工具；"
+                    "请改用 YOLO＋VLM 模式重新发起，本次未创建任务。"
+                )
             if plan.geometry is not None and existing is None:
                 try:
                     self._preflight_geometry(asset, plan.geometry)
@@ -165,7 +197,9 @@ class ConversationDispatcher:
             )
             await self.starter.start(
                 created.snapshot.task_id,
-                force_review=ActionKind.VERIFY in intent.actions,
+                force_review=(
+                    turn.inspection_mode == "yolo_vlm" and ActionKind.VERIFY in intent.actions
+                ),
                 plan=plan,
             )
             media_name = "视频" if asset.kind == "video" else "图片"
@@ -252,6 +286,11 @@ class ConversationDispatcher:
         return self._reply("\n".join(lines), snapshot.task_id)
 
     async def _frame_tool(self, turn, intent, task):
+        if turn.inspection_mode == "yolo_only":
+            return self._reply(
+                "纯 YOLO 模式不能执行视频证据帧增强或几何工具；本次未执行。",
+                turn.task_id,
+            )
         tail = {ActionKind.SUMMARIZE, ActionKind.EXPORT_REPORT}
         operations = set(intent.actions) - tail
         if intent.kind not in {"inspect", "supplement"} or intent.auto_enhancement:

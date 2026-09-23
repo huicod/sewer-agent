@@ -98,6 +98,51 @@ def test_reconnect_preserves_references_idempotency_and_session_grouping(reposit
         )
 
 
+def test_image_mode_reopens_and_participates_in_request_identity(repository):
+    store, settings, schema = repository
+    session = store.create_session()
+    image = original_asset()
+    store.save_asset(image)
+    submission = TaskSubmission(
+        request_id=uuid4(),
+        session_id=session.session_id,
+        input_asset=image.ref,
+        instruction="仅用 YOLO 检查图片",
+        inspection_mode="yolo_only",
+    )
+
+    created = store.create_task(submission)
+    reopened = PostgresRepository(settings.database_dsn, schema=schema)
+
+    assert reopened.get_task(created.snapshot.task_id).inspection_mode == "yolo_only"
+    assert reopened.create_task(submission) == created
+    with pytest.raises(SubmissionConflict, match="^submission conflicts with stored state$"):
+        reopened.create_task(
+            TaskSubmission.model_validate(
+                submission.model_dump() | {"inspection_mode": "yolo_vlm"}
+            )
+        )
+
+
+def test_pure_mode_video_is_rejected_without_creating_task(repository):
+    store, _, _ = repository
+    session = store.create_session()
+    video = original_asset(kind=AssetKind.VIDEO)
+    store.save_asset(video)
+
+    with pytest.raises(SubmissionConflict, match="^submission conflicts with stored state$"):
+        store.create_task(
+            TaskSubmission(
+                request_id=uuid4(),
+                session_id=session.session_id,
+                input_asset=video.ref,
+                instruction="仅用 YOLO 检查视频",
+                inspection_mode="yolo_only",
+            )
+        )
+    assert store.get_session(session.session_id).tasks == ()
+
+
 def test_missing_references_are_rejected_without_partial_task(repository):
     store, _, _ = repository
     session = store.create_session()

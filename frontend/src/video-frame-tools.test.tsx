@@ -214,6 +214,11 @@ describe("stored video evidence frame selection", () => {
     await user.click(await screen.findByText("选择已存证据帧（1）"));
     await user.click(await screen.findByRole("button", { name: "选择证据帧 30 用于工具" }));
     expect(screen.getByText("已选视频证据帧：帧 30 · 6 秒")).toBeTruthy();
+    const conversationPanel = screen.getByRole("heading", { name: "检查助手" }).closest("section")!;
+    const mode = conversationPanel.querySelector<HTMLSelectElement>('select[aria-label="检查模式"]')!;
+    expect(mode.disabled).toBe(true);
+    expect(mode.value).toBe("yolo_vlm");
+    expect(conversationPanel.textContent).toContain("视频证据帧工具仅使用 YOLO＋VLM 复检");
     expect(screen.getByRole<HTMLAnchorElement>("link", { name: "打开已选帧" }).href)
       .toContain(`/api/assets/${frameAsset.asset_id}/versions/2/content`);
     await user.type(screen.getByLabelText("对话内容"), text);
@@ -229,6 +234,7 @@ describe("stored video evidence frame selection", () => {
       text,
       input_asset: frameAsset,
       task_id: videoTaskId,
+      inspection_mode: "yolo_vlm",
     });
     expect(fetchMock.mock.calls.some(([url]) => url === "/api/assets")).toBe(false);
   });
@@ -290,6 +296,7 @@ describe("stored video evidence frame selection", () => {
         text,
         input_asset: null,
         task_id: expectedTaskId,
+        inspection_mode: "yolo_vlm",
       });
     });
   });

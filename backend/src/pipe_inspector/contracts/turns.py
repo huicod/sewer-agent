@@ -7,6 +7,7 @@ from pydantic import AwareDatetime, Field, model_validator
 
 from .assets import AssetRef
 from .common import ContractModel
+from .tasks import InspectionMode
 
 TurnStatus = Literal["queued", "running", "completed", "failed"]
 TurnStage = Literal["queued", "planning", "executing", "finished"]
@@ -18,6 +19,7 @@ class TurnInput(ContractModel):
     input_asset: AssetRef | None = None
     task_id: UUID | None = None
     reference_task_id: UUID | None = None
+    inspection_mode: InspectionMode = "yolo_vlm"
 
 
 class TurnSubmission(TurnInput):

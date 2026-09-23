@@ -213,6 +213,18 @@ describe("image evidence HTTP boundary", () => {
     ["unknown evidence strength", (payload: ImageEvidenceDetail) => {
       (payload.review!.candidates[0] as unknown as Record<string, unknown>).evidence_strength = "ambiguous";
     }],
+    ["unknown mode review status", (payload: ImageEvidenceDetail) => {
+      Object.assign(payload, { inspection_mode: "yolo_vlm", review_status: "skipped" });
+    }],
+    ["review status contradicting pure mode", (payload: ImageEvidenceDetail) => {
+      Object.assign(payload, { inspection_mode: "yolo_only", review_status: "completed" });
+    }],
+    ["present null inspection mode", (payload: ImageEvidenceDetail) => {
+      Object.assign(payload, { inspection_mode: null, review_status: "unavailable" });
+    }],
+    ["present numeric review status", (payload: ImageEvidenceDetail) => {
+      Object.assign(payload, { inspection_mode: "yolo_vlm", review_status: 1 });
+    }],
   ])("rejects %s", async (_name, mutate) => {
     const payload = structuredClone(detail());
     mutate(payload);
@@ -227,6 +239,31 @@ describe("image evidence HTTP boundary", () => {
 });
 
 describe("stored image inspection provenance panel", () => {
+  it("explains that pure YOLO deliberately skipped VLM review", async () => {
+    const payload = detail();
+    payload.review = null;
+    payload.fusion_changes = [];
+    payload.findings = [{
+      ...payload.findings[0],
+      canonical_label: "FS",
+      source: "detector",
+      confirmed_by: "detector_only_rules",
+    }];
+    Object.assign(payload, {
+      inspection_mode: "yolo_only",
+      review_status: "skipped_by_mode",
+    });
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(response(payload)));
+    const user = userEvent.setup();
+
+    render(<ImageEvidencePanel taskId={taskId} snapshotRevision={createdAt} />);
+    await user.click(screen.getByRole("button", { name: "展开检查依据" }));
+
+    expect(await screen.findByText("纯 YOLO，本次未执行 VLM 复检")).toBeTruthy();
+    expect(screen.getByText(new RegExp(`${findingId}.*纯 YOLO 检测规则确认`))).toBeTruthy();
+    expect(screen.queryByText(/可能尚未完成，或历史记录不可用/)).toBeNull();
+  });
+
   it("loads and displays coexisting labels without replacing the original class", async () => {
     const payload = detail();
     Object.assign(payload.review!.candidates[0], { coexisting_labels: ["PL"] });

@@ -9,6 +9,8 @@ from pydantic import AwareDatetime, Field, model_validator
 from .common import ContractModel, NonEmptyStr, Probability
 from .findings import Finding, ReviewStatus
 
+InspectionMode = Literal["yolo_only", "yolo_vlm"]
+
 
 class RuntimeStatus(StrEnum):
     QUEUED = "queued"

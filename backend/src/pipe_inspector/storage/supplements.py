@@ -126,6 +126,11 @@ class SupplementRepository(ConversationRepository):
                 parent = TaskRecord.model_validate(parent_row[0])
                 if parent.session_id != submission.session_id:
                     raise SubmissionConflict
+                if (
+                    parent.inspection_mode == "yolo_only"
+                    or submission.inspection_mode != parent.inspection_mode
+                ):
+                    raise SubmissionConflict
                 if parent.input_asset != submission.input_asset:
                     raise SubmissionConflict
                 if parent.parent_task_id is not None:

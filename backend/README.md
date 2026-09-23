@@ -1,6 +1,6 @@
 # 后端开发入口
 
-当前已接通对话＋附件、图片/视频检测与复检、报告、关联复检、人工审核等待/恢复和视频证据时间轴。开放补检已退出在线调用；2026-09-16 新图片默认接入已认可的 guided 复核与融合，旧任务按固定版本执行，视频策略不变。总范围见 [总体开发计划](../project_management/DEVELOPMENT_PLAN.md)，策略记录见 [在线对齐](../.trellis/tasks/09-16-online-guided-review/report.md)。
+当前已接通对话＋附件、图片/视频检测与复检、报告、关联复检、人工审核等待/恢复和视频证据时间轴。开放补检已退出在线调用；新图片可选纯 YOLO，默认仍为 guided 复核，视频策略不变。总范围见 [总体开发计划](../project_management/DEVELOPMENT_PLAN.md)，最新入口与复算记录见[图片模式与离线评测](../.trellis/tasks/09-23-inspection-modes-image-metrics/report.md)。
 
 ## 本服务器环境
 
@@ -24,6 +24,17 @@
 ```
 
 `GET /health` 仅表示 API 进程存活，不代表检测器/API 供应商/数据库已就绪。T04 的会话、上传和任务接口见下节。
+
+### 从缓存复算图像级指标（不调用模型）
+
+```bash
+.venv/bin/python -m pipe_inspector.evaluation.image_level \
+  --state var/evaluations/2026-09-18-vlm-calibration/live-60-conf025/state.json \
+  --confirmation-state var/evaluations/2026-09-18-vlm-calibration/live-60-conf025-addition-confirmation/state.json \
+  --output var/evaluations/2026-09-23-image-level/cached-60.json
+```
+
+输入是 `vlm-calibration-live-v1` 缓存；第二个输入可省略。输出同时保留图像级多标签指标、整图类别完全匹配率、逐图集合差异与框级 IoU=0.5 参照。SEDD 只评 PL/BLOCK；失败样本不删除，二次确认缺失/错误不接受。此命令不加载 YOLO、不调用 API、不改标签或预测。复算与限制见[实验报告](../.trellis/tasks/09-23-inspection-modes-image-metrics/report.md)。
 
 ### 浏览器核心与回执丢失验收（T15-A/C）
 
@@ -279,12 +290,13 @@ SEWER_RUN_STORAGE_TEST=1 .venv/bin/python -m pytest backend/tests/integration/te
 ```
 
 - 页面启动按钮或 POST /api/tasks/{id}/start 显式启动图片/视频检查，返回 202。相同任务重复点击沿用固定工作流 ID 与首次落盘配置；启动请求超时可重试，不另建任务；终态重处理需新建任务。
+- 新图片的任务提交和对话提交都支持 `inspection_mode: "yolo_only" | "yolo_vlm"`，省略保持默认后者。字段参与 request_id 幂等比较并冻结到 run；同一请求不可换模式。纯 YOLO 沿用相同检测参数，不依赖 VLM 配置、不安排复检 Activity，证据/报告标记跳过；零框不伪造 NORMAL/阴性审计，也不因未选复检而等待人工。视频及增强/几何/追加操作的纯 YOLO 组合明确拒绝。对话的 LLM 解析不等于检测 VLM，仍可能收费；手动任务入口不调用对话 LLM。
 - GET /api/tasks/{id} 的 snapshot 包含实际阶段、重试次数、结论和证据；GET /api/tasks/{id}/calls 查看每个工具的各次尝试。成功 Activity 结果落检查点，可跨 worker 重启复用。
-- 新图片默认采用 `guided_review`，所有图片审核一次（包括零框、高置信检测）。复用已接受离线规则：score≥0.85 的原类别/框/分数受保护，分歧交人工；低分允许明确拒绝或原框改类；明确、可定位、不重复的五类新增纳入融合。质量足够时明确接受/改类/新增可由规则确认，OTHER/不确定/冲突待审；拒绝证据保留为 rejected，不作为有效缺陷。VLM 新增 finding 的 score 为 null，不把离线评分占位值 1.0 冒充置信度。视频策略不变。
+- 默认 YOLO＋VLM 图片模式采用 `guided_review`，所有图片审核一次（包括零框、高置信检测）。当前为 `guided-conservative-v1`：保留原 YOLO 类别/框/分数；明确接受且画质合格可规则确认，分歧及 VLM 新增交人工，不自动删框/改类。按类别保护阈值是复核依据，不是输出筛选或 75% 精度保证。VLM finding 的 score 为 null，不把离线占位值 1.0 冒充置信度。视频策略不变。
 - 正常必须满足画质、全图检测覆盖和完成的全图阴性审核。OTHER、冲突或不能判断的候选为待复核；T09 新任务进入真正的人工等待，旧 pinless 任务维持历史 partial 行为，详见下节。
 - VLM 传输最多 3 次尝试；鉴权/配置/结构错误不重试，超时/网络失败标记 uncertain。检测端的可恢复传输失败最多重试 3 次；本地最终落库可耐久重试，但不会再执行检测或 VLM。供应商可能已处理请求，不能保证无重复计费。当前只记录次数与状态，未计量真实 token/金额。
 - 默认 VLM 输入为未经画框/增强的原图＋YOLO 类别/分数/坐标 JSON＋最多 8 个候选上下文原生裁剪，同一次 API 请求发送；单图最多 8 MiB，总原始图像字节预算为单图的三倍，超限省略裁剪。零框仍审计原图。新增框按完整原图 0～1000 坐标返回并换算成像素。API 失败保留检测证据，不报告正常。旧 `candidate_review`（仅原图＋候选 JSON）与 `independent_discovery`（无候选答案，可带四个局部图）保留兼容。
-- 新任务固定 `guided-confidence-v2` / `yolo-guided-review-v2` / `candidate-context-native-v1`。旧 candidate/discovery 任务仍执行自身固定的 `image-recall-v1` 及对应 prompt，不因新默认值失败或改写；未知/混合版本及模型/API 配置漂移仍明确拒绝。verify 检查点保存原始复核及 `fusion.predictions/changes`；增强、几何工具沿用原结论，关联工具冻结父任务结论。已有结果和人工审核不重算。
+- 新 guided 任务固定 `guided-conservative-v1` / `yolo-guided-review-v4` / `candidate-context-native-v1`，保护依据为 `validation-calibrated-v1`；历史结果不重算，不兼容的固定版本及模型/API 配置漂移会明确拒绝。verify 检查点保存原始复核及 `fusion.predictions/changes`；增强、几何工具沿用原结论，关联工具冻结父任务结论。当前策略与实验见[校准记录](../.trellis/tasks/09-18-vlm-calibration-run/report.md)。
 - 独检模式因真实评测中误报/重复候选和自动确认退化，未获默认启用验收；只有显式设置才使用。相近 VLM 框作为定位备选保留待审，候选召回不等于最终准确率。当前 `.env` 未改动、服务未重启。
 - 恢复时要求检测器/标签空间及规则、Prompt、VLM 配置版本一致；不要原地覆盖同版本权重。视频恢复/取消已接通；图片仅支持取消人工等待，活动中的图片 GPU 调用取消和开机自启尚未提供。
 
@@ -297,7 +309,7 @@ SEWER_RUN_STORAGE_TEST=1 .venv/bin/python -m pytest backend/tests/integration/te
 - 升级后重新执行 `scripts/init_storage.py` 新增对话/复检关联表，并重启 API 与 CPU worker；GPU worker 命令不变。该操作不删除旧数据。网页“检查助手”支持文本、可选附件或已有任务；手动入队入口仍保留。
 - `POST /api/sessions/{session_id}/turns` 接收 `request_id`、`text`、可选 `input_asset` / `task_id`，返回 202；同一路径 GET 恢复最近 50 条消息，加 `/{request_id}` 查询单条阶段。未指定任务时，沿用最近一次已完成对话的关联任务；超出保留窗口时应显式选择。
 - PostgreSQL 保存原始消息、意图/计划/分派检查点；Temporal 依次规划、执行、结束。每会话最多一条活跃消息；启动确认失败可原样重发相同 request_id，刷新后也能用“确认启动”重试。终态不可被重试改写。
-- `IntentParser` 使用最多 5 轮已完成历史（10 条消息）；服务端构建受约束计划，拒绝未部署工具。对话新检查始终执行五类，图片均按已配置模式进行 VLM 检查；视频仍按预算和条件复核。文本识别仍可能误解意图、增加已允许工具的调用，不能承诺语义判断完全准确；必要复检失败保留 partial，不冒充完成。
+- `IntentParser` 使用最多 5 轮已完成历史（10 条消息）；服务端构建受约束计划，拒绝未部署工具。对话新检查始终执行五类，图片按提交时保存的 `inspection_mode` 选择是否复检，LLM 不可擅自覆盖；视频仍按预算和条件复核。文本识别仍可能误解意图、增加已允许工具的调用，不能承诺语义判断完全准确；必要复检失败保留 partial，不冒充完成。
 - 回答“已启动”只表示关联检查已提交，不表示检查完成；检测阶段由关联任务显示。查询/解释引用保存的结论、发现、覆盖和复检说明，不重新跑模型；意图解析本身仍调用一次 LLM。无证据、视频执行或未部署工具均明确说明限制。
 - `GET /api/tasks/{id}/report?format=json` 导出版本化 TaskReport（任务快照＋工具尝试）；`format=html` 查看转义后的中文证据报告。仅终态可导出；进行中返回 409。partial/failed/cancelled 不被包装为正常，报告保留待审、覆盖及工具错误。
 - 报告仅查询存储，不调用模型、不改变旧结论；HTML 证据链接指向服务器媒体接口，不包含离线打包的原图。

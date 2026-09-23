@@ -6,7 +6,7 @@ from pydantic import AwareDatetime, Field, model_validator
 
 from .assets import AssetRef
 from .common import ContractModel
-from .tasks import TaskSnapshot
+from .tasks import InspectionMode, TaskSnapshot
 
 
 class FrameSource(ContractModel):
@@ -25,6 +25,7 @@ class TaskSubmission(ContractModel):
     session_id: UUID
     input_asset: AssetRef
     instruction: str = Field(min_length=1, max_length=4000)
+    inspection_mode: InspectionMode = "yolo_vlm"
 
 
 class TaskRecord(ContractModel):
@@ -32,6 +33,7 @@ class TaskRecord(ContractModel):
     session_id: UUID
     input_asset: AssetRef
     instruction: str = Field(min_length=1, max_length=4000)
+    inspection_mode: InspectionMode = "yolo_vlm"
     created_at: AwareDatetime
     snapshot: TaskSnapshot
     parent_task_id: UUID | None = None

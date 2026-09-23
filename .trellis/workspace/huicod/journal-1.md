@@ -1536,3 +1536,37 @@ sewer新P68.85/R65.17%，旧参考P83.01/R87.57%但可能见过新holdout，不�
 ### Next Steps
 
 - 用户后续授权再继续开发：纯YOLO/VLM模式选择、评测实现及人工校准；75%指标定义仍待确认。
+
+
+## Session 49: 图片纯YOLO/复检模式与缓存图像级评测完成
+
+**Date**: 2026-09-23
+**Task**: 图片纯YOLO/复检模式与缓存图像级评测完成
+**Branch**: `-`
+
+### Summary
+
+图片模式选择接入实际工作流并保存到任务；60图离线复算可重复，融合与检测参数不变。
+
+### Main Changes
+
+- Trellis任务09-23-inspection-modes-image-metrics完成；本地jj变更nmoryyrm，保留父级f0020486实验快照，未推送。
+- 模式覆盖对话/手动提交、重试身份、冻结运行、证据/报告和旧任务兼容；纯YOLO不调用检查VLM，不伪造正常。
+- 新增evaluation.image_level缓存CLI，60图36项计数复现，失败/空标签保留，SEDD只计PL/BLOCK。
+
+### Git Commits
+
+(No commits - planning session)
+
+### Testing
+
+- [OK] 后端1215 passed / 162 skipped；前端138 passed；Ruff、TypeScript/Vite build、diff check通过；独立审查无遗留发现。
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- 启动系统后做真实PG/Temporal持久化与页面人工验收；本轮未启动服务/GPU/API，PG当前无响应，新增PG用例尚未实跑。
+- 75%验收口径及人工校准仍待确认；不将图像级复算当模型或框级精度提升。

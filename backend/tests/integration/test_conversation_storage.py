@@ -98,6 +98,25 @@ def test_admission_reopens_and_identical_request_keeps_first_config(conversation
     assert store.get_turn_config(turn.request_id) == first_config
 
 
+def test_turn_mode_reopens_and_participates_in_request_identity(conversation_store):
+    store, settings, schema = conversation_store
+    session = store.create_session()
+    turn = submission(session.session_id, inspection_mode="yolo_only")
+
+    admitted = store.admit_turn(turn, {"workflow_version": "conversation-v1"})
+    reopened = ConversationRepository(settings.database_dsn, schema=schema)
+
+    assert reopened.get_turn(turn.request_id).inspection_mode == "yolo_only"
+    assert reopened.admit_turn(turn, {"workflow_version": "changed"}) == admitted
+    with pytest.raises(SubmissionConflict, match="^submission conflicts with stored state$"):
+        reopened.admit_turn(
+            TurnSubmission.model_validate(
+                turn.model_dump() | {"inspection_mode": "yolo_vlm"}
+            ),
+            {},
+        )
+
+
 def test_admission_rejects_request_identity_mismatch(conversation_store):
     store, _, _ = conversation_store
     session = store.create_session()

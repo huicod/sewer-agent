@@ -8,6 +8,10 @@ from temporalio import activity
 from temporalio.exceptions import ApplicationError
 
 from pipe_inspector.agent.api_client import APIClientError, OpenAICompatibleClient
+from pipe_inspector.agent.detector_only_policy import (
+    DETECTOR_ONLY_POLICY_VERSION,
+    decide_detector_only,
+)
 from pipe_inspector.agent.guided_fusion import fuse_guided
 from pipe_inspector.agent.guided_review import GuidedImageReviewer
 from pipe_inspector.agent.image_discovery import IndependentImageReviewer
@@ -53,12 +57,24 @@ class ImageActivities:
     def _check_versions(self, config, *, detector=False, vlm=False):
         # Admission defaults may change during deployment. Existing runs execute
         # their supported, immutable policy tuple, never the worker's new default.
-        try:
-            expected = review_pins(config.get("image_review_mode"))
-        except ValueError:
-            raise ApplicationError(
-                "Unsupported pinned review mode", type="configuration_changed", non_retryable=True
-            ) from None
+        inspection_mode = config.get("inspection_mode", "yolo_vlm")
+        if inspection_mode == "yolo_only":
+            expected = {"detector_only_policy_version": DETECTOR_ONLY_POLICY_VERSION}
+            if vlm:
+                raise ApplicationError(
+                    "VLM review disabled by pinned inspection mode",
+                    type="configuration_changed",
+                    non_retryable=True,
+                )
+        else:
+            try:
+                expected = review_pins(config.get("image_review_mode"))
+            except ValueError:
+                raise ApplicationError(
+                    "Unsupported pinned review mode",
+                    type="configuration_changed",
+                    non_retryable=True,
+                ) from None
         if config.get("operation") == "video_inspection":
             expected = {
                 "policy_version": "image-policy-v1",
@@ -357,7 +373,9 @@ class ImageActivities:
                     if saved_review and saved_review.get("review")
                     else None
                 )
-                if "geometry" in run["config"]:
+                if run["config"].get("inspection_mode", "yolo_vlm") == "yolo_only":
+                    decision = decide_detector_only(task_id, task.input_asset, observation)
+                elif "geometry" in run["config"]:
                     from pipe_inspector.workflow.geometry_activities import geometry_baseline
 
                     source = self.repo.load_step(task_id, "geometry_source")
@@ -400,11 +418,12 @@ class ImageActivities:
                     from pipe_inspector.workflow.frame_tools import localize_frame_decision
 
                     decision = localize_frame_decision(self.repo, run, task, decision)
+                pure_mode = run["config"].get("inspection_mode", "yolo_vlm") == "yolo_only"
                 partial = (
                     bool(error)
                     or bool(geometry_error)
                     or decision.needs_review
-                    or decision.inspection_result == "inconclusive"
+                    or (decision.inspection_result == "inconclusive" and not pure_mode)
                 )
                 waiting_reasons = list(decision.reasons)
                 if error:

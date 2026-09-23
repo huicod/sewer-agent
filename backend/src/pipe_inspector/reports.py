@@ -100,6 +100,8 @@ def _image_evidence_section(report: TaskReport) -> list[str]:
     if detail is None or (detail.observation is None and detail.review is None):
         return []
     lines = ["<h2>图片检测与复核溯源</h2>", "<h3>YOLO / 主检测器原始结果</h3>"]
+    if detail.review_status == "skipped_by_mode":
+        lines.append("<p>检测模式：纯 YOLO；按用户选择未执行 VLM 复检。</p>")
     if detail.observation is not None:
         detection = detail.observation.detection
         lines.append(
@@ -116,7 +118,11 @@ def _image_evidence_section(report: TaskReport) -> list[str]:
             lines.append("<p>主检测器零候选，不等于整图正常。</p>")
     lines.append("<h3>VLM 复核意见</h3>")
     if detail.review is None:
-        lines.append("<p>本任务没有已保存的图片 VLM 复核意见。</p>")
+        lines.append(
+            "<p>纯 YOLO 模式已跳过 VLM 复检；这不是 VLM 缺失或调用失败。</p>"
+            if detail.review_status == "skipped_by_mode"
+            else "<p>本任务没有已保存的图片 VLM 复核意见。</p>"
+        )
     else:
         review = detail.review
         lines.append(f"<p>{escape(review.summary)}</p>")
@@ -311,6 +317,11 @@ def render_html(report: TaskReport) -> str:
         "</style></head><body>",
         "<h1>管网检查报告</h1>",
         f"<p>任务：{snapshot.task_id}</p>",
+        (
+            "<p>检测模式：纯 YOLO（未执行 VLM 复检）</p>"
+            if task.inspection_mode == "yolo_only"
+            else "<p>检测模式：YOLO＋VLM</p>"
+        ),
         f"<p>结果：{RESULTS[snapshot.inspection_result]}"
         f"；运行状态：{snapshot.runtime_status.value}</p>",
         f"<p>快照更新时间：{snapshot.updated_at.isoformat()}</p>",
@@ -360,7 +371,12 @@ def render_html(report: TaskReport) -> str:
                 "（非准确率，不是融合类别置信度）</p>"
             )
         if finding.confirmed_by:
-            lines.append("<p>确认依据：" + escape(finding.confirmed_by) + "</p>")
+            confirmed_by = {
+                "detector_only_rules": "纯 YOLO 检测器规则（非 VLM 确认）",
+                "rules": "融合规则",
+                "human": "人工审核",
+            }[finding.confirmed_by]
+            lines.append("<p>确认依据：" + confirmed_by + "</p>")
         for evidence in finding.evidence:
             lines.append("<p>" + evidence_link(evidence.asset) + "</p>")
             if evidence.frame_index is not None:

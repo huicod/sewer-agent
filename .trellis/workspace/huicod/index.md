@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 48
+- **Total Sessions**: 49
 - **Last Active**: 2026-09-23
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~1538 | Active |
+| `journal-1.md` | ~1572 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 49 | 2026-09-23 | 图片纯YOLO/复检模式与缓存图像级评测完成 | - | `-` |
 | 48 | 2026-09-23 | 记录60图图像级多标签复算与框级口径对照 | - | `-` |
 | 47 | 2026-09-17 | YOLO26m训练完成，606图新旧评估与图库交接 | jj `uxttykpz` | `eval/yolo26m-posttrain` |
 | 46 | 2026-09-16 | 正式YOLO26m训练已在tmux启动，交接后台运行 | jj `mptpuplr` | `train/yolo26m-5090-config` |
@@ -83,7 +84,8 @@
 
 ## Notes
 
-- 最新恢复入口：Session48、`.trellis/tasks/09-18-vlm-calibration-run/image_level_report.md`及同目录原框级`report.md`。2026-09-23仅记录60图缓存复算：YOLO/保守融合图像级P98.33/R84.29/F190.77%，不是模型变强或框级达标。来源掩码、四组对照、逐类指标、sample-0018与后续边界均已记录；原始标注和融合未变。纯YOLO/VLM模式选择尚未开发，75%验收口径尚待确认；用户本轮要求先归档，后续再开发。
+- 最新恢复入口：Session49、`.trellis/tasks/09-23-inspection-modes-image-metrics/report.md`。图片纯YOLO／YOLO＋VLM选择已贯通页面、对话、持久契约、冻结运行与证据报告；默认复检，视频不变，融合和检测参数不改。后端1215通过/162跳过、前端138通过、构建/Ruff/独立审查通过。本地jj `nmoryyrm`，未推送、未启动服务或付费模型；PG无响应，后续需真实持久化与人工页面验收。
+- Session48归档的60图框级/图像级对照仍在`09-18-vlm-calibration-run/image_level_report.md`；新缓存CLI复算结果在`var/evaluations/2026-09-23-image-level/cached-60.json`，36项计数吻合。YOLO图像级P98.33/R84.29/F190.77%只是换口径，75%验收定义和人工校准仍待确认。
 
 - 训练阶段历史入口：Session47、`09-17-yolo26m-posttrain-eval/report.md`及`yolov26/docs/merged_five_yolo26m_evaluation_20260917.md`。训练正常早停84轮、best54、4.070h；冻结606图结果位于`var/evaluations/2026-09-17-yolo26m/`。该训练评估与后来的60图VLM校准不是同一份样本，部署状态不能由离线报告推断。
 

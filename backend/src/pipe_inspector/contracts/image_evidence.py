@@ -3,13 +3,14 @@
 from typing import Literal
 from uuid import UUID
 
-from pydantic import Field, FiniteFloat
+from pydantic import Field, FiniteFloat, model_validator
 
 from .assets import AssetRef
 from .common import ContractModel
 from .detection import DetectionLabel
 from .findings import Finding
 from .inspection import AdditionalAnomaly, CandidateReview, ImageObservation, ImageReview
+from .tasks import InspectionMode
 
 
 class EvidenceCandidate(CandidateReview):
@@ -48,7 +49,16 @@ class ImageEvidence(ContractModel):
     task_id: UUID
     input_asset: AssetRef
     parent_task_id: UUID | None = None
+    inspection_mode: InspectionMode = "yolo_vlm"
+    review_status: Literal["completed", "skipped_by_mode", "unavailable"] = "unavailable"
     observation: ImageObservation | None = None
     review: EvidenceReview | None = None
     fusion_changes: tuple[FusionChange, ...] = ()
     findings: tuple[Finding, ...] = ()
+
+    @model_validator(mode="after")
+    def validate_review_status(self) -> "ImageEvidence":
+        skipped = self.review_status == "skipped_by_mode"
+        if skipped != (self.inspection_mode == "yolo_only"):
+            raise ValueError("pure YOLO evidence must explicitly identify skipped VLM review")
+        return self

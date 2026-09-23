@@ -236,7 +236,7 @@ describe("comparison composer identity", () => {
     expect((posts[0][1] as RequestInit).body).toBe((posts[1][1] as RequestInit).body);
     expect(JSON.parse(String((posts[0][1] as RequestInit).body))).toEqual({
       request_id: requestId, text: "比较这两个保存结果", input_asset: null,
-      task_id: currentTaskId, reference_task_id: referenceTaskId,
+      task_id: currentTaskId, reference_task_id: referenceTaskId, inspection_mode: "yolo_vlm",
     });
     expect(fetchMock.mock.calls.some(([url]) => url === "/api/assets")).toBe(false);
   });

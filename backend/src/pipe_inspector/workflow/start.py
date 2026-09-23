@@ -15,6 +15,7 @@ from temporalio.common import WorkflowIDReusePolicy
 from temporalio.exceptions import WorkflowAlreadyStartedError
 from temporalio.service import RPCError
 
+from pipe_inspector.agent.detector_only_policy import DETECTOR_ONLY_POLICY_VERSION
 from pipe_inspector.agent.image_discovery import DISCOVERY_PROMPT_VERSION
 from pipe_inspector.agent.image_review import IMAGE_REVIEW_PROMPT_VERSION
 from pipe_inspector.agent.recall_policy import RECALL_POLICY_VERSION
@@ -42,9 +43,17 @@ DETECT_TIMEOUT = 180
 
 
 def run_config(
-    settings: Settings, detector=None, *, force_review: bool = False, plan: TaskPlan | None = None
+    settings: Settings,
+    detector=None,
+    *,
+    force_review: bool = False,
+    plan: TaskPlan | None = None,
+    inspection_mode: str = "yolo_vlm",
 ) -> dict:
-    if settings.vlm_base_url:
+    if inspection_mode not in {"yolo_only", "yolo_vlm"}:
+        raise InspectionStartError("inspection_mode_invalid", "不支持的检查模式", 409)
+    _validate_inspection_mode_plan(inspection_mode, plan)
+    if inspection_mode == "yolo_vlm" and settings.vlm_base_url:
         try:
             url = httpx.URL(settings.vlm_base_url)
             valid = (
@@ -69,20 +78,26 @@ def run_config(
         "detector_id": detector.detector_id,
         "model_version": detector.model_version,
         "label_space_version": detector.label_space_version,
-        "vlm_model": settings.vlm_model,
-        "vlm_base_url": settings.vlm_base_url,
-        **review_pins(settings.image_review_mode),
+        "inspection_mode": inspection_mode,
         "human_review_version": "human-review-v1",
-        "api_timeout_seconds": settings.api_timeout_seconds,
-        "api_enable_thinking": settings.api_enable_thinking,
-        "api_max_output_tokens": settings.api_max_output_tokens,
-        "max_image_bytes": settings.vlm_max_image_bytes,
         "detect_call_id": str(uuid4()),
-        "verify_call_id": str(uuid4()),
         "gpu_queue": settings.task_queue + "-gpu",
-        "force_review": force_review,
+        "force_review": force_review if inspection_mode == "yolo_vlm" else False,
         "plan": plan.model_dump(mode="json") if plan is not None else None,
     }
+    if inspection_mode == "yolo_only":
+        config["detector_only_policy_version"] = DETECTOR_ONLY_POLICY_VERSION
+    else:
+        config.update(
+            vlm_model=settings.vlm_model,
+            vlm_base_url=settings.vlm_base_url,
+            **review_pins(settings.image_review_mode),
+            api_timeout_seconds=settings.api_timeout_seconds,
+            api_enable_thinking=settings.api_enable_thinking,
+            api_max_output_tokens=settings.api_max_output_tokens,
+            max_image_bytes=settings.vlm_max_image_bytes,
+            verify_call_id=str(uuid4()),
+        )
     if plan and any(s.action == ActionKind.ENHANCE for s in plan.steps):
         from pipe_inspector.workflow.enhancement_config import (
             build_auto_enhancement_config,
@@ -107,6 +122,29 @@ def run_config(
             )
         config["geometry"] = build_geometry_config(settings, plan.geometry)
     return config
+
+
+def _validate_inspection_mode_plan(inspection_mode: str, plan: TaskPlan | None) -> None:
+    if inspection_mode == "yolo_only" and plan and (
+        plan.enhancement is not None
+        or plan.auto_enhancement
+        or plan.geometry is not None
+        or any(
+            step.action
+            in {
+                ActionKind.ENHANCE,
+                ActionKind.SEGMENT,
+                ActionKind.RELATIVE_DEPTH,
+                ActionKind.RELATIVE_MEASURE,
+            }
+            for step in plan.steps
+        )
+    ):
+        raise InspectionStartError(
+            "inspection_mode_tool_unsupported",
+            "纯 YOLO 模式不支持增强或几何工具；请新建 YOLO＋VLM 图片检查",
+            409,
+        )
 
 
 def video_run_config(
@@ -162,6 +200,7 @@ def validate_existing_admission(
         session_id=record.session_id,
         input_asset=record.input_asset,
         instruction=record.instruction,
+        inspection_mode=record.inspection_mode,
     )
     if stored_submission != submission or record.parent_task_id != parent_task_id:
         raise SubmissionConflict
@@ -190,6 +229,25 @@ class InspectionStarter:
             if existing is not None:
                 return validate_existing_admission(
                     existing, submission, parent_task_id=parent_task_id
+                )
+        if getattr(submission, "inspection_mode", "yolo_vlm") == "yolo_only":
+            raise InspectionStartError(
+                "inspection_mode_tool_unsupported",
+                "纯 YOLO 任务不支持追加复检、增强或几何工具",
+                409,
+            )
+        get_task = getattr(self.repo, "get_task", None)
+        if get_task is not None:
+            parent = await asyncio.to_thread(get_task, parent_task_id)
+            if parent.inspection_mode == "yolo_only":
+                raise InspectionStartError(
+                    "inspection_mode_tool_unsupported",
+                    "纯 YOLO 任务不支持追加复检、增强或几何工具",
+                    409,
+                )
+            if submission.inspection_mode != parent.inspection_mode:
+                raise InspectionStartError(
+                    "inspection_mode_conflict", "追加任务不能改变原任务的检查模式", 409
                 )
         raw = await asyncio.to_thread(self.repo.load_step, parent_task_id, "detect")
         try:
@@ -246,6 +304,12 @@ class InspectionStarter:
             raise InspectionStartError(
                 "frame_tool_combination_invalid",
                 "请选择一种视频证据帧增强或几何操作",
+                409,
+            )
+        if submission.inspection_mode == "yolo_only":
+            raise InspectionStartError(
+                "inspection_mode_tool_unsupported",
+                "纯 YOLO 模式不能执行视频证据帧增强或几何工具",
                 409,
             )
         existing = await asyncio.to_thread(self.repo.find_task_by_request_id, submission.request_id)
@@ -352,6 +416,12 @@ class InspectionStarter:
                 "unsupported_media", "当前执行器只支持已接纳的图片或视频", 409
             )
         is_video = asset.kind == AssetKind.VIDEO
+        inspection_mode = getattr(record, "inspection_mode", "yolo_vlm")
+        if inspection_mode == "yolo_only" and is_video:
+            raise InspectionStartError(
+                "inspection_mode_image_only", "纯 YOLO 检查当前仅支持图片", 409
+            )
+        _validate_inspection_mode_plan(inspection_mode, plan)
         if plan and plan.geometry is not None:
             from pipe_inspector.workflow.geometry_config import validate_geometry_input
 
@@ -384,7 +454,12 @@ class InspectionStarter:
                     (
                         video_run_config(self.settings, force_review=force_review, plan=plan)
                         if is_video
-                        else run_config(self.settings, force_review=force_review, plan=plan)
+                        else run_config(
+                            self.settings,
+                            force_review=force_review,
+                            plan=plan,
+                            inspection_mode=inspection_mode,
+                        )
                     ),
                 )
             except SubmissionConflict:
@@ -403,6 +478,10 @@ class InspectionStarter:
             raise InspectionStartError(
                 "configuration_changed", "已固定的运行类型与任务媒体不一致", 409
             )
+        if run is not None and run["config"].get("inspection_mode", "yolo_vlm") != inspection_mode:
+            raise InspectionStartError(
+                "configuration_changed", "已固定的检查模式与任务选择不一致", 409
+            )
         if plan is not None and (
             run is None
             or (
@@ -411,7 +490,8 @@ class InspectionStarter:
                 else None
             )
             != plan
-            or run["config"].get("force_review", False) != force_review
+            or run["config"].get("force_review", False)
+            != (force_review if inspection_mode == "yolo_vlm" else False)
         ):
             raise InspectionStartError(
                 "plan_conflict", "任务已按另一执行计划启动，不能改写；请重新发起检查", 409

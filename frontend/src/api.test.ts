@@ -76,6 +76,7 @@ describe("intake API boundary", () => {
       session_id: task.session_id,
       input_asset: asset.ref,
       instruction: task.instruction,
+      inspection_mode: "yolo_vlm",
     });
 
     const [url, request] = fetchMock.mock.calls[0] as [string, RequestInit];
@@ -87,6 +88,7 @@ describe("intake API boundary", () => {
       session_id: task.session_id,
       input_asset: asset.ref,
       instruction: "检查破损",
+      inspection_mode: "yolo_vlm",
     });
   });
 
@@ -191,12 +193,19 @@ describe("conversation API boundary", () => {
       text: "检查附件",
       input_asset: asset.ref,
       task_id: null,
+      inspection_mode: "yolo_vlm",
     });
 
     expect(fetchMock).toHaveBeenCalledWith(`/api/sessions/${sessionId}/turns`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ request_id: requestId, text: "检查附件", input_asset: asset.ref, task_id: null }),
+      body: JSON.stringify({
+        request_id: requestId,
+        text: "检查附件",
+        input_asset: asset.ref,
+        task_id: null,
+        inspection_mode: "yolo_vlm",
+      }),
     });
   });
 
