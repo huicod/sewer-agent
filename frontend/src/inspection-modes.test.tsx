@@ -83,6 +83,12 @@ function directPanel() {
   return screen.getByRole("heading", { name: "提交现场资料" }).closest("section")!;
 }
 
+async function openDirectPanel(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(await screen.findByRole("button", { name: "新建检查" }));
+  await screen.findByRole("heading", { name: "提交现场资料" });
+  return directPanel();
+}
+
 function conversationPanel() {
   return screen.getByRole("heading", { name: "检查助手" }).closest("section")!;
 }
@@ -120,7 +126,7 @@ describe("image inspection modes", () => {
     render(<App pollIntervalMs={60_000} />);
     await screen.findByText(sessionId);
 
-    const direct = within(directPanel());
+    const direct = within(await openDirectPanel(user));
     await user.upload(
       direct.getByLabelText("现场文件"),
       new File(["image"], "pipe.jpg", { type: "image/jpeg" }),
@@ -169,7 +175,7 @@ describe("image inspection modes", () => {
 
     render(<App pollIntervalMs={60_000} />);
     await screen.findByText(sessionId);
-    const panel = within(directPanel());
+    const panel = within(await openDirectPanel(user));
     await user.upload(
       panel.getByLabelText("现场文件"),
       new File(["image"], "pipe.jpg", { type: "image/jpeg" }),
@@ -320,8 +326,8 @@ describe("image inspection modes", () => {
     await screen.findByText(sessionId);
 
     for (const [panel, fileLabel] of [
-      [within(directPanel()), "现场文件"],
       [within(conversationPanel()), /对话附件/],
+      [within(await openDirectPanel(user)), "现场文件"],
     ] as const) {
       await user.upload(panel.getByLabelText(fileLabel), new File(["img"], "pipe.jpg", { type: "image/jpeg" }));
       const selector = panel.getByLabelText<HTMLSelectElement>("检查模式");
@@ -334,10 +340,11 @@ describe("image inspection modes", () => {
   });
 
   it("displays saved and historical modes without inventing a normal pure-YOLO result", async () => {
-    const pure = task("yolo_only");
+    const pure = { ...task("yolo_only"), instruction: "纯 YOLO 历史任务" };
     const historical = {
       ...task(),
       request_id: "99999999-9999-4999-8999-999999999999",
+      instruction: "默认模式历史任务",
       snapshot: {
         ...task().snapshot,
         task_id: "88888888-8888-4888-8888-888888888888",
@@ -350,14 +357,20 @@ describe("image inspection modes", () => {
       }))
       .mockResolvedValueOnce(response([])));
 
+    const user = userEvent.setup();
     render(<App pollIntervalMs={60_000} />);
 
-    const cards = await screen.findAllByText("检查任务");
-    const pureCard = within(cards[0].closest("article")!);
-    const historicalCard = within(cards[1].closest("article")!);
+    const pureCard = within(
+      (await screen.findByRole("heading", { name: "纯 YOLO 历史任务" })).closest("article")!,
+    );
     expect(pureCard.getByText("纯 YOLO（不复检）")).toBeTruthy();
     expect(pureCard.getByText("未检出五类缺陷（未复检）")).toBeTruthy();
     expect(pureCard.queryByText("正常")).toBeNull();
+
+    await user.click(screen.getByRole("button", { name: "查看任务：默认模式历史任务" }));
+    const historicalCard = within(
+      (await screen.findByRole("heading", { name: "默认模式历史任务" })).closest("article")!,
+    );
     expect(historicalCard.getByText("YOLO＋VLM 复检")).toBeTruthy();
   });
 
@@ -396,7 +409,9 @@ describe("image inspection modes", () => {
 
     render(<App pollIntervalMs={60_000} />);
 
-    const card = within((await screen.findByText("检查任务")).closest("article")!);
+    const card = within(
+      (await screen.findByRole("heading", { name: "检查破损" })).closest("article")!,
+    );
     expect(card.getByText("发现缺陷")).toBeTruthy();
     expect(card.getByText("纯 YOLO 检测规则确认")).toBeTruthy();
     expect(card.getByText("原始检测器分数 0.81")).toBeTruthy();
@@ -427,7 +442,9 @@ describe("image inspection modes", () => {
 
     render(<App pollIntervalMs={60_000} />);
 
-    const card = within((await screen.findByText("检查任务")).closest("article")!);
+    const card = within(
+      (await screen.findByRole("heading", { name: "检查破损" })).closest("article")!,
+    );
     expect(card.getByText("服务器报告任务处理失败")).toBeTruthy();
     expect(card.getByText("无法确定")).toBeTruthy();
     expect(card.queryByText("未检出五类缺陷（未复检）")).toBeNull();

@@ -54,7 +54,7 @@ test("lost admission response reuses the upload and request, then reload restore
   expect(session.tasks[0].snapshot.runtime_status).toBe("waiting_review");
   await page.reload();
   await expect(page.locator(".task-card")).toHaveCount(1);
-  await expect(page.locator(`[title="${taskId}"]`)).toBeVisible();
+  await expect(page.locator(".task-card").locator(`[title="${taskId}"]`)).toBeVisible();
   await expect(page.getByRole("button", { name: "开始人工复核", exact: true })).toBeVisible();
   expect(errors).toEqual([]);
   await page.screenshot({ path: path.join(screenshots, "07-retry-restored.png"), fullPage: true });

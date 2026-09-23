@@ -1,6 +1,8 @@
 # Frontend conventions
 
 - Current package: frontend/, React + TypeScript + Vite. Keep UI state local until a concrete shared-state need appears; no generic chat framework.
+- Use Ant Design with the shared Chinese locale/theme for the inspection workbench. The sidebar searches/filters saved tasks, the center shows the focused inspection, and the assistant can be collapsed without clearing its draft. Visible-task navigation is independent from the assistant's explicit task/reference/frame selection; accepting a turn must not reset that navigation.
+- Manual intake opens in a modal. Closing it preserves the File, instruction and retry identity; successful submission clears the form. Use explicit text-area labels that remain stable after a modal reopens with a draft. At narrow widths, closed navigation must be hidden from keyboard and accessibility navigation, with Escape and focus return supported.
 - Backend-owned contracts are projected in src/types.ts; src/api.ts owns the network boundary. Components do not embed server URLs/credentials or create runtime conclusions.
 - Use same-origin /api via the local Vite proxy. Development binds 127.0.0.1; no production authentication or public deployment is implied.
 - Session ID may be saved in browser localStorage; authoritative task/evidence data stays on the server. Reload restores a session, not a new inspection.

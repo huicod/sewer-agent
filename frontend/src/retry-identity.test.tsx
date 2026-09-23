@@ -100,6 +100,8 @@ describe("task submission retry identity", () => {
 
     render(<App pollIntervalMs={60_000} />);
     await screen.findByText(sessionId);
+    await user.click(screen.getByRole("button", { name: "新建检查" }));
+    await screen.findByRole("heading", { name: "提交现场资料" });
     await user.upload(screen.getByLabelText("现场文件"), firstFile);
     await user.type(screen.getByLabelText("检查要求"), "检查破损");
     await user.click(screen.getByRole("button", { name: "提交检查" }));

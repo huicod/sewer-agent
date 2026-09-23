@@ -1,3 +1,8 @@
+import { Button, ConfigProvider, Input, Layout, Modal, Spin } from "antd";
+import zhCN from "antd/locale/zh_CN";
+import { FileSearchOutlined, InfoCircleOutlined, MenuOutlined, MessageOutlined, UploadOutlined } from "@ant-design/icons";
+import { WorkspaceSidebar } from "./WorkspaceSidebar";
+import { TaskCard } from "./TaskCard";
 import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
 
 import {
@@ -7,7 +12,6 @@ import {
   createTask,
   createTurn,
   getSession,
-  getAsset,
   getTask,
   getTurn,
   listTurns,
@@ -24,56 +28,18 @@ import type {
   TurnSubmission,
   VideoEvidenceFrame,
 } from "./types";
-import { ReviewPanel } from "./ReviewPanel";
-import { VideoTimeline } from "./VideoTimeline";
-import { EnhancementPanel } from "./EnhancementPanel";
-import { GeometryPanel } from "./GeometryPanel";
-import { ImageEvidencePanel } from "./ImageEvidencePanel";
 import { ComparisonPanel } from "./ComparisonPanel";
 
 const SESSION_KEY = "pipe-inspector.session-id";
 const ACTIVE_STATUSES = new Set<RuntimeStatus>(["queued", "running", "waiting_review"]);
 const ACTIVE_TURN_STATUSES = new Set(["queued", "running"]);
 
-const RESULT_TEXT = { pending: "待定", normal: "正常", defects_found: "发现缺陷", inconclusive: "无法确定" } as const;
-const REVIEW_TEXT = { tentative: "暂定", confirmed: "已确认", rejected: "已排除", needs_review: "需复核" } as const;
-const CONFIRMATION_TEXT = {
-  rules: "规则确认",
-  detector_only_rules: "纯 YOLO 检测规则确认",
-  human: "人工确认",
-} as const;
-
-const STATUS_TEXT: Record<RuntimeStatus, string> = {
-  queued: "等待处理",
-  running: "处理中",
-  waiting_review: "等待人工复核",
-  completed: "已完成",
-  partial: "部分完成",
-  failed: "处理失败",
-  cancelled: "已取消",
-};
 const TURN_STAGE_TEXT = {
   queued: "等待处理",
   planning: "正在规划",
   executing: "正在执行",
   finished: "已结束",
 } as const;
-const TASK_STAGE_TEXT: Record<string, string> = {
-  tools: "图片增强处理",
-};
-const ACTIVE_TOOL_TEXT: Record<string, string> = {
-  video_scene: "视频场景筛选",
-  enhancement_selection: "按需选择图片增强",
-  low_light: "低照度恢复",
-  dehaze: "去雾增强",
-  deblur: "去模糊增强",
-  super_resolution: "超分辨率增强",
-  enhancement_review: "增强辅助复核",
-  segment: "提示式掩膜",
-  relative_depth: "单图相对深度",
-  relative_measure: "掩膜与相对深度量化",
-};
-const GEOMETRY_TOOLS = new Set(["segment", "relative_depth", "relative_measure"]);
 const DEFAULT_INSPECTION_MODE: InspectionMode = "yolo_vlm";
 const INSPECTION_MODE_TEXT: Record<InspectionMode, string> = {
   yolo_vlm: "YOLO＋VLM 复检",
@@ -156,22 +122,12 @@ function evidenceUrl(asset: AssetRef): string {
   return `/api/assets/${encodeURIComponent(asset.asset_id)}/versions/${asset.version}/content`;
 }
 
-function reportUrl(taskId: string, format: "json" | "html"): string {
-  return `/api/tasks/${encodeURIComponent(taskId)}/report?format=${format}`;
-}
-
 function linkedTaskStatus(task: TaskRecord | undefined): string {
   if (!task || isActiveTask(task)) return "对话已回复；关联检查仍在继续";
   if (task.snapshot.runtime_status === "completed") return "关联检查已完成";
   if (task.snapshot.runtime_status === "partial") return "关联检查仅部分完成";
   if (task.snapshot.runtime_status === "failed") return "关联检查已失败";
   return "关联检查已取消";
-}
-
-function taskStageText(task: TaskRecord): string {
-  if (task.snapshot.stage === "tools" && task.snapshot.active_tool &&
-      GEOMETRY_TOOLS.has(task.snapshot.active_tool)) return "几何工具处理";
-  return TASK_STAGE_TEXT[task.snapshot.stage] ?? task.snapshot.stage;
 }
 
 type InspectionModeFieldProps = {
@@ -204,273 +160,6 @@ function InspectionModeField({
   );
 }
 
-type TaskCardProps = {
-  task: TaskRecord;
-  starting: boolean;
-  cancelling: boolean;
-  onStart: (taskId: string) => void;
-  onCancel: (taskId: string) => void;
-  onReviewed: (task: TaskRecord, snapshot: TaskRecord["snapshot"]) => void;
-  onSelectFrame: (taskId: string, frame: VideoEvidenceFrame) => void;
-  frameSelectionDisabled: boolean;
-};
-
-function TaskCard({
-  task,
-  starting,
-  cancelling,
-  onStart,
-  onCancel,
-  onReviewed,
-  onSelectFrame,
-  frameSelectionDisabled,
-}: TaskCardProps) {
-  const [reviewOpen, setReviewOpen] = useState(false);
-  const [mediaKind, setMediaKind] = useState<string | null>(null);
-  const [mediaLoading, setMediaLoading] = useState(false);
-  const [mediaError, setMediaError] = useState<string | null>(null);
-  const progress = Math.round(
-    Math.min(1, Math.max(0, task.snapshot.overall_progress)) * 100,
-  );
-  const queued = task.snapshot.runtime_status === "queued";
-  const waitingReview = task.snapshot.runtime_status === "waiting_review";
-  const hasVideoLocator = task.snapshot.findings.some((finding) =>
-    finding.evidence.some((evidence) => evidence.frame_index !== null),
-  );
-  const inspectionMode = inspectionModeOf(task);
-  const inspectionResult = inspectionMode === "yolo_only" &&
-      task.snapshot.runtime_status === "completed" &&
-      task.snapshot.inspection_result === "inconclusive" &&
-      task.snapshot.processed_frames > 0 &&
-      task.snapshot.coverage.sufficient_coverage &&
-      task.snapshot.findings.length === 0
-    ? "未检出五类缺陷（未复检）"
-    : RESULT_TEXT[task.snapshot.inspection_result];
-
-  async function discoverMedia() {
-    if (mediaLoading || mediaKind) return;
-    setMediaLoading(true);
-    setMediaError(null);
-    try {
-      const asset = await getAsset(task.input_asset);
-      setMediaKind(asset.kind);
-    } catch (nextError) {
-      setMediaError(formatError(nextError));
-    } finally {
-      setMediaLoading(false);
-    }
-  }
-
-  return (
-    <article className="task-card">
-      <div className="task-card__heading">
-        <div>
-          <p className="eyebrow">
-            {task.frame_source ? "视频证据帧工具" : task.parent_task_id ? "关联追加复检" : "检查任务"}
-          </p>
-          <h3>{task.instruction}</h3>
-        </div>
-        <span className={`status status--${task.snapshot.runtime_status}`}>
-          {STATUS_TEXT[task.snapshot.runtime_status]}
-        </span>
-      </div>
-      {task.parent_task_id ? (
-        <p className="task-hint">
-          {task.frame_source
-            ? "仅分析已存视频证据帧，不重新扫描视频，也不改写整片结论。"
-            : "复用原图片和检测证据，原结果保持不变。"}{" "}
-          <a href={reportUrl(task.parent_task_id, "html")} target="_blank" rel="noreferrer">原任务报告</a>
-        </p>
-      ) : null}
-      {inspectionMode === "yolo_only" ? (
-        <p className="truth-note">纯 YOLO 模式未执行 VLM 复检；此处仅显示检测器保存结果。</p>
-      ) : null}
-      {task.frame_source ? (
-        <section aria-label="视频证据帧来源">
-          <p>来源：帧 {task.frame_source.frame_index} · {task.frame_source.timestamp_seconds} 秒；仅分析这一帧，不代表整段视频结论。</p>
-          <p className="evidence-links">
-            <a href={evidenceUrl(task.frame_source.video_asset)} target="_blank" rel="noreferrer">打开来源视频</a>
-            <a href={evidenceUrl(task.input_asset)} target="_blank" rel="noreferrer">打开证据帧</a>
-          </p>
-        </section>
-      ) : null}
-      {queued ? (
-        <>
-          <p className="truth-note">{task.parent_task_id ? "复检已入队，等待执行；重复启动沿用同一任务" : "已上传并入队，等待启动检查"}</p>
-          <button
-            type="button"
-            disabled={starting}
-            onClick={() => onStart(task.snapshot.task_id)}
-          >
-            {starting ? "正在启动…" : task.parent_task_id ? "启动关联复检" : "启动检查"}
-          </button>
-        </>
-      ) : null}
-      {task.snapshot.runtime_status === "running" ? (
-        <p className="truth-note">{task.parent_task_id ? "关联复检正在执行（不重新检测）" : "检查正在执行"}</p>
-      ) : null}
-      {waitingReview ? (
-        <button type="button" onClick={() => setReviewOpen((open) => !open)}>
-          {reviewOpen ? "收起人工复核" : "开始人工复核"}
-        </button>
-      ) : null}
-      {task.snapshot.can_cancel === true && !isTerminalTask(task) ? (
-        <button
-          type="button"
-          className="secondary-button"
-          disabled={cancelling}
-          onClick={() => onCancel(task.snapshot.task_id)}
-        >
-          {cancelling ? "正在取消…" : "取消检查"}
-        </button>
-      ) : null}
-      {task.snapshot.runtime_status === "partial" ? (
-        <p className="truth-note">检查部分完成；新任务可查看审核记录，旧任务可能仅保留历史结果。</p>
-      ) : null}
-      {task.snapshot.runtime_status === "failed" ? (
-        <p className="task-error">服务器报告任务处理失败</p>
-      ) : null}
-      {task.snapshot.waiting_reason ? (
-        <p className="waiting-reason">{task.snapshot.waiting_reason}</p>
-      ) : null}
-      <div className="progress-row">
-        <div
-          className="progress-track"
-          role="progressbar"
-          aria-label="任务总进度"
-          aria-valuemin={0}
-          aria-valuemax={100}
-          aria-valuenow={progress}
-        >
-          <span style={{ width: `${progress}%` }} />
-        </div>
-        <strong>{progress}%</strong>
-      </div>
-      <dl className="task-meta">
-        <div>
-          <dt>阶段</dt>
-          <dd>{taskStageText(task)}</dd>
-        </div>
-        <div>
-          <dt>检查结论</dt>
-          <dd>{inspectionResult}</dd>
-        </div>
-        <div>
-          <dt>检查模式</dt>
-          <dd>{INSPECTION_MODE_TEXT[inspectionMode]}</dd>
-        </div>
-        <div>
-          <dt>活动工具</dt>
-          <dd>{task.snapshot.active_tool ? ACTIVE_TOOL_TEXT[task.snapshot.active_tool] ?? task.snapshot.active_tool : "—"}</dd>
-        </div>
-        <div>
-          <dt>重试次数</dt>
-          <dd>{task.snapshot.retry_count}</dd>
-        </div>
-        <div>
-          <dt>已处理帧</dt>
-          <dd>{task.snapshot.processed_frames}</dd>
-        </div>
-        <div>
-          <dt>已处理块</dt>
-          <dd>{task.snapshot.processed_chunks}</dd>
-        </div>
-        <div>
-          <dt>任务编号</dt>
-          <dd title={task.snapshot.task_id}>{task.snapshot.task_id.slice(0, 8)}</dd>
-        </div>
-      </dl>
-      {task.snapshot.findings.length > 0 ? (
-        <div className="findings">
-          <h4>发现项</h4>
-          <ul>
-            {task.snapshot.findings.map((finding) => (
-              <li key={finding.finding_id}>
-                <strong>
-                  {finding.canonical_label ?? "未分类"}
-                  {finding.open_label ? ` · ${finding.open_label}` : ""}
-                </strong>
-                <span>{REVIEW_TEXT[finding.review_status]}</span>
-                {finding.score === null ? null : <span>原始检测器分数 {finding.score}</span>}
-                {finding.confirmed_by ? <span>{CONFIRMATION_TEXT[finding.confirmed_by]}</span> : null}
-                <code title="对话可引用的发现 ID">{finding.finding_id}</code>
-                <span className="evidence-links">
-                  {finding.evidence.map((evidence, index) => (
-                    <a
-                      key={`${evidence.asset.asset_id}-${evidence.asset.version}-${index}`}
-                      href={evidenceUrl(evidence.asset)}
-                      target="_blank"
-                      rel="noreferrer"
-                    >
-                      原始证据 {index + 1}
-                      {evidence.timestamp_seconds === null ? "" : ` · ${evidence.timestamp_seconds} 秒`}
-                    </a>
-                  ))}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      ) : null}
-      {!waitingReview && isTerminalTask(task) ? (
-        <button type="button" className="secondary-button" onClick={() => setReviewOpen((open) => !open)}>
-          {reviewOpen ? "收起审核记录" : "查看审核记录"}
-        </button>
-      ) : null}
-      {reviewOpen ? (
-        <ReviewPanel
-          key={task.snapshot.task_id}
-          taskId={task.snapshot.task_id}
-          snapshotRevision={task.snapshot.updated_at}
-          runtimeStatus={task.snapshot.runtime_status}
-          sourceAsset={task.input_asset}
-          onAccepted={(snapshot) => onReviewed(task, snapshot)}
-        />
-      ) : null}
-      <EnhancementPanel
-        taskId={task.snapshot.task_id}
-        snapshotRevision={task.snapshot.updated_at}
-        runtimeStatus={task.snapshot.runtime_status}
-      />
-      <GeometryPanel
-        taskId={task.snapshot.task_id}
-        snapshotRevision={task.snapshot.updated_at}
-        runtimeStatus={task.snapshot.runtime_status}
-        findingIds={task.snapshot.findings.map((finding) => finding.finding_id)}
-      />
-      {task.frame_source || (mediaKind !== null && mediaKind !== "video") ? (
-        <ImageEvidencePanel
-          taskId={task.snapshot.task_id}
-          snapshotRevision={task.snapshot.updated_at}
-        />
-      ) : null}
-      {!task.frame_source && (hasVideoLocator || mediaKind === "video") ? (
-        <VideoTimeline
-          taskId={task.snapshot.task_id}
-          snapshotRevision={task.snapshot.updated_at}
-          onSelectFrame={(frame) => onSelectFrame(task.snapshot.task_id, frame)}
-          frameSelectionDisabled={frameSelectionDisabled}
-        />
-      ) : null}
-      {!task.frame_source && !hasVideoLocator && !mediaKind ? (
-        <button type="button" className="secondary-button" disabled={mediaLoading} onClick={() => void discoverMedia()}>
-          {mediaLoading ? "正在识别媒体…" : "查看媒体证据"}
-        </button>
-      ) : null}
-      {!task.frame_source && mediaKind && mediaKind !== "video" ? (
-        <a className="source-asset-link" href={evidenceUrl(task.input_asset)} target="_blank" rel="noreferrer">打开源图片</a>
-      ) : null}
-      {mediaError ? <p className="task-error" role="alert">{mediaError}</p> : null}
-      {isTerminalTask(task) ? (
-        <div className="report-links" aria-label="检查报告">
-          <a href={reportUrl(task.snapshot.task_id, "json")} target="_blank" rel="noreferrer">JSON 报告</a>
-          <a href={reportUrl(task.snapshot.task_id, "html")} target="_blank" rel="noreferrer">HTML 报告</a>
-        </div>
-      ) : null}
-    </article>
-  );
-}
-
 type TurnCardProps = {
   turn: TurnRecord;
   sessionId: string;
@@ -493,9 +182,9 @@ function TurnCard({ turn, sessionId, linkedTask, resending, onResend }: TurnCard
           <p className="task-error">处理失败{turn.error_code ? `：${turn.error_code}` : ""}</p>
         ) : null}
         {turn.status === "queued" ? (
-          <button type="button" className="secondary-button" disabled={resending} onClick={() => onResend(turn)}>
+          <Button htmlType="button" className="secondary-button" disabled={resending} onClick={() => onResend(turn)}>
             {resending ? "正在确认…" : "确认启动"}
-          </button>
+          </Button>
         ) : null}
         {turn.status === "completed" && turn.linked_task_id ? (
           <p className="linked-status">{linkedTaskStatus(linkedTask)}</p>
@@ -508,7 +197,11 @@ function TurnCard({ turn, sessionId, linkedTask, resending, onResend }: TurnCard
   );
 }
 
-export default function App({ pollIntervalMs = 2_000 }: AppProps) {
+function Workbench({ pollIntervalMs = 2_000 }: AppProps) {
+  const [focusedTaskId, setFocusedTaskId] = useState("");
+  const [intakeOpen, setIntakeOpen] = useState(false);
+  const [assistantOpen, setAssistantOpen] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [session, setSession] = useState<SessionRecord | null>(null);
   const [tasks, setTasks] = useState<TaskRecord[]>([]);
   const [turns, setTurns] = useState<TurnRecord[]>([]);
@@ -535,6 +228,27 @@ export default function App({ pollIntervalMs = 2_000 }: AppProps) {
   const conversationFileInput = useRef<HTMLInputElement>(null);
   const pendingSubmission = useRef<PendingSubmission | null>(null);
   const pendingTurn = useRef<PendingTurn | null>(null);
+  const navigationToggle = useRef<HTMLButtonElement>(null);
+
+  function closeNavigation() {
+    setSidebarOpen(false);
+    navigationToggle.current?.focus();
+  }
+
+  useEffect(() => {
+    if (!sidebarOpen) return;
+    const focusFrame = requestAnimationFrame(() => {
+      document.querySelector<HTMLButtonElement>(".workspace-sidebar__new")?.focus({ preventScroll: true });
+    });
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") closeNavigation();
+    };
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      cancelAnimationFrame(focusFrame);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [sidebarOpen]);
 
   async function startNewSession() {
     setLoading(true);
@@ -544,6 +258,7 @@ export default function App({ pollIntervalMs = 2_000 }: AppProps) {
       localStorage.setItem(SESSION_KEY, next.session_id);
       setSession(next);
       setTasks([]);
+      setFocusedTaskId("");
       setTurns([]);
       setDirectFile(null);
       setInspectionMode(DEFAULT_INSPECTION_MODE);
@@ -764,6 +479,8 @@ export default function App({ pollIntervalMs = 2_000 }: AppProps) {
       });
       pendingSubmission.current = null;
       setTasks((current) => upsertTask(current, created));
+      setFocusedTaskId(created.snapshot.task_id);
+      setIntakeOpen(false);
       setInstruction("");
       setDirectFile(null);
       setInspectionMode(DEFAULT_INSPECTION_MODE);
@@ -877,6 +594,7 @@ export default function App({ pollIntervalMs = 2_000 }: AppProps) {
   );
 
   function selectVideoFrame(parentTaskId: string, frame: VideoEvidenceFrame) {
+    setAssistantOpen(true);
     setSelectedVideoFrame({ parentTaskId, frame });
     setSelectedTaskId(parentTaskId);
     setSelectedReferenceTaskId("");
@@ -886,46 +604,86 @@ export default function App({ pollIntervalMs = 2_000 }: AppProps) {
     pendingTurn.current = null;
   }
 
+  const focusedTask = tasks.find((task) => task.snapshot.task_id === focusedTaskId) ?? tasks[0];
+
   return (
-    <main className="app-shell">
-      <header className="masthead">
-        <div>
-          <p className="eyebrow">PIPE INSPECTOR · 本地工作台</p>
-          <h1>管道影像检查</h1>
-          <p className="subtitle">提交现场证据与检查要求，并查看服务器返回的任务状态。</p>
-        </div>
-        <div className="session-panel" aria-label="当前会话">
-          <span>当前会话</span>
-          <strong>{session?.session_id ?? "正在连接…"}</strong>
-        </div>
-      </header>
-
-      {error ? (
-        <div className="error-banner" role="alert">
-          <span>{error}</span>
-          {!session && !loading ? (
-            <button type="button" onClick={() => void startNewSession()}>
-              新建会话
-            </button>
-          ) : null}
-        </div>
-      ) : null}
-
+    <Layout className="workbench">
+      {sidebarOpen ? <button className="sidebar-backdrop" aria-label="关闭任务导航" onClick={closeNavigation} /> : null}
+      <Layout.Sider id="task-navigation" width={248} theme="light" className={`workspace-sider${sidebarOpen ? " workspace-sider--open" : ""}`}>
+        <WorkspaceSidebar
+          tasks={tasks}
+          activeTaskId={focusedTask?.snapshot.task_id ?? ""}
+          loading={loading}
+          onSelectTask={(id) => { setFocusedTaskId(id); if (sidebarOpen) closeNavigation(); }}
+          onNewInspection={() => { setIntakeOpen(true); setSidebarOpen(false); }}
+        />
+      </Layout.Sider>
+      <Layout className="workspace-body">
+        <Layout.Header className="workspace-header">
+          <div className="workspace-header__title">
+            <Button ref={navigationToggle} className="mobile-menu" type="text" icon={<MenuOutlined aria-hidden="true" />} aria-label="打开任务导航" aria-expanded={sidebarOpen} aria-controls="task-navigation" onClick={() => setSidebarOpen(true)} />
+            <h1>管道影像检查</h1><span className="workspace-header__divider" /><span className="workspace-header__caption">检查工作台</span>
+          </div>
+          <div className="workspace-header__actions">
+            <span className="workspace-session" aria-label="当前会话"><span>当前会话</span><code>{session?.session_id ?? "正在连接…"}</code></span>
+            <Button icon={<MessageOutlined aria-hidden="true" />} aria-label={assistantOpen ? "隐藏检查助手" : "显示检查助手"} onClick={() => setAssistantOpen((open) => !open)}>{assistantOpen ? "收起助手" : "检查助手"}</Button>
+          </div>
+        </Layout.Header>
+        {error && !intakeOpen ? (
+          <div className="workspace-error" role="alert">
+            <InfoCircleOutlined aria-hidden="true" /><span>{error}</span>
+            {!session && !loading ? <Button onClick={() => void startNewSession()}>新建会话</Button> : null}
+          </div>
+        ) : null}
+        <Layout.Content className={`workspace-content${assistantOpen ? "" : " workspace-content--wide"}`}>
+          <div className="inspection-workspace">
+            <div className="workspace-breadcrumb"><FileSearchOutlined aria-hidden="true" /><span>检查任务</span><span>/</span><span>{focusedTask ? focusedTask.snapshot.task_id.slice(0, 8) : "工作台"}</span></div>
+            <section className="inspection-detail" aria-label="检查详情">
+              {loading ? <div className="workspace-loading"><Spin /><p>正在恢复会话…</p></div> : focusedTask ? (
+                <TaskCard
+                  key={focusedTask.snapshot.task_id}
+                  task={focusedTask}
+                  starting={startingTaskIds.has(focusedTask.snapshot.task_id)}
+                  cancelling={cancellingTaskIds.has(focusedTask.snapshot.task_id)}
+                  onStart={(taskId) => void startInspection(taskId)}
+                  onCancel={(taskId) => void cancelInspection(taskId)}
+                  onReviewed={(reviewedTask, snapshot) => {
+                    setTasks((current) => upsertTask(current, { ...reviewedTask, snapshot }));
+                  }}
+                  onSelectFrame={selectVideoFrame}
+                  frameSelectionDisabled={turnSubmitting || hasActiveTurn}
+                />
+              ) : (
+                <div className="workspace-empty">
+                  <div className="workspace-empty__icon"><FileSearchOutlined aria-hidden="true" /></div>
+                  <h2>从一份现场影像开始</h2>
+                  <p>上传管道图片或视频，查看检测证据、复核缺陷并导出报告。</p>
+                  <Button type="primary" size="large" icon={<UploadOutlined aria-hidden="true" />} onClick={() => setIntakeOpen(true)}>上传现场影像</Button>
+                  <span className="workspace-empty__formats">支持 JPG、PNG 及常用视频格式</span>
+                  <div className="workspace-empty__steps">
+                    <span><b>1</b>上传影像</span><span><b>2</b>检查与复核</span><span><b>3</b>导出报告</span>
+                  </div>
+                </div>
+              )}
+            </section>
+            <footer className="workspace-footer">{tasks.length} 项检查任务<span>结果以原始证据与复核记录为准</span></footer>
+          </div>
+          <aside className="assistant-workspace" hidden={!assistantOpen}>
       <section className="conversation-panel" aria-labelledby="conversation-title">
         <div className="tasks__heading">
           <div>
-            <p className="eyebrow">持久对话</p>
+            <MessageOutlined aria-hidden="true" />
             <h2 id="conversation-title">检查助手</h2>
           </div>
           <span>{turns.length} 条</span>
         </div>
-        <p className="conversation-note">
-          可询问已存证据、请求报告，或上传图片/视频启动检查。原图片任务可显式请求一次关联补证或图片增强；
-          也可对新图或关联原图说“必要时按需增强后再检查”，仅在本轮授权助手选择至多一种增强。
-          附件与已有任务二选一，选择一项会清除另一项。
-        </p>
+        <p className="conversation-note">上传影像发起检查，或关联任务继续追问。</p>
+        <details className="assistant-help">
+          <summary>可用操作与说明</summary>
+          <p>可以询问已存证据、请求报告，或对新图或关联原图提出“必要时按需增强后再检查”。关联原图片可请求一次追加复检或增强。附件与已有任务二选一；对比结果时需选择两个已存任务。</p>
+        </details>
         <div className="transcript" aria-live="polite">
-          {!loading && turns.length === 0 ? <p className="empty-state">尚无对话消息。</p> : null}
+          {!loading && turns.length === 0 ? <div className="assistant-empty"><MessageOutlined aria-hidden="true" /><h3>围绕影像，开始检查</h3><p>上传图片或视频，说明检查要求。你也可以关联左侧任务，询问结果或生成报告。</p></div> : null}
           {turns.map((turn) => (
             <TurnCard
               key={turn.request_id}
@@ -944,8 +702,8 @@ export default function App({ pollIntervalMs = 2_000 }: AppProps) {
               <p>已选视频证据帧：帧 {selectedVideoFrame.frame.frame_index} · {selectedVideoFrame.frame.timestamp_seconds} 秒</p>
               <p className="evidence-links">
                 <a href={evidenceUrl(selectedVideoFrame.frame.asset)} target="_blank" rel="noreferrer">打开已选帧</a>
-                <button
-                  type="button"
+                <Button
+                  htmlType="button"
                   className="secondary-button"
                   disabled={turnSubmitting || hasActiveTurn}
                   onClick={() => {
@@ -953,7 +711,7 @@ export default function App({ pollIntervalMs = 2_000 }: AppProps) {
                     setSelectedTaskId("");
                     pendingTurn.current = null;
                   }}
-                >取消选帧</button>
+                >取消选帧</Button>
               </p>
               <p className="truth-note">
                 请在消息中明确要求增强，或提供原图像素 ROI 进行分割/相对测量；整帧相对深度可直接提出。不会自动执行工具。
@@ -961,8 +719,9 @@ export default function App({ pollIntervalMs = 2_000 }: AppProps) {
             </section>
           ) : null}
           <label className="field">
-            <span>对话内容</span>
-            <textarea
+            <span id="conversation-input-label">对话内容</span>
+            <Input.TextArea
+              aria-labelledby="conversation-input-label"
               value={conversationText}
               onChange={(event) => setConversationText(event.target.value)}
               maxLength={4_000}
@@ -1059,20 +818,26 @@ export default function App({ pollIntervalMs = 2_000 }: AppProps) {
           </div>
           <div className="form-footer">
             <small>{hasActiveTurn ? "当前消息完成后可继续对话" : `${conversationText.length} / 4000`}</small>
-            <button type="submit" disabled={!session || turnSubmitting || hasActiveTurn}>
+            <Button type="primary" htmlType="submit" disabled={!session || turnSubmitting || hasActiveTurn}>
               {turnSubmitting ? "正在发送…" : pendingMatchesComposer ? "重新发送" : "发送消息"}
-            </button>
+            </Button>
           </div>
         </form>
       </section>
 
+          </aside>
+        </Layout.Content>
+      </Layout>
+      <Modal open={intakeOpen} title="新建检查" footer={null} onCancel={() => { if (!submitting) setIntakeOpen(false); }}
+        afterOpenChange={(open) => { if (!open && window.matchMedia("(max-width: 1050px)").matches) navigationToggle.current?.focus(); }}
+        closable={!submitting} mask={{ closable: !submitting }} keyboard={!submitting} width={560} className="inspection-modal">
       <section className="intake-panel" aria-labelledby="intake-title">
         <div className="section-copy">
-          <p className="eyebrow">新建检查</p>
           <h2 id="intake-title">提交现场资料</h2>
           <p>支持 JPEG、PNG、MP4、MOV、AVI 与 MKV。文件是否可用以服务器校验为准。</p>
-          <p>此入口只保存资料，需手动启动基础检查；按文本规划工具请使用上方检查助手。</p>
+          <p>提交后可在检查详情中启动检查。需要对话规划时，请使用检查助手。</p>
         </div>
+        {error ? <div className="conversation-error" role="alert">{error}</div> : null}
         <form ref={form} onSubmit={(event) => void submit(event)}>
           <label className="field">
             <span>现场文件</span>
@@ -1097,8 +862,9 @@ export default function App({ pollIntervalMs = 2_000 }: AppProps) {
             onChange={setInspectionMode}
           />
           <label className="field">
-            <span>检查要求</span>
-            <textarea
+            <span id="inspection-instruction-label">检查要求</span>
+            <Input.TextArea
+              aria-labelledby="inspection-instruction-label"
               value={instruction}
               onChange={(event) => setInstruction(event.target.value)}
               maxLength={4_000}
@@ -1109,43 +875,26 @@ export default function App({ pollIntervalMs = 2_000 }: AppProps) {
           </label>
           <div className="form-footer">
             <small>{instruction.length} / 4000</small>
-            <button type="submit" disabled={!session || submitting}>
+            <Button type="primary" htmlType="submit" disabled={!session || submitting}>
               {submitting ? "正在提交…" : "提交检查"}
-            </button>
+            </Button>
           </div>
         </form>
       </section>
 
-      <section className="tasks" aria-labelledby="tasks-title">
-        <div className="tasks__heading">
-          <div>
-            <p className="eyebrow">服务器状态</p>
-            <h2 id="tasks-title">任务记录</h2>
-          </div>
-          <span>{tasks.length} 项</span>
-        </div>
-        {loading ? <p className="empty-state">正在恢复会话…</p> : null}
-        {!loading && tasks.length === 0 ? (
-          <p className="empty-state">尚未提交检查任务。</p>
-        ) : null}
-        <div className="task-grid">
-          {tasks.map((task) => (
-            <TaskCard
-              key={task.snapshot.task_id}
-              task={task}
-              starting={startingTaskIds.has(task.snapshot.task_id)}
-              cancelling={cancellingTaskIds.has(task.snapshot.task_id)}
-              onStart={(taskId) => void startInspection(taskId)}
-              onCancel={(taskId) => void cancelInspection(taskId)}
-              onReviewed={(reviewedTask, snapshot) => {
-                setTasks((current) => upsertTask(current, { ...reviewedTask, snapshot }));
-              }}
-              onSelectFrame={selectVideoFrame}
-              frameSelectionDisabled={turnSubmitting || hasActiveTurn}
-            />
-          ))}
-        </div>
-      </section>
-    </main>
+      </Modal>
+    </Layout>
+  );
+}
+
+export default function App(props: AppProps) {
+  return (
+    <ConfigProvider locale={zhCN} button={{ autoInsertSpace: false }} theme={{
+      token: { colorPrimary: "#1677ff", colorText: "#172b4d", colorTextSecondary: "#64748b",
+        colorBgLayout: "#f5f6f8", borderRadius: 6, fontSize: 14,
+        fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans SC", "Microsoft YaHei", sans-serif' },
+    }}>
+      <Workbench {...props} />
+    </ConfigProvider>
   );
 }

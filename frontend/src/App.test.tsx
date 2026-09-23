@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -115,12 +115,26 @@ describe("conversation-ready intake shell", () => {
 
     render(<App pollIntervalMs={60_000} />);
     await screen.findByText(sessionId);
+    await user.click(screen.getByRole("button", { name: "新建检查" }));
+    await screen.findByRole("heading", { name: "提交现场资料" });
 
+    const evidenceFile = new File(
+      [new Uint8Array([1, 2, 3])],
+      "现场图.jpg",
+      { type: "image/jpeg" },
+    );
     await user.upload(
       screen.getByLabelText("现场文件"),
-      new File([new Uint8Array([1, 2, 3])], "现场图.jpg", { type: "image/jpeg" }),
+      evidenceFile,
     );
     await user.type(screen.getByLabelText("检查要求"), "检查破损");
+
+    await user.click(screen.getByRole("button", { name: "关闭" }));
+    await user.click(screen.getByRole("button", { name: "新建检查" }));
+    await screen.findByRole("heading", { name: "提交现场资料" });
+    expect(screen.getByLabelText<HTMLInputElement>("现场文件").files?.[0]).toBe(evidenceFile);
+    expect(screen.getByLabelText<HTMLTextAreaElement>("检查要求").value).toBe("检查破损");
+
     await user.click(screen.getByRole("button", { name: "提交检查" }));
 
     expect(await screen.findByText("已上传并入队，等待启动检查")).toBeTruthy();
@@ -327,7 +341,8 @@ describe("conversation-ready intake shell", () => {
     ]);
 
     resolveCancel(jsonResponse(cancelled));
-    expect(await screen.findByText("已取消")).toBeTruthy();
+    const cancelledCard = screen.getByRole("heading", { name: "检查破损" }).closest("article")!;
+    expect(await within(cancelledCard).findByText("已取消")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "取消检查" })).toBeNull();
   });
 
@@ -367,7 +382,7 @@ describe("conversation-ready intake shell", () => {
 
     render(<App pollIntervalMs={60_000} />);
 
-    expect(await screen.findByText("检查破损")).toBeTruthy();
+    expect(await screen.findByRole("heading", { name: "检查破损" })).toBeTruthy();
     expect(fetchMock.mock.calls[0]?.[0]).toBe(`/api/sessions/${sessionId}`);
     expect(fetchMock.mock.calls.some(([, init]) => init?.method === "POST")).toBe(false);
   });
@@ -393,6 +408,8 @@ describe("conversation-ready intake shell", () => {
     const user = userEvent.setup();
     render(<App pollIntervalMs={60_000} />);
     await screen.findByText(sessionId);
+    await user.click(screen.getByRole("button", { name: "新建检查" }));
+    await screen.findByRole("heading", { name: "提交现场资料" });
 
     await user.upload(screen.getByLabelText("现场文件"), new File(["bad"], "bad.jpg", { type: "image/jpeg" }));
     await user.type(screen.getByLabelText("检查要求"), "检查这个文件");
@@ -430,7 +447,7 @@ describe("conversation-ready intake shell", () => {
       .mockResolvedValueOnce(jsonResponse([]));
     vi.stubGlobal("fetch", terminalFetch);
     render(<App pollIntervalMs={10} />);
-    await screen.findByText("检查破损");
+    await screen.findByRole("heading", { name: "检查破损" });
     await new Promise((resolve) => setTimeout(resolve, 30));
     expect(terminalFetch).toHaveBeenCalledTimes(2);
   });

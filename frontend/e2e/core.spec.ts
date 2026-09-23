@@ -5,6 +5,41 @@ import path from "node:path";
 // Synthetic media + model adapters; HTTP, browser, storage and workflows are real.
 const output = process.env.SEWER_BROWSER_OUTPUT!;
 
+test("workbench layout, new inspection dialog and narrow-screen navigation", async ({ page }) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await mkdir(path.join(output, "screenshots"), { recursive: true });
+  await page.goto("/");
+  await expect(page.getByRole("heading", { name: "从一份现场影像开始" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "检查助手", exact: true })).toBeVisible();
+  await page.screenshot({ path: path.join(output, "screenshots/workbench-desktop.png"), fullPage: true });
+  await page.getByRole("button", { name: "新建检查", exact: true }).click();
+  await expect(page.getByRole("dialog")).toBeVisible();
+  await page.getByLabel("检查要求", { exact: true }).fill("待提交的检查草稿");
+  await page.screenshot({ path: path.join(output, "screenshots/workbench-new-inspection.png"), fullPage: true });
+  await page.getByRole("dialog").getByRole("button", { name: /关闭|Close/ }).click();
+  await expect(page.getByRole("dialog")).not.toBeVisible();
+  await page.getByRole("button", { name: "隐藏检查助手" }).click();
+  await expect(page.getByRole("heading", { name: "检查助手", exact: true })).not.toBeVisible();
+  await page.getByRole("button", { name: "显示检查助手" }).click();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(page.getByRole("button", { name: "打开任务导航" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "新建检查", exact: true })).not.toBeVisible();
+  await page.getByRole("button", { name: "打开任务导航" }).click();
+  await expect(page.getByRole("button", { name: "新建检查", exact: true })).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("button", { name: "打开任务导航" })).toBeFocused();
+  await page.getByRole("button", { name: "打开任务导航" }).click();
+  await page.getByRole("button", { name: "新建检查", exact: true }).click();
+  await expect(page.getByLabel("检查要求", { exact: true })).toHaveValue("待提交的检查草稿");
+  await page.getByRole("dialog").getByRole("button", { name: /关闭|Close/ }).click();
+  await expect(page.getByRole("dialog")).not.toBeVisible();
+  await expect(page.getByRole("button", { name: "打开任务导航" })).toBeFocused();
+  await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  await page.screenshot({ path: path.join(output, "screenshots/workbench-mobile.png"), fullPage: true });
+  expect(errors).toEqual([]);
+});
+
 async function inspect(page: Page, file: string, instruction: string): Promise<string> {
   await page.getByLabel("对话附件（可选）").setInputFiles(path.join(output, "service/fixtures", file));
   await page.getByLabel("对话内容", { exact: true }).fill(instruction);

@@ -102,8 +102,7 @@ describe("TaskCard review and evidence integration", () => {
     const user = userEvent.setup();
 
     render(<App pollIntervalMs={60_000} />);
-    await screen.findByText("已完成");
-    await user.click(screen.getByRole("button", { name: "查看审核记录" }));
+    await user.click(await screen.findByRole("button", { name: "查看审核记录" }));
 
     expect(await screen.findByText("该历史任务没有可用的结构化人工审核记录。")).toBeTruthy();
   });

@@ -1570,3 +1570,33 @@ sewer新P68.85/R65.17%，旧参考P83.01/R87.57%但可能见过新holdout，不�
 
 - 启动系统后做真实PG/Temporal持久化与页面人工验收；本轮未启动服务/GPU/API，PG当前无响应，新增PG用例尚未实跑。
 - 75%验收口径及人工校准仍待确认；不将图像级复算当模型或框级精度提升。
+
+
+## Session 50: Ant Design 巡检工作台与本地预览
+
+**Date**: 2026-09-23
+**Task**: Ant Design 巡检工作台与本地预览
+
+### Summary
+
+Completed authorized frontend redesign and restarted loopback service; evidence in archived task report and var/evaluations/ant-design-workbench; no backend contract changes or real provider calls.
+
+### Main Changes
+
+- jj uwpsyylp: Ant Design theme, task navigation/detail, collapsible assistant, draft-preserving intake modal and mobile keyboard navigation
+
+### Git Commits
+
+(No commits - planning session)
+
+### Testing
+
+- [OK] 145 frontend unit tests passed; 3 synthetic browser journeys passed across focused runs; TypeScript/Vite build and production HTTP/browser smoke passed
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- User visual acceptance at localhost:8000 through the existing port forward
