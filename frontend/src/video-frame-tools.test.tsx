@@ -2,7 +2,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import App from "./App";
+import App from "./test/InspectionWorkbench";
 import { VideoTimeline } from "./VideoTimeline";
 import type { TaskRecord, VideoDetail } from "./types";
 import { isTaskRecord } from "./validators";
@@ -214,7 +214,7 @@ describe("stored video evidence frame selection", () => {
     await user.click(await screen.findByText("选择已存证据帧（1）"));
     await user.click(await screen.findByRole("button", { name: "选择证据帧 30 用于工具" }));
     expect(screen.getByText("已选视频证据帧：帧 30 · 6 秒")).toBeTruthy();
-    const conversationPanel = screen.getByRole("heading", { name: "检查助手" }).closest("section")!;
+    const conversationPanel = screen.getByRole("heading", { name: "检查对话" }).closest("section")!;
     const mode = conversationPanel.querySelector<HTMLSelectElement>('select[aria-label="检查模式"]')!;
     expect(mode.disabled).toBe(true);
     expect(mode.value).toBe("yolo_vlm");

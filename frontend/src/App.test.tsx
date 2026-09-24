@@ -2,7 +2,7 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import App from "./App";
+import App from "./test/InspectionWorkbench";
 import { isTaskRecord } from "./validators";
 
 const sessionId = "33333333-3333-4333-8333-333333333333";
@@ -416,7 +416,7 @@ describe("conversation-ready intake shell", () => {
     await user.click(screen.getByRole("button", { name: "提交检查" }));
 
     expect((await screen.findByRole("alert")).textContent).toContain("文件格式不受支持");
-    expect(screen.getByText("0 条")).toBeTruthy();
+    expect(screen.getByText("0 条消息 · 0 项任务")).toBeTruthy();
     expect(screen.queryByText("服务器正在处理这条消息。")).toBeNull();
   });
 

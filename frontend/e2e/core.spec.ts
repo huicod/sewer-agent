@@ -5,55 +5,80 @@ import path from "node:path";
 // Synthetic media + model adapters; HTTP, browser, storage and workflows are real.
 const output = process.env.SEWER_BROWSER_OUTPUT!;
 
-test("workbench layout, new inspection dialog and narrow-screen navigation", async ({ page }) => {
+test.beforeEach(async ({ page }) => {
+  const response = await page.request.post("/api/sessions");
+  expect(response.status()).toBe(201);
+  const session = await response.json();
+  await page.addInitScript((sessionId: string) => {
+    localStorage.setItem("pipe-inspector.session-id", sessionId);
+  }, session.session_id);
+});
+
+async function openOptions(page: Page): Promise<void> {
+  const options = page.locator("details.composer-options");
+  if (!(await options.evaluate((node: HTMLDetailsElement) => node.open))) {
+    await options.getByText("附件与检查选项", { exact: false }).click();
+  }
+}
+
+async function openTaskDetails(page: Page): Promise<void> {
+  if (!(await page.getByLabel("任务与证据").isVisible())) {
+    await page.getByRole("button", { name: "展开任务详情" }).click();
+  }
+}
+
+test("conversation layout, draft isolation and narrow-screen navigation", async ({ page }) => {
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
   await mkdir(path.join(output, "screenshots"), { recursive: true });
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "从一份现场影像开始" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "检查助手", exact: true })).toBeVisible();
-  const separator = page.getByRole("separator", { name: "调整检查助手宽度" });
+  await expect(page.getByRole("heading", { name: "检查对话", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "检查助手", exact: true })).toHaveCount(0);
+  await expect(page.locator("details.composer-options")).not.toHaveAttribute("open", "");
+  await expect(page.getByLabel("任务与证据")).not.toBeVisible();
+  const originalWidth = await page.locator(".conversation-main-surface").evaluate((node) => node.clientWidth);
+  expect(originalWidth).toBeGreaterThan(800);
+  await openTaskDetails(page);
+  const separator = page.getByRole("separator", { name: "调整任务详情宽度" });
   const handle = (await separator.boundingBox())!;
-  const originalWidth = await page.locator(".assistant-workspace").evaluate((node) => node.clientWidth);
+  const originalDetailWidth = await page.getByLabel("任务与证据").evaluate((node) => node.clientWidth);
   await page.mouse.move(handle.x + handle.width / 2, handle.y + 80);
   await page.mouse.down();
   await page.mouse.move(handle.x - 140, handle.y + 80);
   await page.mouse.up();
-  await expect.poll(() => page.locator(".assistant-workspace").evaluate((node) => node.clientWidth))
-    .toBeGreaterThan(originalWidth + 130);
+  await expect.poll(() => page.getByLabel("任务与证据").evaluate((node) => node.clientWidth))
+    .toBeGreaterThan(originalDetailWidth + 130);
   const resizedWidth = await separator.getAttribute("aria-valuenow");
   await page.reload();
+  await openTaskDetails(page);
   await expect(separator).toHaveAttribute("aria-valuenow", resizedWidth!);
   await page.screenshot({ path: path.join(output, "screenshots/workbench-desktop.png"), fullPage: true });
-  await page.getByRole("button", { name: "新建检查", exact: true }).click();
-  await expect(page.getByRole("dialog")).toBeVisible();
-  await page.getByLabel("检查要求", { exact: true }).fill("待提交的检查草稿");
-  await page.screenshot({ path: path.join(output, "screenshots/workbench-new-inspection.png"), fullPage: true });
-  await page.getByRole("dialog").getByRole("button", { name: /关闭|Close/ }).click();
-  await expect(page.getByRole("dialog")).not.toBeVisible();
-  await page.getByRole("button", { name: "隐藏检查助手" }).click();
-  await expect(page.getByRole("heading", { name: "检查助手", exact: true })).not.toBeVisible();
-  await page.getByRole("button", { name: "显示检查助手" }).click();
+  await page.getByLabel("对话内容", { exact: true }).fill("第一个对话的草稿");
+  const firstSession = await page.evaluate(() => localStorage.getItem("pipe-inspector.session-id"));
+  await page.getByRole("button", { name: "新建对话" }).click();
+  await expect(page.getByLabel("对话内容", { exact: true })).toHaveValue("");
+  const secondSession = await page.evaluate(() => localStorage.getItem("pipe-inspector.session-id"));
+  expect(secondSession).not.toBe(firstSession);
+  await page.getByLabel("对话内容", { exact: true }).fill("第二个对话的草稿");
+  await page.getByRole("button", { name: /打开对话：新对话/ }).last().click();
+  await expect(page.getByLabel("对话内容", { exact: true })).toHaveValue("第一个对话的草稿");
   await page.setViewportSize({ width: 390, height: 844 });
+  await page.reload();
   await expect(separator).not.toBeVisible();
-  await expect(page.getByRole("button", { name: "打开任务导航" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "新建检查", exact: true })).not.toBeVisible();
-  await page.getByRole("button", { name: "打开任务导航" }).click();
-  await expect(page.getByRole("button", { name: "新建检查", exact: true })).toBeFocused();
+  await expect(page.getByRole("button", { name: "打开对话导航" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "新建对话" })).not.toBeVisible();
+  await page.getByRole("button", { name: "打开对话导航" }).click();
+  await expect(page.getByRole("button", { name: "新建对话" })).toBeFocused();
   await page.keyboard.press("Escape");
-  await expect(page.getByRole("button", { name: "打开任务导航" })).toBeFocused();
-  await page.getByRole("button", { name: "打开任务导航" }).click();
-  await page.getByRole("button", { name: "新建检查", exact: true }).click();
-  await expect(page.getByLabel("检查要求", { exact: true })).toHaveValue("待提交的检查草稿");
-  await page.getByRole("dialog").getByRole("button", { name: /关闭|Close/ }).click();
-  await expect(page.getByRole("dialog")).not.toBeVisible();
-  await expect(page.getByRole("button", { name: "打开任务导航" })).toBeFocused();
+  await expect(page.getByRole("button", { name: "打开对话导航" })).toBeFocused();
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   await page.screenshot({ path: path.join(output, "screenshots/workbench-mobile.png"), fullPage: true });
   expect(errors).toEqual([]);
 });
 
 async function inspect(page: Page, file: string, instruction: string): Promise<string> {
+  await openOptions(page);
   await page.getByLabel("对话附件（可选）").setInputFiles(path.join(output, "service/fixtures", file));
   await page.getByLabel("对话内容", { exact: true }).fill(instruction);
   const submitted = page.waitForResponse((response) =>
@@ -80,6 +105,7 @@ function card(page: Page, taskId: string): Locator {
 }
 
 async function review(page: Page, taskId: string): Promise<void> {
+  await openTaskDetails(page);
   const task = card(page, taskId);
   await expect(task.getByRole("button", { name: "开始人工复核" })).toBeVisible();
   const stored = await (await page.request.get(`/api/tasks/${taskId}`)).json();
@@ -107,7 +133,8 @@ test("pure YOLO geometry draft is preserved through guided VLM recovery", async 
   page.on("pageerror", (error) => errors.push(error.message));
   await mkdir(path.join(output, "screenshots"), { recursive: true });
   await page.goto("/");
-  await expect(page.getByRole("heading", { name: "检查助手", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "检查对话", exact: true })).toBeVisible();
+  await openOptions(page);
 
   await page.getByLabel("对话附件（可选）").setInputFiles(
     path.join(output, "service/fixtures/image.png"),
@@ -138,7 +165,7 @@ test("pure YOLO geometry draft is preserved through guided VLM recovery", async 
     const saved = await (await page.request.get(`/api/tasks/${sourceTaskId}`)).json();
     return saved.snapshot.runtime_status;
   }).toBe("completed");
-  await expect(page.locator(".assistant-context code")).toHaveText(sourceTaskId.slice(0, 8));
+  await expect(page.getByLabel("关联已有任务（可选）")).toHaveValue(sourceTaskId);
 
   const geometryDraft = "对原图像素框 [1, 1, 8, 8] 做分割和相对量化";
   await page.getByLabel("对话内容", { exact: true }).fill(geometryDraft);
@@ -159,7 +186,7 @@ test("pure YOLO geometry draft is preserved through guided VLM recovery", async 
   expect(newStored.inspection_mode).toBe("yolo_vlm");
   expect(newStored.input_asset).toEqual(sourceStored.input_asset);
   expect(newStored.parent_task_id ?? null).toBeNull();
-  await expect(page.locator(".assistant-context code")).toHaveText(newTaskId.slice(0, 8));
+  await expect(page.getByLabel("关联已有任务（可选）")).toHaveValue(newTaskId);
   await expect(page.getByLabel("对话内容", { exact: true })).toHaveValue(geometryDraft);
   await expect(page.getByRole("button", { name: "发送消息", exact: true })).toBeDisabled();
   await expect(page.getByText(/当前草稿已保留/)).toBeVisible();
@@ -167,7 +194,7 @@ test("pure YOLO geometry draft is preserved through guided VLM recovery", async 
   await review(page, newTaskId);
   await expect(page.getByRole("button", { name: "发送消息", exact: true })).toBeEnabled();
   await expect(page.getByLabel("对话内容", { exact: true })).toHaveValue(geometryDraft);
-  await expect(page.locator(".assistant-context code")).toHaveText(newTaskId.slice(0, 8));
+  await expect(page.getByLabel("关联已有任务（可选）")).toHaveValue(newTaskId);
   await page.screenshot({
     path: path.join(output, "screenshots/07-guided-recovery.png"),
     fullPage: true,
@@ -182,8 +209,16 @@ test("image/video dialogue, durable review, evidence reports and saved compariso
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "管道影像检查" })).toBeVisible();
   const first = await inspect(page, "image.png", "浏览器验收图片一：请检查并复核");
+  await expect(page.getByLabel("任务与证据")).not.toBeVisible();
+  await expect(page.locator(".turn-card").filter({ hasText: "浏览器验收图片一" })).toBeVisible();
+  await page.screenshot({
+    path: path.join(output, "screenshots/00-conversation-default-details-closed.png"),
+    fullPage: true,
+  });
+  await openTaskDetails(page);
   await expect(card(page, first).getByRole("button", { name: "开始人工复核" })).toBeVisible();
   await page.reload();
+  await openTaskDetails(page);
   await expect(card(page, first).getByRole("button", { name: "开始人工复核" })).toBeVisible();
   await page.screenshot({ path: path.join(output, "screenshots/01-image-waiting.png"), fullPage: true });
   await review(page, first);
@@ -237,7 +272,7 @@ test("image/video dialogue, durable review, evidence reports and saved compariso
 
   const second = await inspect(page, "image.png", "浏览器验收图片二：请检查并复核");
   await review(page, second);
-  await page.getByText("更换任务或对比结果", { exact: true }).click();
+  await openOptions(page);
   await page.getByLabel("关联已有任务（可选）").selectOption(second);
   await page.getByLabel("对比参考任务（可选）").selectOption(first);
   await page.getByLabel("对话内容", { exact: true }).fill("比较这两份已保存检查结果并导出报告");
@@ -259,6 +294,20 @@ test("image/video dialogue, durable review, evidence reports and saved compariso
   const popup = await popupPromise;
   await expect(popup.getByRole("heading", { name: "已保存检查结果对比", exact: true })).toBeVisible();
   await popup.screenshot({ path: path.join(output, "screenshots/05-html-report.png"), fullPage: true });
+  const sessionId = await page.evaluate(() => localStorage.getItem("pipe-inspector.session-id"));
+  const unifiedResponse = await page.request.get(`/api/sessions/${sessionId}/report?format=json`);
+  expect(unifiedResponse.status()).toBe(200);
+  const unified = await unifiedResponse.json();
+  expect(unified.session.session_id).toBe(sessionId);
+  expect(unified.asset_groups.length).toBeGreaterThanOrEqual(2);
+  expect(unified.asset_groups.flatMap((group: { sources: { task_id: string }[] }) =>
+    group.sources.map((source) => source.task_id))).toEqual(expect.arrayContaining([first, second, video]));
+  const unifiedPopupPromise = page.waitForEvent("popup");
+  await page.getByText("统一报告", { exact: true }).click();
+  await page.getByRole("link", { name: "HTML 统一报告" }).click();
+  const unifiedPopup = await unifiedPopupPromise;
+  await expect(unifiedPopup.getByRole("heading", { name: "会话统一检查报告" })).toBeVisible();
+  await writeFile(path.join(output, "session-report.json"), JSON.stringify(unified, null, 2));
   expect(errors).toEqual([]);
   await writeFile(path.join(output, "browser-evidence.json"), JSON.stringify({
     image_tasks: [first, second], video_task: video, synthetic_models: true,

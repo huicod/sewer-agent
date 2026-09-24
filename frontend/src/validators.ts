@@ -14,6 +14,7 @@ import type {
   RuntimeStatus,
   SessionDetail,
   SessionRecord,
+  SessionSummary,
   TaskRecord,
   TaskSnapshot,
   TurnRecord,
@@ -121,6 +122,13 @@ export function isAssetRecord(value: unknown): value is AssetRecord {
 
 export function isSessionRecord(value: unknown): value is SessionRecord {
   return isRecord(value) && isUuid(value.session_id) && isTimestamp(value.created_at);
+}
+
+export function isSessionList(value: unknown): value is SessionSummary[] {
+  return Array.isArray(value) && value.every((item: unknown) => isRecord(item) &&
+    isNonEmptyString(item.title) && isTimestamp(item.updated_at) &&
+    isNonNegativeInteger(item.task_count) && isNonNegativeInteger(item.turn_count) &&
+    isSessionRecord(item));
 }
 
 function isNullableNonNegativeNumber(value: unknown): value is number | null {

@@ -16,7 +16,13 @@ async def test_conversation_post_get_and_cross_session_read():
     record = TurnRecord(
         request_id=uuid4(), session_id=uuid4(), text="报告", created_at=now, updated_at=now
     )
-    repo = SimpleNamespace(get_turn=lambda _: record, list_turns=lambda _: (record,))
+    limits = []
+
+    def list_turns(_, limit=50):
+        limits.append(limit)
+        return (record,)
+
+    repo = SimpleNamespace(get_turn=lambda _: record, list_turns=list_turns)
     starter = SimpleNamespace(submit=AsyncMock(return_value=record))
     app = create_app(Settings(_env_file=None), repository=repo, conversation_starter=starter)
     path = f"/api/sessions/{record.session_id}/turns"
@@ -29,6 +35,7 @@ async def test_conversation_post_get_and_cross_session_read():
         assert response.status_code == 202
         assert response.json() == record.model_dump(mode="json")
         assert (await client.get(path)).json() == [record.model_dump(mode="json")]
+        assert limits == [None]
         assert (await client.get(f"{path}/{record.request_id}")).status_code == 200
         assert (
             await client.get(f"/api/sessions/{uuid4()}/turns/{record.request_id}")

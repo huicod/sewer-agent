@@ -4,7 +4,7 @@ from html import escape
 
 from pipe_inspector.contracts.assets import AssetRef
 from pipe_inspector.contracts.inspection import QualitySummary
-from pipe_inspector.contracts.reports import TaskReport
+from pipe_inspector.contracts.reports import SessionReportSource, TaskReport
 
 LABELS = {
     "PL": "破裂",
@@ -95,7 +95,7 @@ def _confirmation_text(value: object) -> str:
     return f"；新增二次确认 {escape(rendered)}"
 
 
-def _image_evidence_section(report: TaskReport) -> list[str]:
+def _image_evidence_section(report: TaskReport | SessionReportSource) -> list[str]:
     detail = report.image_evidence
     if detail is None or (detail.observation is None and detail.review is None):
         return []
@@ -161,7 +161,7 @@ def _image_evidence_section(report: TaskReport) -> list[str]:
     return lines
 
 
-def _enhancement_section(report: TaskReport) -> list[str]:
+def _enhancement_section(report: TaskReport | SessionReportSource) -> list[str]:
     selection = report.enhancement_selection
     result = report.enhancement
     if selection is None and result is None:
@@ -225,7 +225,7 @@ def _enhancement_section(report: TaskReport) -> list[str]:
     return lines
 
 
-def _geometry_section(report: TaskReport) -> list[str]:
+def _geometry_section(report: TaskReport | SessionReportSource) -> list[str]:
     detail = report.geometry
     if detail is None:
         return []
@@ -298,6 +298,15 @@ def _geometry_section(report: TaskReport) -> list[str]:
     return lines
 
 
+def render_evidence_sections(report: TaskReport | SessionReportSource) -> list[str]:
+    """Render stored enhancement, geometry, and detector/reviewer evidence fragments."""
+    lines: list[str] = []
+    lines.extend(_enhancement_section(report))
+    lines.extend(_geometry_section(report))
+    lines.extend(_image_evidence_section(report))
+    return lines
+
+
 def render_html(report: TaskReport) -> str:
     task, snapshot = report.task, report.task.snapshot
     coverage = snapshot.coverage
@@ -348,9 +357,7 @@ def render_html(report: TaskReport) -> str:
         )
     if snapshot.waiting_reason:
         lines.append("<p>限制/待处理：" + escape(snapshot.waiting_reason) + "</p>")
-    lines.extend(_enhancement_section(report))
-    lines.extend(_geometry_section(report))
-    lines.extend(_image_evidence_section(report))
+    lines.extend(render_evidence_sections(report))
     lines.append("<h2>检测发现</h2>")
     if not snapshot.findings:
         lines.append("<p>没有已保存的缺陷发现；是否正常以任务结论和覆盖条件为准。</p>")

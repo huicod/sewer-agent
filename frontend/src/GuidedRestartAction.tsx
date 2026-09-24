@@ -12,6 +12,7 @@ type PendingRestart = {
 };
 
 type GuidedRestartActionProps = {
+  compact?: boolean;
   task: TaskRecord | null;
   disabled: boolean;
   onAdmitted(task: TaskRecord): void;
@@ -24,6 +25,7 @@ function errorMessage(error: unknown): string {
 }
 
 export function GuidedRestartAction({
+  compact = false,
   task,
   disabled,
   onAdmitted,
@@ -77,8 +79,8 @@ export function GuidedRestartAction({
   }
 
   return (
-    <div className="guided-restart-action">
-      <p>当前为纯 YOLO，可追问和导出已存结果。追加复检、增强或几何工具需先使用同一原图新建 YOLO＋VLM 任务；完成后可继续发送当前草稿。</p>
+    <div className={`guided-restart-action${compact ? " guided-restart-action--compact" : ""}`}>
+      <p title="复用原图新建 YOLO＋VLM 检查，完成后可继续使用工具，草稿会保留。">{compact ? "纯 YOLO · 扩展工具需复检" : "当前为纯 YOLO，可追问和导出已存结果。追加复检、增强或几何工具需先使用同一原图新建 YOLO＋VLM 任务；完成后可继续发送当前草稿。"}</p>
       {error ? <div role="alert">{error}</div> : null}
       <button type="button" disabled={disabled || busy} onClick={() => void restart()}>
         {error ? "重试新建复检" : busy ? "正在新建复检…" : "用原图新建复检"}

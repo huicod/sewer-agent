@@ -181,6 +181,32 @@ def test_admission_is_atomic_reopens_and_replay_keeps_first_pins(supplement_stor
     assert store.list_calls(child.snapshot.task_id) == ()
 
 
+def test_initialize_backfills_legacy_supplement_lineage(supplement_store):
+    store, settings, schema = supplement_store
+    parent, _ = make_parent(store)
+    submission = child_submission(parent)
+    config = child_config(parent)
+    child = store.admit_supplement(parent.snapshot.task_id, submission, config)
+    with store._connect() as connection:
+        connection.execute(
+            sql.SQL("DELETE FROM {} WHERE task_id = %s").format(
+                store._table("sewer_image_operations")
+            ),
+            (child.snapshot.task_id,),
+        )
+        connection.execute(
+            sql.SQL("INSERT INTO {} (parent_task_id, task_id) VALUES (%s, %s)").format(
+                store._table("sewer_image_supplements")
+            ),
+            (parent.snapshot.task_id, child.snapshot.task_id),
+        )
+
+    reopened = SupplementRepository(settings.database_dsn, schema=schema)
+    reopened.initialize()
+
+    assert reopened.admit_supplement(parent.snapshot.task_id, submission, config) == child
+
+
 def test_same_request_id_with_changed_submission_or_parent_conflicts(supplement_store):
     store, _, _ = supplement_store
     parent, _ = make_parent(store)
@@ -195,7 +221,7 @@ def test_same_request_id_with_changed_submission_or_parent_conflicts(supplement_
         store.admit_supplement(other.snapshot.task_id, submission, child_config(other))
 
 
-def test_competing_requests_create_only_one_child(supplement_store):
+def test_competing_requests_create_independent_children(supplement_store):
     store, settings, schema = supplement_store
     parent, _ = make_parent(store)
     workers = 2
@@ -205,19 +231,16 @@ def test_competing_requests_create_only_one_child(supplement_store):
         reopened = SupplementRepository(settings.database_dsn, schema=schema)
         submission = child_submission(parent, instruction=f"review {index}")
         barrier.wait(timeout=10)
-        try:
-            return reopened.admit_supplement(
-                parent.snapshot.task_id, submission, child_config(parent)
-            )
-        except SupplementNotAllowed as error:
-            return error.code
+        return reopened.admit_supplement(
+            parent.snapshot.task_id, submission, child_config(parent)
+        )
 
     with ThreadPoolExecutor(max_workers=workers) as pool:
         results = list(pool.map(admit, range(workers)))
 
-    assert sum(result == "supplement_limit" for result in results) == 1
+    assert len({result.snapshot.task_id for result in results}) == 2
     children = [task for task in store.get_session(parent.session_id).tasks if task.parent_task_id]
-    assert len(children) == 1
+    assert len(children) == 2
 
 
 def test_concurrent_identical_request_returns_the_same_first_pinned_child(
@@ -246,7 +269,7 @@ def test_concurrent_identical_request_returns_the_same_first_pinned_child(
     assert len(store.get_session(parent.session_id).tasks) == 2
 
 
-def test_nested_admission_and_failed_child_still_consume_slot(supplement_store):
+def test_failed_child_does_not_prevent_another_frozen_child(supplement_store):
     store, _, _ = supplement_store
     parent, _ = make_parent(store)
     child = store.admit_supplement(
@@ -263,15 +286,26 @@ def test_nested_admission_and_failed_child_still_consume_slot(supplement_store):
     )
     store.update_snapshot(failed)
 
-    with pytest.raises(SupplementNotAllowed, match="supplement_limit") as nested:
+    next_child = store.admit_supplement(
+        parent.snapshot.task_id, child_submission(parent), child_config(parent)
+    )
+
+    assert next_child.snapshot.task_id != child.snapshot.task_id
+    assert next_child.parent_task_id == parent.snapshot.task_id
+    assert store.load_step(next_child.snapshot.task_id, "detect") == detection_payload()
+
+
+def test_child_cannot_be_used_as_a_new_evidence_parent(supplement_store):
+    store, _, _ = supplement_store
+    parent, _ = make_parent(store)
+    child = store.admit_supplement(
+        parent.snapshot.task_id, child_submission(parent), child_config(parent)
+    )
+
+    with pytest.raises(SupplementNotAllowed, match="supplement_source_invalid") as nested:
         store.admit_supplement(child.snapshot.task_id, child_submission(child), child_config(child))
-    assert nested.value.code == "supplement_limit"
-    with pytest.raises(SupplementNotAllowed, match="supplement_limit"):
-        store.admit_supplement(
-            parent.snapshot.task_id,
-            child_submission(parent),
-            child_config(parent, operation="invalid-after-budget-is-used"),
-        )
+
+    assert nested.value.code == "supplement_source_invalid"
 
 
 @pytest.mark.parametrize("status", ["queued", "running", "failed", "cancelled"])
@@ -418,7 +452,7 @@ def test_late_serialization_failure_rolls_back_all_child_rows(supplement_store):
             (submission.request_id,),
         ).fetchone()[0]
         relation_count = connection.execute(
-            sql.SQL("SELECT count(*) FROM {}").format(store._table("sewer_image_supplements"))
+            sql.SQL("SELECT count(*) FROM {}").format(store._table("sewer_image_operations"))
         ).fetchone()[0]
     assert task_count == relation_count == 0
     assert store.get_session(parent.session_id).tasks == (parent,)

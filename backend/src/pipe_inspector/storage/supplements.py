@@ -1,4 +1,4 @@
-"""Atomic admission for one linked image re-review per original task."""
+"""Atomic admission for repeatable image operations over frozen original evidence."""
 
 from datetime import datetime, timezone
 from uuid import UUID, uuid4
@@ -42,6 +42,32 @@ class SupplementRepository(ConversationRepository):
                     self._table("sewer_tasks"),
                 )
             )
+            connection.execute(
+                sql.SQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS {} (
+                        parent_task_id uuid NOT NULL REFERENCES {} (task_id),
+                        task_id uuid PRIMARY KEY REFERENCES {} (task_id)
+                    )
+                    """
+                ).format(
+                    self._table("sewer_image_operations"),
+                    self._table("sewer_tasks"),
+                    self._table("sewer_tasks"),
+                )
+            )
+            connection.execute(
+                sql.SQL(
+                    """
+                    INSERT INTO {} (parent_task_id, task_id)
+                    SELECT parent_task_id, task_id FROM {}
+                    ON CONFLICT (task_id) DO NOTHING
+                    """
+                ).format(
+                    self._table("sewer_image_operations"),
+                    self._table("sewer_image_supplements"),
+                )
+            )
 
     def _existing_request(
         self,
@@ -59,7 +85,7 @@ class SupplementRepository(ConversationRepository):
                 """
             ).format(
                 self._table("sewer_tasks"),
-                self._table("sewer_image_supplements"),
+                self._table("sewer_image_operations"),
             ),
             (submission.request_id,),
         ).fetchone()
@@ -134,7 +160,7 @@ class SupplementRepository(ConversationRepository):
                 if parent.input_asset != submission.input_asset:
                     raise SubmissionConflict
                 if parent.parent_task_id is not None:
-                    raise SupplementNotAllowed("supplement_limit")
+                    raise SupplementNotAllowed("supplement_source_invalid")
                 if parent.snapshot.runtime_status not in {
                     RuntimeStatus.COMPLETED,
                     RuntimeStatus.PARTIAL,
@@ -152,15 +178,6 @@ class SupplementRepository(ConversationRepository):
                 asset = AssetRecord.model_validate(asset_row[0])
                 if asset.kind != AssetKind.IMAGE or asset.parent is not None:
                     raise SupplementNotAllowed("image_only")
-
-                used = connection.execute(
-                    sql.SQL("SELECT 1 FROM {} WHERE parent_task_id = %s").format(
-                        self._table("sewer_image_supplements")
-                    ),
-                    (parent_task_id,),
-                ).fetchone()
-                if used is not None:
-                    raise SupplementNotAllowed("supplement_limit")
 
                 run_row = connection.execute(
                     sql.SQL("SELECT config FROM {} WHERE task_id = %s").format(
@@ -211,7 +228,7 @@ class SupplementRepository(ConversationRepository):
                 )
                 connection.execute(
                     sql.SQL("INSERT INTO {} (parent_task_id, task_id) VALUES (%s, %s)").format(
-                        self._table("sewer_image_supplements")
+                        self._table("sewer_image_operations")
                     ),
                     (parent_task_id, child_id),
                 )

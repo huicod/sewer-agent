@@ -2,7 +2,7 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import App from "./App";
+import App from "./test/InspectionWorkbench";
 import { isTaskRecord, isTurnRecord } from "./validators";
 
 const sessionId = "33333333-3333-4333-8333-333333333333";
@@ -90,7 +90,7 @@ async function openDirectPanel(user: ReturnType<typeof userEvent.setup>) {
 }
 
 function conversationPanel() {
-  return screen.getByRole("heading", { name: "检查助手" }).closest("section")!;
+  return screen.getByRole("heading", { name: "检查对话" }).closest("section")!;
 }
 
 beforeEach(() => {

@@ -53,6 +53,18 @@ class ConversationDispatcher:
             raise MissingRecord
         return task
 
+    async def _original_image_task(self, task):
+        if task.parent_task_id is None:
+            return task
+        original = await asyncio.to_thread(self.repo.get_task, task.parent_task_id)
+        if (
+            original.parent_task_id is not None
+            or original.session_id != task.session_id
+            or original.input_asset != task.input_asset
+        ):
+            raise MissingRecord
+        return original
+
     @staticmethod
     def _reply(text, task_id=None):
         return {"reply": text, "linked_task_id": str(task_id) if task_id else None}
@@ -370,6 +382,7 @@ class ConversationDispatcher:
             )
         if task is None:
             return self._reply("请先选择一个已完成或部分完成的图片任务，再请求追加操作。")
+        task = await self._original_image_task(task)
         parent_id = task.snapshot.task_id
         if turn.input_asset is not None and turn.input_asset != task.input_asset:
             return self._reply(
@@ -411,10 +424,7 @@ class ConversationDispatcher:
             )
         except SupplementNotAllowed as exc:
             message = {
-                "supplement_limit": (
-                    "该原任务的追加复检次数已用完（最多一次）；"
-                    "仅启动确认失败时可重试同一关联任务；已结束复检不再执行。"
-                ),
+                "supplement_source_invalid": "所选任务不能作为原图证据来源。",
                 "source_not_ready": "原任务尚未完成或不处于可复检状态，请先查看原任务进度。",
                 "image_only": "当前追加复检仅支持图片任务，视频复检尚未接入。",
                 "source_evidence_missing": "原任务缺少有效的检测证据，无法追加复检。",
@@ -456,6 +466,7 @@ class ConversationDispatcher:
             return self._reply("请明确几何操作；分割/相对测量需提供原图区域或已有 finding ID。")
         if task is None:
             return self._reply("请先选择一个已完成或部分完成的原始图片任务。")
+        task = await self._original_image_task(task)
         parent_id = task.snapshot.task_id
         if turn.input_asset is not None and turn.input_asset != task.input_asset:
             return self._reply("追加几何工具必须使用原任务图片；本次未执行。", parent_id)
@@ -475,7 +486,7 @@ class ConversationDispatcher:
                 parent_id, submission, geometry=intent.geometry)
         except SupplementNotAllowed as exc:
             reasons = {
-                "supplement_limit": "原任务的一次关联补证额度已使用，不能再次追加。",
+                "supplement_source_invalid": "所选任务不能作为原图证据来源。",
                 "source_not_ready": "原任务尚未完成或不处于可追加状态。",
                 "image_only": "几何工具当前仅支持原始图片任务。",
                 "source_evidence_missing": "原任务缺少有效的已保存检测证据。",

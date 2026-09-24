@@ -13,6 +13,7 @@ from pipe_inspector.contracts.assets import AssetRecord, AssetRef
 from pipe_inspector.contracts.intake import (
     SessionDetail,
     SessionRecord,
+    SessionSummary,
     TaskRecord,
     TaskSubmission,
 )
@@ -26,6 +27,10 @@ def intake_router(repo: PostgresRepository, media: MediaStore) -> APIRouter:
     @router.post("/sessions", response_model=SessionRecord, status_code=201)
     def create_session():
         return repo.create_session()
+
+    @router.get("/sessions", response_model=tuple[SessionSummary, ...])
+    def list_sessions():
+        return repo.list_sessions()
 
     @router.get("/sessions/{session_id}", response_model=SessionDetail)
     def get_session(session_id: UUID):

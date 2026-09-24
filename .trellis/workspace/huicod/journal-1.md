@@ -1660,3 +1660,35 @@ Addressed manual-test feedback with persistent assistant resizing, automatic tas
 ### Next Steps
 
 - User resumes example01: refresh page, use same-original guided recovery if source is pure YOLO, review actual evidence, then send retained geometry prompt.
+
+
+## Session 53: Independent conversations, repeatable image tools and unified reports
+
+**Date**: 2026-09-24
+**Task**: Independent conversations, repeatable image tools and unified reports
+
+### Summary
+
+Delivered conversation-first Ant Design workbench; existing server conversations preserved; managed loopback app rebuilt and all services ready. jj change yqvryysp, parent 31b7b332.
+
+### Main Changes
+
+- Central conversation with collapsible controls and optional resizable evidence panel; session draft/retry isolation and recent-context restoration.
+- Repeatable original-image operation lineage and source-preserving JSON/HTML conversation report; six example instructions updated.
+
+### Git Commits
+
+(No commits - planning session)
+
+### Testing
+
+- [OK] Backend 1222 passed/165 skipped; Ruff passed; frontend full 174 passed plus final 13 relevant regressions including an additional unsent-draft case; TypeScript/build passed.
+- [OK] Isolated PG 26 passed; synthetic Temporal 3 passed; synthetic browser 4 passed; 9 runtime read-only HTTP checks all 200.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- User manual acceptance on example images; actual model/geometry quality was not inferred from synthetic tests. Delivery record: .trellis/tasks/archive/2026-09/09-24-independent-conversations/report.md.

@@ -1,7 +1,7 @@
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, expect, it, vi } from "vitest";
-import App from "./App";
+import App from "./test/InspectionWorkbench";
 
 const sessionId = "33333333-3333-4333-8333-333333333333";
 const firstId = "44444444-4444-4444-8444-444444444444";
@@ -29,6 +29,44 @@ function restore(tasks: ReturnType<typeof task>[]) {
   return fetch;
 }
 afterEach(() => { localStorage.clear(); vi.unstubAllGlobals(); });
+
+it("restores the most recent linked result as the conversation context after reload", async () => {
+  localStorage.setItem("pipe-inspector.session-id", sessionId);
+  const tasks = [task(firstId, "最早的检查"), task(secondId, "最近的处理结果")];
+  vi.stubGlobal("fetch", vi.fn(async (url: string) => new Response(JSON.stringify(
+    url.endsWith("/turns") ? [{
+      request_id: crypto.randomUUID(), session_id: sessionId, text: "继续处理当前影像",
+      task_id: firstId, input_asset: null, linked_task_id: secondId,
+      status: "completed", stage: "finished", reply: "最新结果已保存",
+      created_at: tasks[0].created_at, updated_at: tasks[0].created_at, attempts: 1, error_code: null,
+    }] : { session: { session_id: sessionId, created_at: tasks[0].created_at }, tasks },
+  ), { headers: { "content-type": "application/json" } })));
+  render(<App pollIntervalMs={60_000} />);
+  await screen.findByText("最新结果已保存");
+  expect(screen.getByLabelText<HTMLSelectElement>("关联已有任务（可选）").value).toBe(secondId);
+});
+
+it("continues with the new linked tool result inside the same conversation", async () => {
+  const source = task(firstId, "原图检查");
+  source.snapshot.runtime_status = "completed";
+  const fetch = restore([source]);
+  const user = userEvent.setup();
+  render(<App pollIntervalMs={60_000} />);
+  await screen.findByRole("button", { name: "查看任务：原图检查" });
+  const child = { ...task(secondId, "原图分割"), parent_task_id: firstId };
+  child.snapshot.runtime_status = "completed";
+  fetch.mockResolvedValueOnce(new Response(JSON.stringify({
+    request_id: crypto.randomUUID(), session_id: sessionId, text: "对原图分割",
+    task_id: firstId, input_asset: null, linked_task_id: secondId,
+    status: "completed", stage: "finished", reply: "工具结果已保存",
+    created_at: source.created_at, updated_at: source.created_at, attempts: 1, error_code: null,
+  }), { headers: { "content-type": "application/json" } }));
+  fetch.mockResolvedValueOnce(new Response(JSON.stringify(child), { headers: { "content-type": "application/json" } }));
+  await user.type(screen.getByLabelText("对话内容"), "对原图分割");
+  await user.click(screen.getByRole("button", { name: "发送消息" }));
+  await screen.findByText("工具结果已保存");
+  await waitFor(() => expect(screen.getByLabelText<HTMLSelectElement>("关联已有任务（可选）").value).toBe(secondId));
+});
 
 it("restarts a detector-only original with guided review, preserves the draft and waits before sending", async () => {
   localStorage.setItem("pipe-inspector.session-id", sessionId);

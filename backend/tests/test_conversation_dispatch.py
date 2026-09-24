@@ -198,6 +198,36 @@ async def test_supplement_persists_child_link_before_start(start_fails):
     assert not store.created
 
 
+async def test_supplement_selected_child_admits_against_original_task():
+    store = Store()
+    root = store.task
+    child = TaskRecord.model_validate(
+        root.model_dump()
+        | {
+            "request_id": uuid4(),
+            "snapshot": root.snapshot.model_dump() | {"task_id": uuid4()},
+            "parent_task_id": root.snapshot.task_id,
+        }
+    )
+    tasks = {root.snapshot.task_id: root, child.snapshot.task_id: child}
+    store.get_task = tasks.__getitem__
+    turn = TurnRecord.model_validate(
+        store.turn.model_dump() | {"task_id": child.snapshot.task_id}
+    )
+    next_child = SimpleNamespace(snapshot=SimpleNamespace(task_id=uuid4(), is_terminal=False))
+    starter = SimpleNamespace(
+        admit_supplement=AsyncMock(return_value=next_child), start=AsyncMock()
+    )
+
+    result = await ConversationDispatcher(store, starter).handle(
+        turn,
+        ConversationIntent(kind="supplement", actions=("verify",), message="再复检原图"),
+    )
+
+    assert starter.admit_supplement.call_args.args[0] == root.snapshot.task_id
+    assert result["linked_task_id"] == str(next_child.snapshot.task_id)
+
+
 @pytest.mark.parametrize("invalid", ["tool", "asset"])
 async def test_supplement_rejects_unavailable_tools_and_asset_substitution(invalid):
     store = Store()

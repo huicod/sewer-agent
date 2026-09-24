@@ -1,995 +1,235 @@
-import { Button, ConfigProvider, Input, Layout, Modal, Spin } from "antd";
+import { MenuOutlined } from "@ant-design/icons";
+import { Alert, Button, ConfigProvider, Spin } from "antd";
 import zhCN from "antd/locale/zh_CN";
-import { FileSearchOutlined, InfoCircleOutlined, MenuOutlined, MessageOutlined, UploadOutlined } from "@ant-design/icons";
-import { WorkspaceSidebar } from "./WorkspaceSidebar";
-import { TaskCard } from "./TaskCard";
-import { GuidedRestartAction } from "./GuidedRestartAction";
-import { useAssistantResize } from "./useAssistantResize";
-import { type CSSProperties, type FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
-import {
-  ApiError,
-  cancelTask,
-  createSession,
-  createTask,
-  createTurn,
-  getSession,
-  getTask,
-  getTurn,
-  listTurns,
-  startTask,
-  uploadAsset,
-} from "./api";
-import type {
-  AssetRef,
-  InspectionMode,
-  RuntimeStatus,
-  SessionRecord,
-  TaskRecord,
-  TurnRecord,
-  TurnSubmission,
-  VideoEvidenceFrame,
-} from "./types";
-import { ComparisonPanel } from "./ComparisonPanel";
+import { createSession, listSessions } from "./api";
+import { ConversationSidebar } from "./ConversationSidebar";
+import InspectionConversation, { type ConversationDraft } from "./InspectionConversation";
+import type { SessionRecord, SessionSummary } from "./types";
 
 const SESSION_KEY = "pipe-inspector.session-id";
-const ACTIVE_STATUSES = new Set<RuntimeStatus>(["queued", "running", "waiting_review"]);
-const ACTIVE_TURN_STATUSES = new Set(["queued", "running"]);
 
-const TURN_STAGE_TEXT = {
-  queued: "等待处理",
-  planning: "正在规划",
-  executing: "正在执行",
-  finished: "已结束",
-} as const;
-const DEFAULT_INSPECTION_MODE: InspectionMode = "yolo_vlm";
-const INSPECTION_MODE_TEXT: Record<InspectionMode, string> = {
-  yolo_vlm: "YOLO＋VLM 复检",
-  yolo_only: "纯 YOLO（不复检）",
-};
+type AppProps = { pollIntervalMs?: number };
 
-type PendingSubmission = {
-  file: File;
-  sessionId: string;
-  instruction: string;
-  requestId: string;
-  inputAsset: AssetRef;
-  inspectionMode: InspectionMode;
-};
-
-type PendingTurn = TurnSubmission & {
-  file: File | null;
-  frameAsset: AssetRef | null;
-  sessionId: string;
-};
-
-type SelectedVideoFrame = {
-  parentTaskId: string;
-  frame: VideoEvidenceFrame;
-};
-
-type AppProps = {
-  pollIntervalMs?: number;
-};
-
-export function isActiveTask(task: TaskRecord): boolean {
-  return ACTIVE_STATUSES.has(task.snapshot.runtime_status);
+function newSummary(session: SessionRecord): SessionSummary {
+  return {
+    ...session,
+    title: "新对话",
+    updated_at: session.created_at,
+    task_count: 0,
+    turn_count: 0,
+  };
 }
 
-function isTerminalTask(task: TaskRecord): boolean {
-  return !isActiveTask(task);
+function sortSummaries(items: SessionSummary[]): SessionSummary[] {
+  return [...items].sort((left, right) => right.updated_at.localeCompare(left.updated_at));
 }
 
-function isActiveTurn(turn: TurnRecord): boolean {
-  return ACTIVE_TURN_STATUSES.has(turn.status);
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : "无法加载对话列表，请稍后重试";
 }
 
-function formatError(error: unknown): string {
-  if (error instanceof ApiError) return error.message;
-  return "发生未知错误，请稍后重试";
-}
-
-function sameAssetRef(left: AssetRef | null, right: AssetRef | null): boolean {
-  if (left === null || right === null) return left === right;
-  return left.asset_id === right.asset_id && left.version === right.version;
-}
-
-function inspectionModeOf(record: { inspection_mode?: InspectionMode }): InspectionMode {
-  return record.inspection_mode ?? DEFAULT_INSPECTION_MODE;
-}
-
-function isImageFile(file: File | null): boolean {
-  if (!file) return false;
-  if (file.type.startsWith("image/")) return true;
-  if (file.type.startsWith("video/")) return false;
-  return /\.(?:jpe?g|png)$/i.test(file.name);
-}
-
-function upsertTask(tasks: TaskRecord[], next: TaskRecord): TaskRecord[] {
-  const index = tasks.findIndex(
-    (task) =>
-      task.snapshot.task_id === next.snapshot.task_id || task.request_id === next.request_id,
-  );
-  if (index < 0) return [next, ...tasks];
-  return tasks.map((task, taskIndex) => (taskIndex === index ? next : task));
-}
-
-function upsertTurn(turns: TurnRecord[], next: TurnRecord): TurnRecord[] {
-  const index = turns.findIndex((turn) => turn.request_id === next.request_id);
-  if (index < 0) return [...turns, next];
-  return turns.map((turn, turnIndex) => (turnIndex === index ? next : turn));
-}
-
-function evidenceUrl(asset: AssetRef): string {
-  return `/api/assets/${encodeURIComponent(asset.asset_id)}/versions/${asset.version}/content`;
-}
-
-function linkedTaskStatus(task: TaskRecord | undefined): string {
-  if (!task || isActiveTask(task)) return "对话已回复；关联检查仍在继续";
-  if (task.snapshot.runtime_status === "completed") return "关联检查已完成";
-  if (task.snapshot.runtime_status === "partial") return "关联检查仅部分完成";
-  if (task.snapshot.runtime_status === "failed") return "关联检查已失败";
-  return "关联检查已取消";
-}
-
-type InspectionModeFieldProps = {
-  value: InspectionMode;
-  disabled: boolean;
-  disabledReason: string;
-  onChange: (mode: InspectionMode) => void;
-};
-
-function InspectionModeField({
-  value,
-  disabled,
-  disabledReason,
-  onChange,
-}: InspectionModeFieldProps) {
-  return (
-    <label className="field">
-      <span>检查模式</span>
-      <select
-        aria-label="检查模式"
-        value={value}
-        disabled={disabled}
-        onChange={(event) => onChange(event.target.value as InspectionMode)}
-      >
-        <option value="yolo_vlm">YOLO＋VLM 复检</option>
-        <option value="yolo_only">纯 YOLO（不复检）</option>
-      </select>
-      <small>{disabled ? disabledReason : "纯 YOLO 跳过 VLM 复检，结果会明确标注未复检。"}</small>
-    </label>
-  );
-}
-
-type TurnCardProps = {
-  turn: TurnRecord;
-  sessionId: string;
-  linkedTask: TaskRecord | undefined;
-  resending: boolean;
-  onResend: (turn: TurnRecord) => void;
-};
-
-function TurnCard({ turn, sessionId, linkedTask, resending, onResend }: TurnCardProps) {
-  return (
-    <article className="turn-card">
-      <div className="turn-message turn-message--user">
-        <span>你</span>
-        <p>{turn.text}</p>
-      </div>
-      <div className="turn-message turn-message--assistant">
-        <span>助手 · {TURN_STAGE_TEXT[turn.stage]}</span>
-        {turn.reply ? <p>{turn.reply}</p> : <p className="muted">服务器正在处理这条消息。</p>}
-        {turn.status === "failed" ? (
-          <p className="task-error">处理失败{turn.error_code ? `：${turn.error_code}` : ""}</p>
-        ) : null}
-        {turn.status === "queued" ? (
-          <Button htmlType="button" className="secondary-button" disabled={resending} onClick={() => onResend(turn)}>
-            {resending ? "正在确认…" : "确认启动"}
-          </Button>
-        ) : null}
-        {turn.status === "completed" && turn.linked_task_id ? (
-          <p className="linked-status">{linkedTaskStatus(linkedTask)}</p>
-        ) : null}
-        {turn.task_id || turn.linked_task_id ? <p className="turn-context">任务 {(turn.task_id ?? turn.linked_task_id)?.slice(0, 8)}</p> : null}
-        {turn.status === "completed" ? (
-          <ComparisonPanel sessionId={sessionId} requestId={turn.request_id} />
-        ) : null}
-      </div>
-    </article>
-  );
-}
-
-function Workbench({ pollIntervalMs = 2_000 }: AppProps) {
-  const [focusedTaskId, setFocusedTaskId] = useState("");
-  const [intakeOpen, setIntakeOpen] = useState(false);
-  const [assistantOpen, setAssistantOpen] = useState(true);
-  const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [session, setSession] = useState<SessionRecord | null>(null);
-  const [tasks, setTasks] = useState<TaskRecord[]>([]);
-  const [turns, setTurns] = useState<TurnRecord[]>([]);
-  const [instruction, setInstruction] = useState("");
-  const [directFile, setDirectFile] = useState<File | null>(null);
-  const [inspectionMode, setInspectionMode] = useState<InspectionMode>(DEFAULT_INSPECTION_MODE);
-  const [conversationText, setConversationText] = useState("");
-  const [conversationFile, setConversationFile] = useState<File | null>(null);
-  const [conversationInspectionMode, setConversationInspectionMode] =
-    useState<InspectionMode>(DEFAULT_INSPECTION_MODE);
-  const [selectedTaskId, setSelectedTaskId] = useState("");
-  const [followFocusedTask, setFollowFocusedTask] = useState(true);
-  const [restartingGuided, setRestartingGuided] = useState(false);
-  const [waitingGuidedTaskId, setWaitingGuidedTaskId] = useState("");
-  const [selectedReferenceTaskId, setSelectedReferenceTaskId] = useState("");
-  const [selectedVideoFrame, setSelectedVideoFrame] = useState<SelectedVideoFrame | null>(null);
+function ConversationShell({ pollIntervalMs }: AppProps) {
+  const [sessions, setSessions] = useState<SessionSummary[]>([]);
+  const [activeSessionId, setActiveSessionId] = useState("");
   const [loading, setLoading] = useState(true);
-  const [submitting, setSubmitting] = useState(false);
-  const [turnSubmitting, setTurnSubmitting] = useState(false);
+  const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [conversationError, setConversationError] = useState<string | null>(null);
-  const [startingTaskIds, setStartingTaskIds] = useState<Set<string>>(() => new Set());
-  const [cancellingTaskIds, setCancellingTaskIds] = useState<Set<string>>(() => new Set());
-  const fileInput = useRef<HTMLInputElement>(null);
-  const form = useRef<HTMLFormElement>(null);
-  const conversationForm = useRef<HTMLFormElement>(null);
-  const conversationFileInput = useRef<HTMLInputElement>(null);
-  const pendingSubmission = useRef<PendingSubmission | null>(null);
-  const pendingTurn = useRef<PendingTurn | null>(null);
+  const mobileViewport = useRef(window.matchMedia("(max-width: 900px)").matches);
+  const [navigationOpen, setNavigationOpen] = useState(() => !mobileViewport.current);
+  const draftCache = useRef<Map<string, ConversationDraft>>(new Map());
+  const requestSequence = useRef(0);
+  const creatingRef = useRef(false);
   const navigationToggle = useRef<HTMLButtonElement>(null);
-  const workspaceContent = useRef<HTMLElement>(null);
-  const { width: assistantWidth, separatorProps } = useAssistantResize(workspaceContent);
-  const followCreatedTurn = useRef<string | null>(null);
-  const focusedTask = tasks.find((task) => task.snapshot.task_id === focusedTaskId) ?? tasks[0];
-  const contextTask = conversationFile ? undefined : tasks.find((task) => task.snapshot.task_id === (
-    selectedVideoFrame?.parentTaskId ?? (followFocusedTask ? focusedTask?.snapshot.task_id : selectedTaskId)
-  ));
-  const effectiveTaskId = contextTask?.snapshot.task_id ?? "";
-  const effectiveMode = selectedVideoFrame ? DEFAULT_INSPECTION_MODE
-    : contextTask ? inspectionModeOf(contextTask) : conversationInspectionMode;
-  const waitingForGuided = Boolean(waitingGuidedTaskId && effectiveTaskId === waitingGuidedTaskId &&
-    contextTask && isActiveTask(contextTask));
+  const activeSessionRef = useRef("");
 
-  function discussFocusedTask() {
-    followCreatedTurn.current = null;
-    setFollowFocusedTask(true);
-    setSelectedTaskId("");
-    setSelectedReferenceTaskId("");
-    setSelectedVideoFrame(null);
-    setConversationFile(null);
-    if (conversationFileInput.current) conversationFileInput.current.value = "";
-    pendingTurn.current = null;
-  }
+  const activate = useCallback((sessionId: string) => {
+    activeSessionRef.current = sessionId;
+    setActiveSessionId(sessionId);
+    localStorage.setItem(SESSION_KEY, sessionId);
+    if (mobileViewport.current) setNavigationOpen(false);
+  }, []);
 
-  useEffect(() => {
-    const requestId = followCreatedTurn.current;
-    if (!requestId) return;
-    const linkedId = turns.find((turn) => turn.request_id === requestId)?.linked_task_id;
-    if (linkedId && tasks.some((task) => task.snapshot.task_id === linkedId)) {
-      followCreatedTurn.current = null;
-      setFocusedTaskId(linkedId);
-      setFollowFocusedTask(true);
-      setSelectedTaskId("");
+  const createAndActivate = useCallback(async () => {
+    if (creatingRef.current) return;
+    creatingRef.current = true;
+    setCreating(true);
+    setError(null);
+    try {
+      const created = await createSession();
+      const summary = newSummary(created);
+      setSessions((current) => [
+        summary,
+        ...current.filter((item) => item.session_id !== summary.session_id),
+      ]);
+      activate(created.session_id);
+    } catch (caught) {
+      setError(errorMessage(caught));
+    } finally {
+      creatingRef.current = false;
+      setCreating(false);
     }
-  }, [tasks, turns]);
+  }, [activate]);
 
-  function closeNavigation() {
-    setSidebarOpen(false);
-    navigationToggle.current?.focus();
-  }
-
-  useEffect(() => {
-    if (!sidebarOpen) return;
-    const focusFrame = requestAnimationFrame(() => {
-      document.querySelector<HTMLButtonElement>(".workspace-sidebar__new")?.focus({ preventScroll: true });
-    });
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") closeNavigation();
-    };
-    document.addEventListener("keydown", closeOnEscape);
-    return () => {
-      cancelAnimationFrame(focusFrame);
-      document.removeEventListener("keydown", closeOnEscape);
-    };
-  }, [sidebarOpen]);
-
-  async function startNewSession() {
+  const loadSessions = useCallback(async (initial = false) => {
+    const sequence = ++requestSequence.current;
     setLoading(true);
     setError(null);
     try {
-      const next = await createSession();
-      localStorage.setItem(SESSION_KEY, next.session_id);
-      setSession(next);
-      setTasks([]);
-      setFocusedTaskId("");
-      setTurns([]);
-      setDirectFile(null);
-      setInspectionMode(DEFAULT_INSPECTION_MODE);
-      setConversationFile(null);
-      setConversationInspectionMode(DEFAULT_INSPECTION_MODE);
-      setSelectedTaskId("");
-      setFollowFocusedTask(true);
-      setWaitingGuidedTaskId("");
-      followCreatedTurn.current = null;
-      setSelectedReferenceTaskId("");
-      setSelectedVideoFrame(null);
-      pendingTurn.current = null;
-    } catch (nextError) {
-      setError(formatError(nextError));
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  useEffect(() => {
-    let cancelled = false;
-    const savedSessionId = localStorage.getItem(SESSION_KEY);
-    const load = savedSessionId
-      ? Promise.all([getSession(savedSessionId), listTurns(savedSessionId)])
-          .then(([detail, restoredTurns]) => ({ ...detail, turns: restoredTurns }))
-      : createSession().then((nextSession) => ({ session: nextSession, tasks: [], turns: [] }));
-
-    void load
-      .then((detail) => {
-        if (cancelled) return;
-        localStorage.setItem(SESSION_KEY, detail.session.session_id);
-        setSession(detail.session);
-        setTasks(detail.tasks);
-        setTurns(detail.turns);
-      })
-      .catch((nextError: unknown) => {
-        if (!cancelled) setError(formatError(nextError));
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
+      const listed = await listSessions();
+      if (sequence !== requestSequence.current) return;
+      setSessions((current) => {
+        const active = current.find(
+          (item) => item.session_id === activeSessionRef.current,
+        );
+        return active && !listed.some((item) => item.session_id === active.session_id)
+          ? [active, ...listed]
+          : listed;
       });
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  const activeTurnIds = useMemo(
-    () => turns.filter(isActiveTurn).map((turn) => turn.request_id),
-    [turns],
-  );
-  const activeTurnKey = activeTurnIds.join(",");
-
-  useEffect(() => {
-    if (!session || !activeTurnKey) return;
-    const requestIds = activeTurnKey.split(",");
-    let stopped = false;
-    let polling = false;
-    const timer = window.setInterval(() => {
-      if (polling) return;
-      polling = true;
-      void Promise.all(requestIds.map((requestId) => getTurn(session.session_id, requestId)))
-        .then((updates) => {
-          if (stopped) return;
-          setTurns((current) => updates.reduce(upsertTurn, current));
-          if (updates.every((turn) => !isActiveTurn(turn))) {
-            stopped = true;
-            window.clearInterval(timer);
-          }
-        })
-        .catch((nextError: unknown) => {
-          if (!stopped) setConversationError(formatError(nextError));
-        })
-        .finally(() => {
-          polling = false;
-        });
-    }, pollIntervalMs);
-    return () => {
-      stopped = true;
-      window.clearInterval(timer);
-    };
-  }, [activeTurnKey, pollIntervalMs, session]);
-
-  const linkedTaskKey = useMemo(
-    () => Array.from(new Set(turns.map((turn) => turn.linked_task_id).filter((id): id is string => Boolean(id)))).join(","),
-    [turns],
-  );
-  const knownTaskKey = tasks.map((task) => task.snapshot.task_id).join(",");
-
-  useEffect(() => {
-    if (!linkedTaskKey) return;
-    const known = new Set(knownTaskKey ? knownTaskKey.split(",") : []);
-    const missing = linkedTaskKey.split(",").filter((taskId) => !known.has(taskId));
-    if (!missing.length) return;
-    let stopped = false;
-    void Promise.all(missing.map((taskId) => getTask(taskId)))
-      .then((linkedTasks) => {
-        if (!stopped) setTasks((current) => linkedTasks.reduce(upsertTask, current));
-      })
-      .catch((nextError: unknown) => {
-        if (!stopped) setError(formatError(nextError));
-      });
-    return () => {
-      stopped = true;
-    };
-  }, [knownTaskKey, linkedTaskKey]);
-
-  const activeTaskIds = useMemo(
-    () => tasks.filter(isActiveTask).map((task) => task.snapshot.task_id),
-    [tasks],
-  );
-  const activeTaskKey = activeTaskIds.join(",");
-
-  useEffect(() => {
-    if (!activeTaskKey) return;
-    const taskIds = activeTaskKey.split(",");
-    let stopped = false;
-    let polling = false;
-    const timer = window.setInterval(() => {
-      if (polling) return;
-      polling = true;
-      void Promise.all(taskIds.map((taskId) => getTask(taskId)))
-        .then((updates) => {
-          if (stopped) return;
-          setTasks((current) => updates.reduce(upsertTask, current));
-        })
-        .catch((nextError: unknown) => {
-          if (!stopped) setError(formatError(nextError));
-        })
-        .finally(() => {
-          polling = false;
-        });
-    }, pollIntervalMs);
-
-    return () => {
-      stopped = true;
-      window.clearInterval(timer);
-    };
-  }, [activeTaskKey, pollIntervalMs]);
-
-  async function startInspection(taskId: string) {
-    setStartingTaskIds((current) => new Set(current).add(taskId));
-    setError(null);
-    try {
-      const started = await startTask(taskId);
-      setTasks((current) => upsertTask(current, started));
-    } catch (nextError) {
-      setError(formatError(nextError));
-    } finally {
-      setStartingTaskIds((current) => {
-        const next = new Set(current);
-        next.delete(taskId);
-        return next;
-      });
-    }
-  }
-
-  async function cancelInspection(taskId: string) {
-    setCancellingTaskIds((current) => new Set(current).add(taskId));
-    setError(null);
-    try {
-      const cancelled = await cancelTask(taskId);
-      setTasks((current) => upsertTask(current, cancelled));
-    } catch (nextError) {
-      setError(formatError(nextError));
-    } finally {
-      setCancellingTaskIds((current) => {
-        const next = new Set(current);
-        next.delete(taskId);
-        return next;
-      });
-    }
-  }
-
-  async function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!session) return;
-    const file = fileInput.current?.files?.[0];
-    const cleanInstruction = instruction.trim();
-    if (!file) {
-      setError("请选择现场图片或视频");
-      return;
-    }
-    if (!cleanInstruction) {
-      setError("请输入检查要求");
-      return;
-    }
-
-    setSubmitting(true);
-    setError(null);
-    try {
-      let pending = pendingSubmission.current;
-      if (
-        !pending ||
-        pending.file !== file ||
-        pending.sessionId !== session.session_id ||
-        pending.instruction !== cleanInstruction ||
-        pending.inspectionMode !== inspectionMode
-      ) {
-        const reusableAsset = pending && pending.file === file &&
-          pending.sessionId === session.session_id && pending.instruction === cleanInstruction
-          ? pending.inputAsset
-          : null;
-        const inputAsset = reusableAsset ?? (await uploadAsset(file)).ref;
-        pending = {
-          file,
-          sessionId: session.session_id,
-          instruction: cleanInstruction,
-          requestId: crypto.randomUUID(),
-          inputAsset,
-          inspectionMode,
-        };
-        pendingSubmission.current = pending;
-      }
-      const created = await createTask({
-        request_id: pending.requestId,
-        session_id: session.session_id,
-        input_asset: pending.inputAsset,
-        instruction: cleanInstruction,
-        inspection_mode: pending.inspectionMode,
-      });
-      pendingSubmission.current = null;
-      setTasks((current) => upsertTask(current, created));
-      setFocusedTaskId(created.snapshot.task_id);
-      if (followFocusedTask) setSelectedReferenceTaskId("");
-      setIntakeOpen(false);
-      setInstruction("");
-      setDirectFile(null);
-      setInspectionMode(DEFAULT_INSPECTION_MODE);
-      form.current?.reset();
-    } catch (nextError) {
-      setError(formatError(nextError));
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
-  async function postTurn(submission: PendingTurn | TurnRecord) {
-    if (!session) return;
-    setTurnSubmitting(true);
-    setConversationError(null);
-    try {
-      const created = await createTurn(session.session_id, {
-        request_id: submission.request_id,
-        text: submission.text,
-        input_asset: submission.input_asset,
-        task_id: submission.task_id,
-        inspection_mode: inspectionModeOf(submission),
-        ...(submission.reference_task_id
-          ? { reference_task_id: submission.reference_task_id }
-          : {}),
-      });
-      setTurns((current) => upsertTurn(current, created));
-      if (submission.input_asset && !submission.task_id) followCreatedTurn.current = created.request_id;
-      pendingTurn.current = null;
-      setConversationText("");
-      setConversationFile(null);
-      setConversationInspectionMode(DEFAULT_INSPECTION_MODE);
-      setSelectedReferenceTaskId("");
-      setSelectedVideoFrame(null);
-      if (conversationFileInput.current) conversationFileInput.current.value = "";
-    } catch (nextError) {
-      const message = formatError(nextError);
-      setConversationError(
-        nextError instanceof ApiError && nextError.status === 0
-          ? `${message}。再次发送将使用相同请求编号，不会重复上传附件。`
-          : message,
-      );
-    } finally {
-      setTurnSubmitting(false);
-    }
-  }
-
-  async function submitTurn(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!session || activeTurnIds.length > 0 || restartingGuided || waitingForGuided) return;
-    const cleanText = conversationText.trim();
-    if (!cleanText) {
-      setConversationError("请输入对话内容");
-      return;
-    }
-    const taskId = selectedVideoFrame?.parentTaskId ?? (effectiveTaskId || null);
-    const referenceTaskId = selectedReferenceTaskId || null;
-    if (referenceTaskId && (conversationFile || selectedVideoFrame)) {
-      setConversationError("保存结果对比不能同时上传新附件");
-      return;
-    }
-    const selectedFrameAsset = selectedVideoFrame?.frame.asset ?? null;
-    let pending = pendingTurn.current;
-    const sameIntent = Boolean(
-      pending && pending.sessionId === session.session_id && pending.text === cleanText &&
-      pending.task_id === taskId && pending.file === conversationFile &&
-      pending.reference_task_id === referenceTaskId &&
-      inspectionModeOf(pending) === effectiveMode &&
-      sameAssetRef(pending.frameAsset, selectedFrameAsset),
-    );
-    if (!sameIntent) {
-      setTurnSubmitting(true);
-      setConversationError(null);
-      try {
-        const reusableAsset = conversationFile !== null && pending?.file === conversationFile &&
-          pending.frameAsset === null ? pending.input_asset : null;
-        const inputAsset = selectedFrameAsset ?? reusableAsset ??
-          (conversationFile ? (await uploadAsset(conversationFile)).ref : null);
-        pending = {
-          request_id: crypto.randomUUID(),
-          sessionId: session.session_id,
-          text: cleanText,
-          input_asset: inputAsset,
-          task_id: taskId,
-          reference_task_id: referenceTaskId,
-          inspection_mode: effectiveMode,
-          file: conversationFile,
-          frameAsset: selectedFrameAsset,
-        };
-        pendingTurn.current = pending;
-      } catch (nextError) {
-        setConversationError(formatError(nextError));
-        setTurnSubmitting(false);
+      if (initial && listed.length === 0) {
+        await createAndActivate();
         return;
       }
-      setTurnSubmitting(false);
+      if (!activeSessionRef.current) {
+        const saved = localStorage.getItem(SESSION_KEY);
+        const next = listed.find((item) => item.session_id === saved)?.session_id
+          ?? listed[0]?.session_id;
+        if (next) activate(next);
+      }
+    } catch (caught) {
+      if (sequence === requestSequence.current) setError(errorMessage(caught));
+    } finally {
+      if (sequence === requestSequence.current) setLoading(false);
     }
-    if (pending) await postTurn(pending);
-  }
+  }, [activate, createAndActivate]);
 
-  const hasActiveTurn = activeTurnIds.length > 0;
-  const composerBusy = turnSubmitting || hasActiveTurn || restartingGuided;
-  const pendingMatchesComposer = Boolean(
-    pendingTurn.current &&
-    pendingTurn.current.sessionId === session?.session_id &&
-    pendingTurn.current.text === conversationText.trim() &&
-    pendingTurn.current.task_id === (effectiveTaskId || null) &&
-    pendingTurn.current.reference_task_id === (selectedReferenceTaskId || null) &&
-    inspectionModeOf(pendingTurn.current) === effectiveMode &&
-    pendingTurn.current.file === conversationFile &&
-    sameAssetRef(pendingTurn.current.frameAsset, selectedVideoFrame?.frame.asset ?? null),
-  );
+  useEffect(() => {
+    void loadSessions(true);
+    return () => { requestSequence.current += 1; };
+  }, []); // Initialization is intentionally independent of the active conversation.
 
-  function selectVideoFrame(parentTaskId: string, frame: VideoEvidenceFrame) {
-    setAssistantOpen(true);
-    setSelectedVideoFrame({ parentTaskId, frame });
-    setSelectedTaskId(parentTaskId);
-    setFollowFocusedTask(false);
-    setSelectedReferenceTaskId("");
-    setConversationFile(null);
-    setConversationInspectionMode(DEFAULT_INSPECTION_MODE);
-    if (conversationFileInput.current) conversationFileInput.current.value = "";
-    pendingTurn.current = null;
-  }
+  useEffect(() => {
+    if (!navigationOpen) return;
+    const focusFrame = mobileViewport.current
+      ? requestAnimationFrame(() => {
+        document.querySelector<HTMLButtonElement>(".workspace-sidebar__new")
+          ?.focus({ preventScroll: true });
+      })
+      : null;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      setNavigationOpen(false);
+      navigationToggle.current?.focus();
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => {
+      if (focusFrame !== null) cancelAnimationFrame(focusFrame);
+      window.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [navigationOpen]);
+
+  const updateSummary = useCallback((summary: SessionSummary) => {
+    setSessions((current) => sortSummaries([
+      summary,
+      ...current.filter((item) => item.session_id !== summary.session_id),
+    ]));
+  }, []);
+
+  const closeNavigation = useCallback(() => {
+    setNavigationOpen(false);
+    navigationToggle.current?.focus();
+  }, []);
 
   return (
-    <Layout className="workbench">
-      {sidebarOpen ? <button className="sidebar-backdrop" aria-label="关闭任务导航" onClick={closeNavigation} /> : null}
-      <Layout.Sider id="task-navigation" width={248} theme="light" className={`workspace-sider${sidebarOpen ? " workspace-sider--open" : ""}`}>
-        <WorkspaceSidebar
-          tasks={tasks}
-          activeTaskId={focusedTask?.snapshot.task_id ?? ""}
+    <div className={`conversation-shell${
+      navigationOpen ? " conversation-shell--navigation" : ""
+    }`}>
+      <Button
+        ref={navigationToggle}
+        className="conversation-shell__navigation-toggle"
+        type="text"
+        icon={<MenuOutlined />}
+        aria-label={navigationOpen ? "关闭对话导航" : "打开对话导航"}
+        aria-expanded={navigationOpen}
+        aria-controls="conversation-navigation"
+        onClick={() => setNavigationOpen((open) => !open)}
+      />
+      <div
+        id="conversation-navigation"
+        className={`conversation-nav${navigationOpen ? " conversation-nav--open" : ""}`}
+      >
+        <ConversationSidebar
+          sessions={sessions}
+          activeSessionId={activeSessionId}
+          onSelectSession={activate}
+          onNewConversation={() => void createAndActivate()}
           loading={loading}
-          onSelectTask={(id) => {
-            followCreatedTurn.current = null;
-            setFocusedTaskId(id);
-            if (followFocusedTask && !composerBusy) { setSelectedReferenceTaskId(""); pendingTurn.current = null; }
-            if (sidebarOpen) closeNavigation();
-          }}
-          onNewInspection={() => { setIntakeOpen(true); setSidebarOpen(false); }}
+          disabled={creating}
+          onRefresh={() => void loadSessions()}
         />
-      </Layout.Sider>
-      <Layout className="workspace-body">
-        <Layout.Header className="workspace-header">
-          <div className="workspace-header__title">
-            <Button ref={navigationToggle} className="mobile-menu" type="text" icon={<MenuOutlined aria-hidden="true" />} aria-label="打开任务导航" aria-expanded={sidebarOpen} aria-controls="task-navigation" onClick={() => setSidebarOpen(true)} />
-            <h1>管道影像检查</h1><span className="workspace-header__divider" /><span className="workspace-header__caption">检查工作台</span>
-          </div>
-          <div className="workspace-header__actions">
-            <span className="workspace-session" aria-label="当前会话"><span>当前会话</span><code>{session?.session_id ?? "正在连接…"}</code></span>
-            <Button icon={<MessageOutlined aria-hidden="true" />} aria-label={assistantOpen ? "隐藏检查助手" : "显示检查助手"} onClick={() => setAssistantOpen((open) => !open)}>{assistantOpen ? "收起助手" : "检查助手"}</Button>
-          </div>
-        </Layout.Header>
-        {error && !intakeOpen ? (
-          <div className="workspace-error" role="alert">
-            <InfoCircleOutlined aria-hidden="true" /><span>{error}</span>
-            {!session && !loading ? <Button onClick={() => void startNewSession()}>新建会话</Button> : null}
-          </div>
-        ) : null}
-        <Layout.Content ref={workspaceContent} style={{ "--assistant-width": `${assistantWidth}px` } as CSSProperties}
-          className={`workspace-content${assistantOpen ? "" : " workspace-content--wide"}`}>
-          <div className="inspection-workspace">
-            <div className="workspace-breadcrumb"><FileSearchOutlined aria-hidden="true" /><span>检查任务</span><span>/</span><span>{focusedTask ? focusedTask.snapshot.task_id.slice(0, 8) : "工作台"}</span></div>
-            <section className="inspection-detail" aria-label="检查详情">
-              {loading ? <div className="workspace-loading"><Spin /><p>正在恢复会话…</p></div> : focusedTask ? (
-                <TaskCard
-                  key={focusedTask.snapshot.task_id}
-                  task={focusedTask}
-                  starting={startingTaskIds.has(focusedTask.snapshot.task_id)}
-                  cancelling={cancellingTaskIds.has(focusedTask.snapshot.task_id)}
-                  onStart={(taskId) => void startInspection(taskId)}
-                  onCancel={(taskId) => void cancelInspection(taskId)}
-                  onReviewed={(reviewedTask, snapshot) => {
-                    setTasks((current) => upsertTask(current, { ...reviewedTask, snapshot }));
-                  }}
-                  onSelectFrame={selectVideoFrame}
-                  frameSelectionDisabled={turnSubmitting || hasActiveTurn}
-                />
-              ) : (
-                <div className="workspace-empty">
-                  <div className="workspace-empty__icon"><FileSearchOutlined aria-hidden="true" /></div>
-                  <h2>从一份现场影像开始</h2>
-                  <p>上传管道图片或视频，查看检测证据、复核缺陷并导出报告。</p>
-                  <Button type="primary" size="large" icon={<UploadOutlined aria-hidden="true" />} onClick={() => setIntakeOpen(true)}>上传现场影像</Button>
-                  <span className="workspace-empty__formats">支持 JPG、PNG 及常用视频格式</span>
-                  <div className="workspace-empty__steps">
-                    <span><b>1</b>上传影像</span><span><b>2</b>检查与复核</span><span><b>3</b>导出报告</span>
-                  </div>
-                </div>
-              )}
-            </section>
-            <footer className="workspace-footer">{tasks.length} 项检查任务<span>结果以原始证据与复核记录为准</span></footer>
-          </div>
-          {assistantOpen ? <div {...separatorProps} className="assistant-resizer" aria-label="调整检查助手宽度" title="拖动调整助手宽度；也可使用左右方向键" /> : null}
-          <aside className="assistant-workspace" hidden={!assistantOpen}>
-      <section className="conversation-panel" aria-labelledby="conversation-title">
-        <div className="tasks__heading">
-          <div>
-            <MessageOutlined aria-hidden="true" />
-            <h2 id="conversation-title">检查助手</h2>
-          </div>
-          <span>{turns.length} 条</span>
-        </div>
-        <p className="conversation-note">自动带上当前任务，继续追问或处理证据。</p>
-        <details className="assistant-help">
-          <summary>可用操作与说明</summary>
-          <p>可以询问已存证据、请求报告，或对新图或关联原图提出“必要时按需增强后再检查”。关联原图片可请求一次追加复检或增强。附件与已有任务二选一；对比结果时需选择两个已存任务。</p>
-        </details>
-        <div className="transcript" aria-live="polite">
-          {!loading && turns.length === 0 ? <div className="assistant-empty"><MessageOutlined aria-hidden="true" /><h3>围绕影像，开始检查</h3><p>上传图片或视频，说明检查要求。你也可以关联左侧任务，询问结果或生成报告。</p></div> : null}
-          {turns.map((turn) => (
-            <TurnCard
-              key={turn.request_id}
-              turn={turn}
-              sessionId={session?.session_id ?? turn.session_id}
-              linkedTask={tasks.find((task) => task.snapshot.task_id === turn.linked_task_id)}
-              resending={turnSubmitting}
-              onResend={(nextTurn) => void postTurn(nextTurn)}
-            />
-          ))}
-        </div>
-        {conversationError ? <div className="conversation-error" role="alert">{conversationError}</div> : null}
-        <form ref={conversationForm} className="conversation-form" onSubmit={(event) => void submitTurn(event)}>
-          <section className="assistant-context" aria-label="当前对话上下文">
-            <div className="assistant-context__heading"><strong>{conversationFile ? "新附件检查" : contextTask ? "正在讨论的任务" : "会话对话"}</strong>
-              {contextTask ? <code>{contextTask.snapshot.task_id.slice(0, 8)}</code> : null}</div>
-            <p title={contextTask?.instruction}>{conversationFile?.name ?? contextTask?.instruction ?? "上传图片开始检查，或选择一个已有任务。"}</p>
-            {contextTask ? <small>{INSPECTION_MODE_TEXT[effectiveMode]} · {followFocusedTask ? "跟随当前任务" : "已固定对话任务"}</small> : null}
-            {focusedTask && (effectiveTaskId !== focusedTask.snapshot.task_id || !followFocusedTask) ? (
-              <Button type="link" size="small" disabled={composerBusy} onClick={discussFocusedTask}>讨论当前查看的任务</Button>
-            ) : null}
-          </section>
-          <GuidedRestartAction task={contextTask ?? null} disabled={composerBusy || Boolean(selectedVideoFrame)}
-            onBusyChange={(busy) => {
-              if (busy && contextTask) {
-                setSelectedTaskId(contextTask.snapshot.task_id);
-                setFollowFocusedTask(false);
-                followCreatedTurn.current = null;
-              }
-              setRestartingGuided(busy);
-            }}
-            onAdmitted={(task) => setTasks((current) => upsertTask(current, task))}
-            onStarted={(task) => {
-              setTasks((current) => upsertTask(current, task));
-              setFocusedTaskId(task.snapshot.task_id);
-              setSelectedTaskId(task.snapshot.task_id);
-              setFollowFocusedTask(false);
-              setSelectedReferenceTaskId("");
-              setWaitingGuidedTaskId(task.snapshot.task_id);
-              pendingTurn.current = null;
-            }} />
-          {waitingForGuided ? <p className="assistant-baseline-note" role="status">原图复检任务尚未完成，当前草稿已保留。待任务已完成或部分完成后，可继续发送工具请求；若等待人工复核，请先查看证据并复核。</p> : null}
-          {selectedVideoFrame ? (
-            <section className="task-hint" aria-label="已选视频证据帧">
-              <p>已选视频证据帧：帧 {selectedVideoFrame.frame.frame_index} · {selectedVideoFrame.frame.timestamp_seconds} 秒</p>
-              <p className="evidence-links">
-                <a href={evidenceUrl(selectedVideoFrame.frame.asset)} target="_blank" rel="noreferrer">打开已选帧</a>
-                <Button
-                  htmlType="button"
-                  className="secondary-button"
-                  disabled={turnSubmitting || hasActiveTurn}
-                  onClick={() => {
-                    setSelectedVideoFrame(null);
-                    setSelectedTaskId("");
-                    pendingTurn.current = null;
-                  }}
-                >取消选帧</Button>
-              </p>
-              <p className="truth-note">
-                请在消息中明确要求增强，或提供原图像素 ROI 进行分割/相对测量；整帧相对深度可直接提出。不会自动执行工具。
-              </p>
-            </section>
-          ) : null}
-          <label className="field">
-            <span id="conversation-input-label">对话内容</span>
-            <Input.TextArea
-              aria-labelledby="conversation-input-label"
-              value={conversationText}
-              onChange={(event) => {
-                setConversationText(event.target.value);
-                if (followFocusedTask && contextTask) {
-                  setSelectedTaskId(contextTask.snapshot.task_id);
-                  setFollowFocusedTask(false);
-                }
-              }}
-              maxLength={4_000}
-              rows={3}
-              placeholder="例如：请检查这份影像，或解释上一项检查结果"
-              disabled={!session || composerBusy}
-            />
-          </label>
-          <div className="conversation-options">
-            <label className="field">
-              <span>对话附件（可选）</span>
-              <input
-                ref={conversationFileInput}
-                type="file"
-                accept=".jpg,.jpeg,.png,.mp4,.mov,.avi,.mkv,image/jpeg,image/png,video/*"
-                onChange={(event) => {
-                  const nextFile = event.target.files?.[0] ?? null;
-                  pendingTurn.current = null;
-                  setConversationFile(nextFile);
-                  if (!isImageFile(nextFile)) {
-                    setConversationInspectionMode(DEFAULT_INSPECTION_MODE);
-                  }
-                  if (nextFile) {
-                    setSelectedVideoFrame(null);
-                    setSelectedTaskId("");
-                    setFollowFocusedTask(false);
-                    setSelectedReferenceTaskId("");
-                  }
-                }}
-                disabled={!session || composerBusy}
-              />
-            </label>
-            <InspectionModeField
-              value={effectiveMode}
-              disabled={!isImageFile(conversationFile) || composerBusy}
-              disabledReason={selectedVideoFrame
-                ? "视频证据帧工具仅使用 YOLO＋VLM 复检。"
-                : conversationFile
-                  ? "视频仅使用 YOLO＋VLM 复检。"
-                  : effectiveTaskId
-                    ? "关联任务沿用已保存的检查模式，不能在这里改写。"
-                    : "选择新图片后可更改检查模式；视频仅使用 YOLO＋VLM 复检。"}
-              onChange={setConversationInspectionMode}
-            />
-            <details className="assistant-target-options">
-            <summary>更换任务或对比结果</summary>
-            <label className="field">
-              <span>关联已有任务（可选）</span>
-              <select
-                value={effectiveTaskId}
-                onChange={(event) => {
-                  const nextTaskId = event.target.value;
-                  const nextTask = tasks.find((task) => task.snapshot.task_id === nextTaskId);
-                  pendingTurn.current = null;
-                  setSelectedVideoFrame(null);
-                  setSelectedTaskId(nextTaskId);
-                  setFollowFocusedTask(false);
-                  followCreatedTurn.current = null;
-                  setSelectedReferenceTaskId("");
-                  setConversationInspectionMode(nextTask
-                    ? inspectionModeOf(nextTask)
-                    : DEFAULT_INSPECTION_MODE);
-                  if (nextTaskId) {
-                    setConversationFile(null);
-                    if (conversationFileInput.current) conversationFileInput.current.value = "";
-                  }
-                }}
-                disabled={!session || composerBusy}
-              >
-                <option value="">会话对话（不指定任务）</option>
-                {tasks.map((task) => (
-                  <option key={task.snapshot.task_id} value={task.snapshot.task_id}>
-                    {task.snapshot.task_id.slice(0, 8)} · {task.instruction}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="field">
-              <span>对比参考任务（可选）</span>
-              <select
-                value={selectedReferenceTaskId}
-                onChange={(event) => {
-                  setSelectedReferenceTaskId(event.target.value);
-                  setSelectedTaskId(effectiveTaskId);
-                  setFollowFocusedTask(false);
-                  if (event.target.value) {
-                    setConversationFile(null);
-                    if (conversationFileInput.current) conversationFileInput.current.value = "";
-                  }
-                }}
-                disabled={!session || composerBusy || !effectiveTaskId || Boolean(selectedVideoFrame)}
-              >
-                <option value="">不对比</option>
-                {tasks.filter((task) => task.snapshot.task_id !== effectiveTaskId).map((task) => (
-                  <option key={task.snapshot.task_id} value={task.snapshot.task_id}>
-                    {task.snapshot.task_id.slice(0, 8)} · {task.instruction}
-                  </option>
-                ))}
-              </select>
-            </label>
-            </details>
-          </div>
-          <div className="form-footer">
-            <small>{hasActiveTurn ? "当前消息完成后可继续对话" : `${conversationText.length} / 4000`}</small>
-            <Button type="primary" htmlType="submit" disabled={!session || composerBusy || waitingForGuided}>
-              {turnSubmitting ? "正在发送…" : pendingMatchesComposer ? "重新发送" : "发送消息"}
-            </Button>
-          </div>
-        </form>
-      </section>
-
-          </aside>
-        </Layout.Content>
-      </Layout>
-      <Modal open={intakeOpen} title="新建检查" footer={null} onCancel={() => { if (!submitting) setIntakeOpen(false); }}
-        afterOpenChange={(open) => { if (!open && window.matchMedia("(max-width: 1050px)").matches) navigationToggle.current?.focus(); }}
-        closable={!submitting} mask={{ closable: !submitting }} keyboard={!submitting} width={560} className="inspection-modal">
-      <section className="intake-panel" aria-labelledby="intake-title">
-        <div className="section-copy">
-          <h2 id="intake-title">提交现场资料</h2>
-          <p>支持 JPEG、PNG、MP4、MOV、AVI 与 MKV。文件是否可用以服务器校验为准。</p>
-          <p>提交后可在检查详情中启动检查。需要对话规划时，请使用检查助手。</p>
-        </div>
-        {error ? <div className="conversation-error" role="alert">{error}</div> : null}
-        <form ref={form} onSubmit={(event) => void submit(event)}>
-          <label className="field">
-            <span>现场文件</span>
-            <input
-              ref={fileInput}
-              type="file"
-              accept=".jpg,.jpeg,.png,.mp4,.mov,.avi,.mkv,image/jpeg,image/png,video/*"
-              onChange={(event) => {
-                const nextFile = event.target.files?.[0] ?? null;
-                setDirectFile(nextFile);
-                if (!isImageFile(nextFile)) setInspectionMode(DEFAULT_INSPECTION_MODE);
-              }}
-              disabled={!session || submitting}
-            />
-          </label>
-          <InspectionModeField
-            value={inspectionMode}
-            disabled={!isImageFile(directFile) || submitting}
-            disabledReason={directFile
-              ? "视频仅使用 YOLO＋VLM 复检。"
-              : "选择图片后可更改检查模式；视频仅使用 YOLO＋VLM 复检。"}
-            onChange={setInspectionMode}
+        {error && activeSessionId ? (
+          <Alert
+            type="error"
+            showIcon
+            message="对话列表加载失败"
+            description={error}
+            action={<Button size="small" onClick={() => void loadSessions()}>重试</Button>}
           />
-          <label className="field">
-            <span id="inspection-instruction-label">检查要求</span>
-            <Input.TextArea
-              aria-labelledby="inspection-instruction-label"
-              value={instruction}
-              onChange={(event) => setInstruction(event.target.value)}
-              maxLength={4_000}
-              rows={4}
-              placeholder="例如：请检查这段管道是否存在破损或堵塞"
-              disabled={!session || submitting}
-            />
-          </label>
-          <div className="form-footer">
-            <small>{instruction.length} / 4000</small>
-            <Button type="primary" htmlType="submit" disabled={!session || submitting}>
-              {submitting ? "正在提交…" : "提交检查"}
-            </Button>
+        ) : null}
+      </div>
+      {navigationOpen ? (
+        <button
+          type="button"
+          className="conversation-nav-backdrop"
+          aria-label="关闭对话导航"
+          onClick={closeNavigation}
+        />
+      ) : null}
+      <main className="conversation-shell__main">
+        {activeSessionId ? (
+          <InspectionConversation
+            key={activeSessionId}
+            pollIntervalMs={pollIntervalMs}
+            sessionId={activeSessionId}
+            onSummary={updateSummary}
+            draftCache={draftCache.current}
+          />
+        ) : loading || creating ? (
+          <div className="conversation-shell__loading" aria-live="polite">
+            <Spin />
+            <span>{creating ? "正在新建对话" : "正在加载对话"}</span>
           </div>
-        </form>
-      </section>
-
-      </Modal>
-    </Layout>
+        ) : error ? (
+          <Alert
+            type="error"
+            showIcon
+            message="无法进入对话"
+            description={error}
+            action={<Button onClick={() => void loadSessions(true)}>重试</Button>}
+          />
+        ) : null}
+      </main>
+    </div>
   );
 }
 
 export default function App(props: AppProps) {
   return (
-    <ConfigProvider locale={zhCN} button={{ autoInsertSpace: false }} theme={{
-      token: { colorPrimary: "#1677ff", colorText: "#172b4d", colorTextSecondary: "#64748b",
-        colorBgLayout: "#f5f6f8", borderRadius: 6, fontSize: 14,
-        fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans SC", "Microsoft YaHei", sans-serif' },
-    }}>
-      <Workbench {...props} />
+    <ConfigProvider
+      locale={zhCN}
+      button={{ autoInsertSpace: false }}
+      theme={{ token: {
+        colorPrimary: "#1677ff",
+        colorText: "#172b4d",
+        colorTextSecondary: "#64748b",
+        colorBgLayout: "#f5f6f8",
+        borderRadius: 6,
+        fontSize: 14,
+        fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans SC", "Microsoft YaHei", sans-serif',
+      } }}
+    >
+      <ConversationShell {...props} />
     </ConfigProvider>
   );
 }

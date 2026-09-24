@@ -47,6 +47,7 @@ REQUIRED_TABLES = (
     "sewer_step_checkpoints",
     "sewer_conversation_turns",
     "sewer_image_supplements",
+    "sewer_image_operations",
     "sewer_video_states",
     "sewer_video_chunks",
     "sewer_human_reviews",

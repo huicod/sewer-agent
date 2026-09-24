@@ -96,6 +96,13 @@ export type SessionRecord = {
   created_at: string;
 };
 
+export type SessionSummary = SessionRecord & {
+  title: string;
+  updated_at: string;
+  task_count: number;
+  turn_count: number;
+};
+
 export type SessionDetail = {
   session: SessionRecord;
   tasks: TaskRecord[];

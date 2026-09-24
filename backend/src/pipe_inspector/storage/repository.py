@@ -12,6 +12,7 @@ from pipe_inspector.contracts.assets import AssetKind, AssetRecord, AssetRef
 from pipe_inspector.contracts.intake import (
     SessionDetail,
     SessionRecord,
+    SessionSummary,
     TaskRecord,
     TaskSubmission,
 )
@@ -110,6 +111,47 @@ class PostgresRepository:
             )
         return record
 
+    def list_sessions(self) -> tuple[SessionSummary, ...]:
+        with self._connect() as connection:
+            rows = connection.execute(
+                sql.SQL("""
+                SELECT s.session_id, s.created_at,
+                    greatest(s.created_at, tasks.updated_at, turns.updated_at) AS updated_at,
+                    left(coalesce(nullif(turns.title, ''), nullif(tasks.title, ''), '新对话'), 120),
+                    tasks.total, turns.total
+                FROM {} s
+                LEFT JOIN LATERAL (
+                    SELECT count(*) AS total,
+                        max((record->'snapshot'->>'updated_at')::timestamptz) AS updated_at,
+                        (array_agg(record->>'instruction' ORDER BY created_at, request_id))[1]
+                            AS title
+                    FROM {} WHERE session_id = s.session_id
+                ) tasks ON true
+                LEFT JOIN LATERAL (
+                    SELECT count(*) AS total,
+                        max((record->>'updated_at')::timestamptz) AS updated_at,
+                        (array_agg(record->>'text' ORDER BY created_at, request_id))[1] AS title
+                    FROM {} WHERE session_id = s.session_id
+                ) turns ON true
+                ORDER BY updated_at DESC, s.session_id
+            """).format(
+                    self._table("sewer_sessions"),
+                    self._table("sewer_tasks"),
+                    self._table("sewer_conversation_turns"),
+                )
+            ).fetchall()
+        return tuple(
+            SessionSummary(
+                session_id=row[0],
+                created_at=row[1],
+                updated_at=row[2],
+                title=row[3],
+                task_count=row[4],
+                turn_count=row[5],
+            )
+            for row in rows
+        )
+
     def get_session(self, session_id: UUID) -> SessionDetail:
         with self._connect() as connection:
             row = connection.execute(
@@ -122,8 +164,7 @@ class PostgresRepository:
                 raise MissingRecord
             task_rows = connection.execute(
                 sql.SQL(
-                    "SELECT record FROM {} WHERE session_id = %s "
-                    "ORDER BY created_at, request_id"
+                    "SELECT record FROM {} WHERE session_id = %s ORDER BY created_at, request_id"
                 ).format(self._table("sewer_tasks")),
                 (session_id,),
             ).fetchall()
@@ -155,9 +196,9 @@ class PostgresRepository:
         if inserted is not None:
             return
         existing = connection.execute(
-            sql.SQL(
-                "SELECT record FROM {} WHERE asset_id = %s AND version = %s"
-            ).format(self._table("sewer_assets")),
+            sql.SQL("SELECT record FROM {} WHERE asset_id = %s AND version = %s").format(
+                self._table("sewer_assets")
+            ),
             (asset.ref.asset_id, asset.ref.version),
         ).fetchone()
         if existing is None or AssetRecord.model_validate(existing[0]) != asset:
@@ -195,9 +236,7 @@ class PostgresRepository:
     def create_task(self, submission: TaskSubmission) -> TaskRecord:
         created_at = datetime.now(timezone.utc)
         snapshot = TaskSnapshot(task_id=uuid4(), updated_at=created_at)
-        candidate = TaskRecord(
-            **submission.model_dump(), created_at=created_at, snapshot=snapshot
-        )
+        candidate = TaskRecord(**submission.model_dump(), created_at=created_at, snapshot=snapshot)
         try:
             with self._connect() as connection:
                 existing_row = connection.execute(
@@ -221,9 +260,9 @@ class PostgresRepository:
                 if session_exists is None:
                     raise MissingRecord
                 asset_row = connection.execute(
-                    sql.SQL(
-                        "SELECT record FROM {} WHERE asset_id = %s AND version = %s"
-                    ).format(self._table("sewer_assets")),
+                    sql.SQL("SELECT record FROM {} WHERE asset_id = %s AND version = %s").format(
+                        self._table("sewer_assets")
+                    ),
                     (submission.input_asset.asset_id, submission.input_asset.version),
                 ).fetchone()
                 if asset_row is None:

@@ -296,15 +296,28 @@ async def test_conversation_re_review_preserves_source_budget_and_report(case, m
                     answer = await send({"request_id": str(uuid4()), "text": "为什么这样判断？"})
                     assert answer["linked_task_id"] == str(child_id)
                     assert ("缺陷" if other else "正常") in answer["reply"]
+                    additional_ids = []
                     for target in (parent.snapshot.task_id, child_id):
-                        limited = await send(
+                        additional = await send(
                             {
                                 "request_id": str(uuid4()),
                                 "task_id": str(target),
                                 "text": "再追加一次复检",
                             }
                         )
-                        assert "次数已用完" in limited["reply"]
+                        additional_id = UUID(additional["linked_task_id"])
+                        additional_ids.append(additional_id)
+                        assert (
+                            repo.get_task(additional_id).parent_task_id
+                            == parent.snapshot.task_id
+                        )
+                        additional_handle = client.get_workflow_handle(
+                            f"inspection:{additional_id}"
+                        )
+                        handles.append(additional_handle)
+                        if (await additional_handle.describe()).status.name == "RUNNING":
+                            await additional_handle.terminate("multi-operation admission verified")
+                    assert len(set(additional_ids)) == 2
                     report = await http.get(f"/api/tasks/{child_id}/report?format=json")
                     assert report.status_code == 200
                     assert report.json()["task"]["parent_task_id"] == str(parent.snapshot.task_id)
@@ -312,7 +325,7 @@ async def test_conversation_re_review_preserves_source_budget_and_report(case, m
                     html = await http.get(f"/api/tasks/{child_id}/report?format=html")
                     assert "原任务报告" in html.text
                     assert (
-                        len(provider_calls) == 2
+                        len(provider_calls) >= 2
                     )  # one rate-limit, one successful full-image audit
                     assert "image_url" in json.dumps(provider_calls[-1])
                     calls = repo.list_calls(child_id)
@@ -323,7 +336,7 @@ async def test_conversation_re_review_preserves_source_budget_and_report(case, m
                     )
                     assert not repo.list_calls(parent.snapshot.task_id)
                     reopened = HumanReviewRepository(settings.database_dsn, schema=repo._schema)
-                    assert len(reopened.get_session(session_id).tasks) == 2
+                    assert len(reopened.get_session(session_id).tasks) == 4
                     assert reopened.get_task(child_id).parent_task_id == parent.snapshot.task_id
     finally:
         await cleanup(handles)

@@ -47,7 +47,7 @@ def conversation_router(repository, starter) -> APIRouter:
 
     @router.get("", response_model=tuple[TurnRecord, ...])
     def list_turns(session_id: UUID):
-        return repository.list_turns(session_id)
+        return repository.list_turns(session_id, limit=None)
 
     @router.get("/{request_id}", response_model=TurnRecord)
     def get_turn(session_id: UUID, request_id: UUID):

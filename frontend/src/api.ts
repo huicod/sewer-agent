@@ -9,6 +9,7 @@ import type {
   ImageEvidenceDetail,
   SessionDetail,
   SessionRecord,
+  SessionSummary,
   TaskRecord,
   TaskSubmission,
   TurnRecord,
@@ -25,6 +26,7 @@ import {
   isImageEvidenceDetail,
   isSessionDetail,
   isSessionRecord,
+  isSessionList,
   isTaskRecord,
   isTurnList,
   isTurnRecord,
@@ -89,6 +91,10 @@ async function requestJson<T>(
 
 export function createSession(): Promise<SessionRecord> {
   return requestJson<SessionRecord>("/api/sessions", isSessionRecord, { method: "POST" });
+}
+
+export function listSessions(): Promise<SessionSummary[]> {
+  return requestJson("/api/sessions", isSessionList);
 }
 
 export function getSession(sessionId: string): Promise<SessionDetail> {

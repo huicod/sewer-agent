@@ -20,6 +20,13 @@ class SessionRecord(ContractModel):
     created_at: AwareDatetime
 
 
+class SessionSummary(SessionRecord):
+    title: str = Field(min_length=1, max_length=120)
+    updated_at: AwareDatetime
+    task_count: int = Field(ge=0)
+    turn_count: int = Field(ge=0)
+
+
 class TaskSubmission(ContractModel):
     request_id: UUID
     session_id: UUID

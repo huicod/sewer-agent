@@ -2,7 +2,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import App from "./App";
+import App from "./test/InspectionWorkbench";
 
 const sessionId = "33333333-3333-4333-8333-333333333333";
 const taskId = "44444444-4444-4444-8444-444444444444";

@@ -236,8 +236,8 @@ class ConversationRepository(InspectionRepository):
             raise MissingRecord
         return TurnRecord.model_validate(row[0])
 
-    def list_turns(self, session_id: UUID, limit: int = 50) -> tuple[TurnRecord, ...]:
-        if not 1 <= limit <= 100:
+    def list_turns(self, session_id: UUID, limit: int | None = 50) -> tuple[TurnRecord, ...]:
+        if limit is not None and not 1 <= limit <= 100:
             raise ValueError("limit must be between 1 and 100")
         with self._connect() as connection:
             session = connection.execute(
@@ -248,20 +248,29 @@ class ConversationRepository(InspectionRepository):
             ).fetchone()
             if session is None:
                 raise MissingRecord
-            rows = connection.execute(
-                sql.SQL(
-                    """
-                    SELECT record FROM (
-                        SELECT request_id, created_at, record FROM {}
-                        WHERE session_id = %s
-                        ORDER BY created_at DESC, request_id DESC
-                        LIMIT %s
-                    ) AS recent
-                    ORDER BY created_at, request_id
-                    """
-                ).format(self._table("sewer_conversation_turns")),
-                (session_id, limit),
-            ).fetchall()
+            if limit is None:
+                rows = connection.execute(
+                    sql.SQL(
+                        "SELECT record FROM {} WHERE session_id = %s "
+                        "ORDER BY created_at, request_id"
+                    ).format(self._table("sewer_conversation_turns")),
+                    (session_id,),
+                ).fetchall()
+            else:
+                rows = connection.execute(
+                    sql.SQL(
+                        """
+                        SELECT record FROM (
+                            SELECT request_id, created_at, record FROM {}
+                            WHERE session_id = %s
+                            ORDER BY created_at DESC, request_id DESC
+                            LIMIT %s
+                        ) AS recent
+                        ORDER BY created_at, request_id
+                        """
+                    ).format(self._table("sewer_conversation_turns")),
+                    (session_id, limit),
+                ).fetchall()
         return tuple(TurnRecord.model_validate(row[0]) for row in rows)
 
     def get_turn_config(self, request_id: UUID) -> dict:
