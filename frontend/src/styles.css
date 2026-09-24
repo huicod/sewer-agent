@@ -308,7 +308,8 @@ h2 { font-size: 18px; } h3 { font-size: 16px; } h4 { font-size: 14px; }
   .review-panel, .video-timeline__content, .enhancement-panel__content, .geometry-panel__content, .image-evidence-panel__content { padding: 12px; }
 }
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after { scroll-behavior: auto !important; transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; }
+  /* Popup alignment measures position synchronously; even a tiny transition returns stale coordinates. */
+  *, *::before, *::after { scroll-behavior: auto !important; transition-duration: 0s !important; animation-duration: 0.01ms !important; }
 }
 
 /* Independent conversations: messages own the main surface; evidence is optional. */

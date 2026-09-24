@@ -1724,3 +1724,30 @@ Added persistent per-conversation more actions and archive view; current drafts/
 ### Next Steps
 
 - User can refresh port 8000 and use each conversation’s more menu. Delivery: .trellis/tasks/archive/2026-09/09-24-conversation-actions/report.md.
+
+
+## Session 55: 修复 reduced-motion 下菜单抖动及屏幕外定位
+
+**Date**: 2026-09-24
+**Task**: 修复 reduced-motion 下菜单抖动及屏幕外定位
+
+### Summary
+
+修正全局 transition-duration 为 0s，真实浏览器先复现失败再验证修复，并更新本地服务。
+
+### Main Changes
+
+- jj unnnlzsz；仅 reduced-motion CSS、浏览器回归和工作记录。回滚父提交 13b29546。
+
+### Git Commits
+
+(No commits - planning session)
+
+### Testing
+
+- [OK] E2E red: viewport ratio 0；green: reduced-motion 桌面/窄屏及普通会话操作共 2 项通过。
+- [OK] 生产构建通过；8000 实际页面 normal/reduced motion 菜单与重命名弹窗通过，无真实数据写入，服务全部 ready。
+
+### Status
+
+[OK] **Completed**

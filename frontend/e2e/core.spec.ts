@@ -77,6 +77,48 @@ test("conversation layout, draft isolation and narrow-screen navigation", async 
   expect(errors).toEqual([]);
 });
 
+test("conversation actions stay in the viewport with reduced motion", async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 }]) {
+    await page.setViewportSize(viewport);
+    await page.goto("/");
+    await expect(page.getByRole("heading", { name: "检查对话", exact: true })).toBeVisible();
+    if (viewport.width <= 900) {
+      await page.getByRole("button", { name: "打开对话导航", exact: true }).click();
+    }
+    const trigger = page.locator(".workspace-task-list > li")
+      .filter({ has: page.getByRole("button", { pressed: true }) })
+      .getByRole("button", { name: /对话操作：/ });
+    const initialBounds = await trigger.boundingBox();
+    await trigger.click();
+    // A popup can be CSS-visible while thousands of pixels outside the viewport.
+    const rename = page.getByRole("menuitem", { name: "重命名", exact: true });
+    await expect(rename).toBeInViewport({ ratio: 1 });
+    await expect(page.getByRole("menuitem", { name: "置顶", exact: true })).toBeInViewport({ ratio: 1 });
+    await expect(page.getByRole("menuitem", { name: "归档", exact: true })).toBeInViewport({ ratio: 1 });
+    const positions = await rename.evaluate(async (node) => {
+      const samples = [];
+      for (let frame = 0; frame < 4; frame += 1) {
+        await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+        const { x, y } = node.getBoundingClientRect();
+        samples.push({ x, y });
+      }
+      return samples;
+    });
+    expect(Math.max(...positions.map(({ x }) => x)) - Math.min(...positions.map(({ x }) => x))).toBeLessThan(1);
+    expect(Math.max(...positions.map(({ y }) => y)) - Math.min(...positions.map(({ y }) => y))).toBeLessThan(1);
+    expect(await trigger.boundingBox()).toEqual(initialBounds);
+    expect(await page.evaluate(() => ({ x: window.scrollX, y: window.scrollY,
+      overflowing: document.documentElement.scrollWidth > window.innerWidth })))
+      .toEqual({ x: 0, y: 0, overflowing: false });
+    await rename.click();
+    const dialog = page.getByRole("dialog", { name: "重命名对话" });
+    await expect(dialog).toBeInViewport({ ratio: 1 });
+    await dialog.getByRole("button", { name: "取消", exact: true }).click();
+    await expect(dialog).not.toBeVisible();
+  }
+});
+
 test("conversation rename, pin, archive and restore survive real storage refresh", async ({
   page,
 }) => {
