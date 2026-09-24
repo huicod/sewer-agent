@@ -96,6 +96,49 @@ async def test_upload_submit_reconnect_and_download_original(api_store):
         assert (await client.get(f"/api/assets/{uuid4()}/versions/1/content")).status_code == 404
 
 
+async def test_patch_session_metadata_and_validation(api_store):
+    from pipe_inspector.storage.human_review import HumanReviewRepository
+
+    settings, _, schema = api_store
+    repo = HumanReviewRepository(settings.database_dsn, schema=schema)
+    repo.initialize()
+    async with AsyncClient(
+        transport=ASGITransport(app=create_app(settings, repository=repo)),
+        base_url="http://test",
+    ) as client:
+        created = (await client.post("/api/sessions")).json()
+        path = f"/api/sessions/{created['session_id']}"
+        updated = await client.patch(
+            path, json={"title": "  项目 A  ", "pinned": True, "archived": True}
+        )
+        assert updated.status_code == 200
+        assert updated.json()["custom_title"] == "项目 A"
+        assert updated.json()["title"] == "项目 A"
+        assert updated.json()["pinned"] is True
+        assert updated.json()["archived"] is True
+
+        partial = await client.patch(path, json={"archived": False})
+        assert partial.json()["custom_title"] == "项目 A"
+        assert partial.json()["pinned"] is True
+        assert partial.json()["archived"] is False
+        cleared = await client.patch(path, json={"title": None})
+        assert cleared.json()["custom_title"] is None
+        assert cleared.json()["title"] == "新对话"
+
+        invalid = (
+            {},
+            {"title": "   "},
+            {"pinned": None},
+            {"pinned": "false"},
+            {"archived": 1},
+            {"unknown": True},
+        )
+        for payload in invalid:
+            assert (await client.patch(path, json=payload)).status_code == 422
+        missing = await client.patch(f"/api/sessions/{uuid4()}", json={"pinned": True})
+        assert missing.status_code == 404
+
+
 async def test_invalid_and_real_video_upload(api_store, tmp_path):
     settings, repo, _ = api_store
     clip = tmp_path / "input.mp4"

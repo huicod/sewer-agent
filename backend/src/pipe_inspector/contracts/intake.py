@@ -25,6 +25,21 @@ class SessionSummary(SessionRecord):
     updated_at: AwareDatetime
     task_count: int = Field(ge=0)
     turn_count: int = Field(ge=0)
+    custom_title: str | None = Field(default=None, min_length=1, max_length=120)
+    pinned: bool = False
+    archived: bool = False
+
+
+class SessionUpdate(ContractModel):
+    title: str | None = Field(default=None, min_length=1, max_length=120)
+    pinned: bool = Field(default=False, strict=True)
+    archived: bool = Field(default=False, strict=True)
+
+    @model_validator(mode="after")
+    def validate_patch(self) -> "SessionUpdate":
+        if not self.model_fields_set:
+            raise ValueError("session update must include at least one field")
+        return self
 
 
 class TaskSubmission(ContractModel):

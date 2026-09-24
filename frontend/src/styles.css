@@ -316,7 +316,17 @@ h2 { font-size: 18px; } h3 { font-size: 16px; } h4 { font-size: 14px; }
 .conversation-shell--navigation { grid-template-columns: 240px minmax(0, 1fr); }
 .conversation-nav { display: none; min-width: 0; overflow: hidden; border-right: 1px solid #e5e7eb; background: #fff; }
 .conversation-nav--open { display: block; }
-.conversation-shell__main { min-width: 0; min-height: 0; overflow: hidden; }
+.conversation-shell__main { min-width: 0; min-height: 0; overflow: hidden; display: flex; flex-direction: column; }
+.conversation-shell__main > .conversation-workbench { flex: 1; height: auto; min-height: 0; }
+.conversation-shell__main > .ant-alert { flex: none; }
+.conversation-segments { margin: 0 0 12px; font-size: 12px; }
+.conversation-item-row { position: relative; }
+.conversation-item-row__main { padding-right: 38px; }
+.conversation-item__actions.ant-btn { position: absolute; top: 8px; right: 4px; width: 30px; height: 30px; color: #64748b; }
+.conversation-item__actions.ant-btn:hover { color: #1677ff; background: #dcecff; }
+.conversation-item__pinned { display: inline-flex; align-items: center; gap: 4px; margin-top: 5px; font-size: 10px; color: #1677ff; }
+.conversation-rename-error { margin-top: 10px; color: #b42318; font-size: 12px; }
+.conversation-workbench > .ant-alert { flex: none; }
 .conversation-shell__navigation-toggle.ant-btn { position: fixed; z-index: 45; top: 16px; left: 12px; }
 .conversation-shell--navigation > .conversation-shell__navigation-toggle { left: 252px; }
 .conversation-nav-backdrop { display: none; }

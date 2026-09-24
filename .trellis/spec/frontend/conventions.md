@@ -21,3 +21,5 @@
 - Comparison selection binds `reference_task_id` into the same immutable pending-turn retry identity; clear it on session/input changes. Read comparison evidence per completed turn on expansion, invalidate stale requests, and separate absent results from errors. Show both frozen sources, coverage and review-status counts; count deltas never establish real temporal changes.
 
 - Unified reports use `/api/sessions/{id}/report?format=json|html` and include every saved turn plus per-asset task/tool evidence. These are current server snapshots, with active work marked non-final; never sum repeated or inherited findings into a new defect total.
+
+- Conversation organization uses server summaries and PATCH metadata. Per-row menus rename, pin/unpin and archive/restore; archive filters the sidebar only, preserving the active keyed controller and draft. Poll-derived summaries must preserve saved custom_title/pinned/archived. Apply mutation results after acknowledgement, retain rename input on failure, and start new conversations in the unarchived unfiltered view.

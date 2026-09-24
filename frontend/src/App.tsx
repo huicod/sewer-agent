@@ -3,10 +3,10 @@ import { Alert, Button, ConfigProvider, Spin } from "antd";
 import zhCN from "antd/locale/zh_CN";
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { createSession, listSessions } from "./api";
+import { createSession, listSessions, updateSession } from "./api";
 import { ConversationSidebar } from "./ConversationSidebar";
 import InspectionConversation, { type ConversationDraft } from "./InspectionConversation";
-import type { SessionRecord, SessionSummary } from "./types";
+import type { SessionRecord, SessionSummary, SessionUpdate } from "./types";
 
 const SESSION_KEY = "pipe-inspector.session-id";
 
@@ -23,7 +23,8 @@ function newSummary(session: SessionRecord): SessionSummary {
 }
 
 function sortSummaries(items: SessionSummary[]): SessionSummary[] {
-  return [...items].sort((left, right) => right.updated_at.localeCompare(left.updated_at));
+  return [...items].sort((left, right) => Number(Boolean(right.pinned)) - Number(Boolean(left.pinned)) ||
+    right.updated_at.localeCompare(left.updated_at));
 }
 
 function errorMessage(error: unknown): string {
@@ -36,6 +37,9 @@ function ConversationShell({ pollIntervalMs }: AppProps) {
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [updatingSessionId, setUpdatingSessionId] = useState<string | undefined>();
+  const updatingRef = useRef(false);
   const mobileViewport = useRef(window.matchMedia("(max-width: 900px)").matches);
   const [navigationOpen, setNavigationOpen] = useState(() => !mobileViewport.current);
   const draftCache = useRef<Map<string, ConversationDraft>>(new Map());
@@ -118,7 +122,9 @@ function ConversationShell({ pollIntervalMs }: AppProps) {
       })
       : null;
     const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
+      if (event.key !== "Escape" || !mobileViewport.current || event.defaultPrevented) return;
+      // Dropdowns and dialogs handle Escape first; keep the drawer underneath open.
+      if (document.querySelector('.ant-dropdown:not(.ant-dropdown-hidden), .ant-modal-wrap:not([style*="display: none"])')) return;
       setNavigationOpen(false);
       navigationToggle.current?.focus();
     };
@@ -130,11 +136,41 @@ function ConversationShell({ pollIntervalMs }: AppProps) {
   }, [navigationOpen]);
 
   const updateSummary = useCallback((summary: SessionSummary) => {
-    setSessions((current) => sortSummaries([
-      summary,
-      ...current.filter((item) => item.session_id !== summary.session_id),
-    ]));
+    setSessions((current) => {
+      const saved = current.find((item) => item.session_id === summary.session_id);
+      return sortSummaries([
+        { ...summary, custom_title: saved?.custom_title ?? null,
+          title: saved?.custom_title ?? summary.title,
+          pinned: saved?.pinned ?? false, archived: saved?.archived ?? false,
+          updated_at: saved && saved.updated_at > summary.updated_at ? saved.updated_at : summary.updated_at },
+        ...current.filter((item) => item.session_id !== summary.session_id),
+      ]);
+    });
   }, []);
+
+  const changeSession = useCallback(async (sessionId: string, update: SessionUpdate) => {
+    if (updatingRef.current) throw new Error("正在保存对话设置，请稍候");
+    updatingRef.current = true;
+    requestSequence.current += 1;
+    setLoading(false);
+    setUpdatingSessionId(sessionId);
+    setActionError(null);
+    try {
+      const saved = await updateSession(sessionId, update);
+      requestSequence.current += 1;
+      setSessions((current) => sortSummaries([
+        saved, ...current.filter((item) => item.session_id !== sessionId),
+      ]));
+    } catch (caught) {
+      setActionError(errorMessage(caught));
+      throw caught;
+    } finally {
+      updatingRef.current = false;
+      setUpdatingSessionId(undefined);
+      setLoading(false);
+    }
+  }, []);
+  const activeSession = sessions.find((item) => item.session_id === activeSessionId);
 
   const closeNavigation = useCallback(() => {
     setNavigationOpen(false);
@@ -166,6 +202,8 @@ function ConversationShell({ pollIntervalMs }: AppProps) {
           onNewConversation={() => void createAndActivate()}
           loading={loading}
           disabled={creating}
+          onUpdateSession={changeSession}
+          updatingSessionId={updatingSessionId}
           onRefresh={() => void loadSessions()}
         />
         {error && activeSessionId ? (
@@ -194,6 +232,14 @@ function ConversationShell({ pollIntervalMs }: AppProps) {
             sessionId={activeSessionId}
             onSummary={updateSummary}
             draftCache={draftCache.current}
+            notice={<>
+              {actionError ? <Alert type="error" showIcon title="对话设置保存失败" description={actionError}
+                action={<Button size="small" onClick={() => setActionError(null)}>关闭提示</Button>} /> : null}
+              {activeSession?.archived ? <Alert type="info" title="此对话已归档" banner
+                action={<Button size="small" disabled={Boolean(updatingSessionId)}
+                  onClick={() => void changeSession(activeSessionId, { archived: false }).catch(() => undefined)}>
+                  恢复对话</Button>} /> : null}
+            </>}
           />
         ) : loading || creating ? (
           <div className="conversation-shell__loading" aria-live="polite">

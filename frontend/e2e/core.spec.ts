@@ -77,6 +77,101 @@ test("conversation layout, draft isolation and narrow-screen navigation", async 
   expect(errors).toEqual([]);
 });
 
+test("conversation rename, pin, archive and restore survive real storage refresh", async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await mkdir(path.join(output, "screenshots"), { recursive: true });
+  await page.goto("/");
+  await expect(page.getByRole("heading", { name: "检查对话", exact: true })).toBeVisible();
+  const sessionId = await page.evaluate(() => localStorage.getItem("pipe-inspector.session-id"));
+  expect(sessionId).toMatch(/^[0-9a-f-]{36}$/);
+
+  const activeItem = () => page.locator(".workspace-task-list > li")
+    .filter({ has: page.getByRole("button", { pressed: true }) });
+
+  await activeItem().getByRole("button", { name: /对话操作：/ }).click();
+  await page.getByRole("menuitem", { name: "重命名" }).click();
+  await expect(page.getByRole("dialog", { name: "重命名对话" })).toBeVisible();
+  await page.getByLabel("对话名称").fill("合成会话管理验收");
+  const renameSaved = page.waitForResponse((response) =>
+    response.request().method() === "PATCH"
+      && new URL(response.url()).pathname === `/api/sessions/${sessionId}`,
+  );
+  await page.getByRole("button", { name: "保存", exact: true }).click();
+  expect((await renameSaved).status()).toBe(200);
+  await expect(page.getByRole("button", { name: "打开对话：合成会话管理验收" })).toBeVisible();
+
+  await activeItem().getByRole("button", { name: "对话操作：合成会话管理验收" }).click();
+  await expect(page.getByRole("menuitem", { name: "置顶", exact: true })).toBeVisible();
+  await page.screenshot({
+    path: path.join(output, "screenshots/08-conversation-actions-menu.png"),
+    fullPage: true,
+  });
+  const pinSaved = page.waitForResponse((response) =>
+    response.request().method() === "PATCH"
+      && new URL(response.url()).pathname === `/api/sessions/${sessionId}`,
+  );
+  await page.getByRole("menuitem", { name: "置顶", exact: true }).click();
+  const pinned = await pinSaved;
+  expect(pinned.status()).toBe(200);
+  expect(await pinned.json()).toMatchObject({
+    session_id: sessionId, custom_title: "合成会话管理验收", pinned: true, archived: false,
+  });
+
+  await page.reload();
+  await expect(page.getByRole("button", { name: "打开对话：合成会话管理验收" })).toBeVisible();
+  await activeItem().getByRole("button", { name: "对话操作：合成会话管理验收" }).click();
+  await expect(page.getByRole("menuitem", { name: "取消置顶" })).toBeVisible();
+  await page.keyboard.press("Escape");
+
+  const draft = "归档前保留的未发送草稿";
+  await page.getByLabel("对话内容", { exact: true }).fill(draft);
+  await activeItem().getByRole("button", { name: "对话操作：合成会话管理验收" }).click();
+  const archiveSaved = page.waitForResponse((response) =>
+    response.request().method() === "PATCH"
+      && new URL(response.url()).pathname === `/api/sessions/${sessionId}`,
+  );
+  await page.getByRole("menuitem", { name: "归档", exact: true }).click();
+  expect((await archiveSaved).status()).toBe(200);
+  await expect(page.getByText("此对话已归档", { exact: true })).toBeVisible();
+  await expect(page.getByLabel("对话内容", { exact: true })).toHaveValue(draft);
+  await page.getByText(/^已归档 /).click();
+  await expect(page.getByRole("button", { name: "打开对话：合成会话管理验收" })).toBeVisible();
+  await expect(page.getByLabel("对话内容", { exact: true })).toHaveValue(draft);
+  await page.screenshot({
+    path: path.join(output, "screenshots/09-conversation-archived.png"),
+    fullPage: true,
+  });
+
+  const restoreSaved = page.waitForResponse((response) =>
+    response.request().method() === "PATCH"
+      && new URL(response.url()).pathname === `/api/sessions/${sessionId}`,
+  );
+  await page.getByRole("button", { name: "恢复对话", exact: true }).click();
+  expect((await restoreSaved).status()).toBe(200);
+  await expect(page.getByText("此对话已归档", { exact: true })).toHaveCount(0);
+  await page.getByText(/^对话 /).click();
+  await expect(page.getByRole("button", { name: "打开对话：合成会话管理验收" })).toBeVisible();
+  await expect(page.getByLabel("对话内容", { exact: true })).toHaveValue(draft);
+
+  const listedResponse = await page.request.get("/api/sessions");
+  expect(listedResponse.status()).toBe(200);
+  const listed = await listedResponse.json();
+  expect(listed.find((item: { session_id: string }) => item.session_id === sessionId)).toMatchObject({
+    custom_title: "合成会话管理验收", pinned: true, archived: false,
+    task_count: 0, turn_count: 0,
+  });
+  const detailResponse = await page.request.get(`/api/sessions/${sessionId}`);
+  expect(detailResponse.status()).toBe(200);
+  expect((await detailResponse.json()).tasks).toEqual([]);
+  const reportResponse = await page.request.get(`/api/sessions/${sessionId}/report?format=json`);
+  expect(reportResponse.status()).toBe(200);
+  expect((await reportResponse.json()).session.session_id).toBe(sessionId);
+  expect(errors).toEqual([]);
+});
+
 async function inspect(page: Page, file: string, instruction: string): Promise<string> {
   await openOptions(page);
   await page.getByLabel("对话附件（可选）").setInputFiles(path.join(output, "service/fixtures", file));

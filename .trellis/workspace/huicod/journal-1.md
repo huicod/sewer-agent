@@ -1692,3 +1692,35 @@ Delivered conversation-first Ant Design workbench; existing server conversations
 ### Next Steps
 
 - User manual acceptance on example images; actual model/geometry quality was not inferred from synthetic tests. Delivery record: .trellis/tasks/archive/2026-09/09-24-independent-conversations/report.md.
+
+
+## Session 54: Conversation archive, rename and pin controls
+
+**Date**: 2026-09-24
+**Task**: Conversation archive, rename and pin controls
+
+### Summary
+
+Added persistent per-conversation more actions and archive view; current drafts/history preserved; local app updated and ready. jj zqxoqylw, parent fc8a046b.
+
+### Main Changes
+
+- Sidebar AntD menus, rename/pin/archive/restore, archive filtering and server PATCH metadata with additive storage initialization.
+- Protect saved metadata from task polling; preserve active chat/draft on archive; fix Escape menu/navigation interaction.
+
+### Git Commits
+
+(No commits - planning session)
+
+### Testing
+
+- [OK] Frontend full 187 passed, final sidebar/shell 19 passed; backend relevant 35 passed and isolated PG/API 6 passed; Ruff/typecheck/build passed.
+- [OK] Synthetic browser: four existing scenarios passed plus new management case passed; eight runtime HTTP reads 200 and six pre-existing conversations preserved.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- User can refresh port 8000 and use each conversation’s more menu. Delivery: .trellis/tasks/archive/2026-09/09-24-conversation-actions/report.md.

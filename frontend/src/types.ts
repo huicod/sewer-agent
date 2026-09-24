@@ -101,7 +101,12 @@ export type SessionSummary = SessionRecord & {
   updated_at: string;
   task_count: number;
   turn_count: number;
+  custom_title?: string | null;
+  pinned?: boolean;
+  archived?: boolean;
 };
+
+export type SessionUpdate = { title?: string | null; pinned?: boolean; archived?: boolean };
 
 export type SessionDetail = {
   session: SessionRecord;

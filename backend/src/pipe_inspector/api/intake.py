@@ -14,6 +14,7 @@ from pipe_inspector.contracts.intake import (
     SessionDetail,
     SessionRecord,
     SessionSummary,
+    SessionUpdate,
     TaskRecord,
     TaskSubmission,
 )
@@ -35,6 +36,10 @@ def intake_router(repo: PostgresRepository, media: MediaStore) -> APIRouter:
     @router.get("/sessions/{session_id}", response_model=SessionDetail)
     def get_session(session_id: UUID):
         return repo.get_session(session_id)
+
+    @router.patch("/sessions/{session_id}", response_model=SessionSummary)
+    def update_session(session_id: UUID, update: SessionUpdate):
+        return repo.update_session(session_id, update)
 
     @router.post("/assets", response_model=AssetRecord, status_code=201)
     async def upload(request: Request):

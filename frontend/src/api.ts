@@ -10,6 +10,7 @@ import type {
   SessionDetail,
   SessionRecord,
   SessionSummary,
+  SessionUpdate,
   TaskRecord,
   TaskSubmission,
   TurnRecord,
@@ -27,6 +28,7 @@ import {
   isSessionDetail,
   isSessionRecord,
   isSessionList,
+  isSessionSummary,
   isTaskRecord,
   isTurnList,
   isTurnRecord,
@@ -95,6 +97,12 @@ export function createSession(): Promise<SessionRecord> {
 
 export function listSessions(): Promise<SessionSummary[]> {
   return requestJson("/api/sessions", isSessionList);
+}
+
+export function updateSession(sessionId: string, update: SessionUpdate): Promise<SessionSummary> {
+  return requestJson(`/api/sessions/${encodeURIComponent(sessionId)}`, isSessionSummary, {
+    method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify(update),
+  });
 }
 
 export function getSession(sessionId: string): Promise<SessionDetail> {

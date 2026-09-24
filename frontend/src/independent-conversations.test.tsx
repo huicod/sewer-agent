@@ -1,4 +1,5 @@
 import { render, screen, waitFor } from "@testing-library/react";
+import type { ReactNode } from "react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -28,13 +29,15 @@ const summaries = [
 ];
 
 vi.mock("./InspectionConversation", () => ({
-  default: ({ sessionId, onSummary, onToggleNavigation, navigationOpen }: {
+  default: ({ sessionId, onSummary, onToggleNavigation, navigationOpen, notice }: {
     sessionId?: string;
     onSummary?: (summary: (typeof summaries)[number]) => void;
     onToggleNavigation?: () => void;
     navigationOpen?: boolean;
+    notice?: ReactNode;
   }) => (
     <div>
+      {notice}
       <span data-testid="active-conversation">{sessionId}</span>
       <span data-testid="navigation-state">{String(navigationOpen)}</span>
       <button type="button" onClick={onToggleNavigation}>子组件打开导航</button>
@@ -72,6 +75,50 @@ afterEach(() => {
 });
 
 describe("independent conversation shell", () => {
+  it.each([false, true])("keeps navigation open when Escape dismisses a conversation menu (mobile: %s)", async (mobile) => {
+    setMobileViewport(mobile);
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(json(summaries)));
+    const user = userEvent.setup();
+    render(<App />);
+    await screen.findByTestId("active-conversation");
+    if (mobile) await user.click(screen.getByRole("button", { name: "打开对话导航" }));
+    await user.click(await screen.findByRole("button", { name: "对话操作：第一段检查" }));
+    await screen.findByRole("menuitem", { name: "重命名" });
+    await user.keyboard("{Escape}");
+    expect(screen.getByRole("button", { name: "关闭对话导航", expanded: true })).toBeTruthy();
+  });
+
+  it("keeps saved names and organization metadata when task polling updates a summary", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(json([
+      { ...summaries[0], title: "自定义名称", custom_title: "自定义名称", pinned: true, archived: false },
+      summaries[1],
+    ])));
+    const user = userEvent.setup();
+    render(<App />);
+    await screen.findByRole("button", { name: "打开对话：自定义名称" });
+    await user.click(screen.getByRole("button", { name: "更新摘要" }));
+    expect(screen.getByRole("button", { name: "打开对话：自定义名称" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "打开对话：刚刚更新" })).toBeNull();
+  });
+
+  it("keeps the archived conversation open and restores it through its own ID", async () => {
+    localStorage.setItem("pipe-inspector.session-id", firstId);
+    const archived = { ...summaries[0], archived: true, pinned: true };
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(json([archived, summaries[1]]))
+      .mockResolvedValueOnce(json({ ...archived, archived: false }));
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+    render(<App />);
+    await screen.findByText("此对话已归档");
+    expect(screen.getByTestId("active-conversation").textContent).toBe(firstId);
+    await user.click(screen.getByRole("button", { name: "恢复对话" }));
+    await waitFor(() => expect(screen.queryByText("此对话已归档")).toBeNull());
+    expect(screen.getByTestId("active-conversation").textContent).toBe(firstId);
+    expect(fetchMock.mock.calls[1][0]).toBe(`/api/sessions/${firstId}`);
+    expect(JSON.parse(fetchMock.mock.calls[1][1].body)).toEqual({ archived: false });
+  });
+
   it("restores a saved session, switches identity, and persists the selection", async () => {
     localStorage.setItem("pipe-inspector.session-id", firstId);
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {

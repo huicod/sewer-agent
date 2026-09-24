@@ -5,7 +5,7 @@ import { ConversationTaskHistory } from "./ConversationTaskHistory";
 import { TaskCard } from "./TaskCard";
 import { GuidedRestartAction } from "./GuidedRestartAction";
 import { useAssistantResize } from "./useAssistantResize";
-import { type CSSProperties, type FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { type CSSProperties, type FormEvent, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 
 import {
   ApiError,
@@ -77,6 +77,7 @@ type AppProps = {
   onToggleNavigation?: () => void;
   navigationOpen?: boolean;
   initialDetailsOpen?: boolean;
+  notice?: ReactNode;
 };
 
 export type ConversationDraft = {
@@ -228,7 +229,7 @@ function TurnCard({ turn, sessionId, linkedTask, resending, onResend, onViewTask
 }
 
 function Workbench({ pollIntervalMs = 2_000, sessionId, onSummary, draftCache,
-  onToggleNavigation, navigationOpen, initialDetailsOpen = false }: AppProps) {
+  onToggleNavigation, navigationOpen, initialDetailsOpen = false, notice }: AppProps) {
   const cached = useRef(sessionId ? draftCache?.get(sessionId) : undefined).current;
   const [focusedTaskId, setFocusedTaskId] = useState(cached?.focusedId ?? "");
   const [intakeOpen, setIntakeOpen] = useState(false);
@@ -737,6 +738,7 @@ function Workbench({ pollIntervalMs = 2_000, sessionId, onSummary, draftCache,
             onClick={() => setDetailsOpen((value) => !value)}>{detailsOpen ? "收起详情" : `任务与证据 ${tasks.length}`}</Button>
         </div>
       </Layout.Header>
+      {notice}
       {error && !intakeOpen ? <div className="workspace-error" role="alert"><InfoCircleOutlined />{error}
         {!session && !loading && !sessionId ? <Button onClick={() => void startNewSession()}>新建会话</Button> : null}
       </div> : null}

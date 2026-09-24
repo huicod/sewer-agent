@@ -124,11 +124,16 @@ export function isSessionRecord(value: unknown): value is SessionRecord {
   return isRecord(value) && isUuid(value.session_id) && isTimestamp(value.created_at);
 }
 
+export function isSessionSummary(value: unknown): value is SessionSummary {
+  return isRecord(value) && isNonEmptyString(value.title) && isTimestamp(value.updated_at) &&
+    isNonNegativeInteger(value.task_count) && isNonNegativeInteger(value.turn_count) &&
+    (value.custom_title === undefined || value.custom_title === null || isNonEmptyString(value.custom_title)) &&
+    (value.pinned === undefined || typeof value.pinned === "boolean") &&
+    (value.archived === undefined || typeof value.archived === "boolean") && isSessionRecord(value);
+}
+
 export function isSessionList(value: unknown): value is SessionSummary[] {
-  return Array.isArray(value) && value.every((item: unknown) => isRecord(item) &&
-    isNonEmptyString(item.title) && isTimestamp(item.updated_at) &&
-    isNonNegativeInteger(item.task_count) && isNonNegativeInteger(item.turn_count) &&
-    isSessionRecord(item));
+  return Array.isArray(value) && value.every(isSessionSummary);
 }
 
 function isNullableNonNegativeNumber(value: unknown): value is number | null {

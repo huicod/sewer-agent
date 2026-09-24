@@ -13,6 +13,7 @@ from pipe_inspector.contracts.intake import (
     SessionDetail,
     SessionRecord,
     SessionSummary,
+    SessionUpdate,
     TaskRecord,
     TaskSubmission,
 )
@@ -59,8 +60,23 @@ class PostgresRepository:
                     """
                     CREATE TABLE IF NOT EXISTS {} (
                         session_id uuid PRIMARY KEY,
-                        created_at timestamptz NOT NULL
+                        created_at timestamptz NOT NULL,
+                        custom_title text,
+                        pinned boolean NOT NULL DEFAULT false,
+                        archived boolean NOT NULL DEFAULT false,
+                        metadata_updated_at timestamptz
                     )
+                    """
+                ).format(sessions)
+            )
+            connection.execute(
+                sql.SQL(
+                    """
+                    ALTER TABLE {}
+                        ADD COLUMN IF NOT EXISTS custom_title text,
+                        ADD COLUMN IF NOT EXISTS pinned boolean NOT NULL DEFAULT false,
+                        ADD COLUMN IF NOT EXISTS archived boolean NOT NULL DEFAULT false,
+                        ADD COLUMN IF NOT EXISTS metadata_updated_at timestamptz
                     """
                 ).format(sessions)
             )
@@ -113,12 +129,21 @@ class PostgresRepository:
 
     def list_sessions(self) -> tuple[SessionSummary, ...]:
         with self._connect() as connection:
-            rows = connection.execute(
-                sql.SQL("""
+            rows = connection.execute(self._session_summary_query()).fetchall()
+        return tuple(self._session_summary(row) for row in rows)
+
+    def _session_summary_query(self, *, by_id: bool = False) -> sql.Composed:
+        where = sql.SQL("WHERE s.session_id = %s") if by_id else sql.SQL("")
+        return sql.SQL("""
                 SELECT s.session_id, s.created_at,
-                    greatest(s.created_at, tasks.updated_at, turns.updated_at) AS updated_at,
-                    left(coalesce(nullif(turns.title, ''), nullif(tasks.title, ''), '新对话'), 120),
-                    tasks.total, turns.total
+                    greatest(
+                        s.created_at, s.metadata_updated_at, tasks.updated_at, turns.updated_at
+                    ) AS updated_at,
+                    left(coalesce(
+                        nullif(s.custom_title, ''), nullif(turns.title, ''),
+                        nullif(tasks.title, ''), '新对话'
+                    ), 120),
+                    tasks.total, turns.total, s.custom_title, s.pinned, s.archived
                 FROM {} s
                 LEFT JOIN LATERAL (
                     SELECT count(*) AS total,
@@ -133,24 +158,57 @@ class PostgresRepository:
                         (array_agg(record->>'text' ORDER BY created_at, request_id))[1] AS title
                     FROM {} WHERE session_id = s.session_id
                 ) turns ON true
-                ORDER BY updated_at DESC, s.session_id
+                {}
+                ORDER BY s.pinned DESC, updated_at DESC, s.session_id
             """).format(
-                    self._table("sewer_sessions"),
-                    self._table("sewer_tasks"),
-                    self._table("sewer_conversation_turns"),
-                )
-            ).fetchall()
-        return tuple(
-            SessionSummary(
-                session_id=row[0],
-                created_at=row[1],
-                updated_at=row[2],
-                title=row[3],
-                task_count=row[4],
-                turn_count=row[5],
-            )
-            for row in rows
+            self._table("sewer_sessions"),
+            self._table("sewer_tasks"),
+            self._table("sewer_conversation_turns"),
+            where,
         )
+
+    @staticmethod
+    def _session_summary(row) -> SessionSummary:
+        return SessionSummary(
+            session_id=row[0],
+            created_at=row[1],
+            updated_at=row[2],
+            title=row[3],
+            task_count=row[4],
+            turn_count=row[5],
+            custom_title=row[6],
+            pinned=row[7],
+            archived=row[8],
+        )
+
+    def update_session(self, session_id: UUID, update: SessionUpdate) -> SessionSummary:
+        columns = {
+            "title": "custom_title",
+            "pinned": "pinned",
+            "archived": "archived",
+        }
+        requested_fields = tuple(field for field in columns if field in update.model_fields_set)
+        assignments = [
+            sql.SQL("{} = %s").format(sql.Identifier(columns[field])) for field in requested_fields
+        ]
+        values = [getattr(update, field) for field in requested_fields]
+        assignments.append(sql.SQL("metadata_updated_at = %s"))
+        values.extend((datetime.now(timezone.utc), session_id))
+        with self._connect() as connection:
+            updated = connection.execute(
+                sql.SQL("UPDATE {} SET {} WHERE session_id = %s RETURNING session_id").format(
+                    self._table("sewer_sessions"), sql.SQL(", ").join(assignments)
+                ),
+                values,
+            ).fetchone()
+            if updated is None:
+                raise MissingRecord
+            row = connection.execute(
+                self._session_summary_query(by_id=True), (session_id,)
+            ).fetchone()
+        if row is None:
+            raise MissingRecord
+        return self._session_summary(row)
 
     def get_session(self, session_id: UUID) -> SessionDetail:
         with self._connect() as connection:
