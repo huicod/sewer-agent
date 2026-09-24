@@ -1,0 +1,167 @@
+{
+  "purpose": "Manual UI/workflow exploration; not a model-accuracy benchmark",
+  "selection_note": "Six samples: one each for PL, BX, FS, AJ, BLOCK, and target-empty OTHER. Six distinct source groups, visually inspected. Deliberate diversity selection; source training overlap is possible. Dataset annotations are references, not guaranteed current-model outputs or human review decisions. Empty target annotations for sample 06 mean annotated non-target defects, not verified normality. Existing OSD and blue masking blocks belong to source files. No resizing, crop, enhancement, synthetic imagery or inference performed when preparing this pack.",
+  "samples": [
+    {
+      "id": "01_wall_trace",
+      "description": "细线裂纹与局部纹理",
+      "image": "01_wall_trace/image.jpg",
+      "prompt": "01_wall_trace/prompt.md",
+      "dataset": "Sewer2403 user-supplied source archive",
+      "source_sample_id": "sewer2403-4172_png.rf.fccf3ffaa2743770e3ebdd7199ebf7cd",
+      "source_group_id": "source:4172",
+      "source_image": "var/datasets/sewer2403_source/extracted/市政下水雨污管道缺陷数据2403/images/4172_png.rf.fccf3ffaa2743770e3ebdd7199ebf7cd.jpg",
+      "source_manifest": "var/evaluations/2026-09-11/sewer2403-paired-manifest.json",
+      "width": 640,
+      "height": 640,
+      "dataset_annotation_reference": [
+        {
+          "label": "PL",
+          "bbox_xyxy": [
+            274.0,
+            113.0,
+            341.0,
+            437.0
+          ]
+        }
+      ],
+      "optional_geometry_roi_xyxy": [
+        245,
+        104,
+        348,
+        436
+      ],
+      "geometry_roi_source": "var/evaluations/2026-09-11-guided/paired/gallery/sample-0003/record.json : historical original detector box rounded to pixels; prompt region only, not a mask ground truth",
+      "modified": false
+    },
+    {
+      "id": "02_pipe_shape",
+      "description": "疑似变形、重复环纹与水滴",
+      "image": "02_pipe_shape/image.jpg",
+      "prompt": "02_pipe_shape/prompt.md",
+      "dataset": "Sewer2403 user-supplied source archive",
+      "source_sample_id": "sewer2403-1d36512acba6cc35dba6ffd69fe8443d",
+      "source_group_id": "source:1d36512acba6cc35dba6ffd69fe8443d",
+      "source_image": "var/datasets/sewer2403_source/extracted/市政下水雨污管道缺陷数据2403/images/1d36512acba6cc35dba6ffd69fe8443d.jpg",
+      "source_manifest": "var/evaluations/2026-09-11/sewer2403-paired-manifest.json",
+      "width": 1920,
+      "height": 1080,
+      "dataset_annotation_reference": [
+        {
+          "label": "BX",
+          "bbox_xyxy": [
+            328.0,
+            179.0,
+            1436.0,
+            1025.0
+          ]
+        }
+      ],
+      "optional_geometry_roi_xyxy": null,
+      "geometry_roi_source": null,
+      "modified": false
+    },
+    {
+      "id": "03_wall_texture",
+      "description": "低对比度侧壁纹理与腐蚀候选",
+      "image": "03_wall_texture/image.jpg",
+      "prompt": "03_wall_texture/prompt.md",
+      "dataset": "Sewer2403 user-supplied source archive",
+      "source_sample_id": "sewer2403-f71029ab1dfc22049a4a8ea1222f3876",
+      "source_group_id": "source:f71029ab1dfc22049a4a8ea1222f3876",
+      "source_image": "var/datasets/sewer2403_source/extracted/市政下水雨污管道缺陷数据2403/images/f71029ab1dfc22049a4a8ea1222f3876.jpg",
+      "source_manifest": "var/evaluations/2026-09-11/sewer2403-paired-manifest.json",
+      "width": 1920,
+      "height": 1080,
+      "dataset_annotation_reference": [
+        {
+          "label": "FS",
+          "bbox_xyxy": [
+            1354.0,
+            271.0,
+            1427.0,
+            567.0
+          ]
+        }
+      ],
+      "optional_geometry_roi_xyxy": null,
+      "geometry_roi_source": null,
+      "modified": false
+    },
+    {
+      "id": "04_branch_opening",
+      "description": "支管接入口与边界",
+      "image": "04_branch_opening/image.jpg",
+      "prompt": "04_branch_opening/prompt.md",
+      "dataset": "Sewer2403 user-supplied source archive",
+      "source_sample_id": "sewer2403-Junction1305_jpg.rf.f1ec89aab15efa9c1bf00ae1eba6ead2",
+      "source_group_id": "source:junction1305",
+      "source_image": "var/datasets/sewer2403_source/extracted/市政下水雨污管道缺陷数据2403/images/Junction1305_jpg.rf.f1ec89aab15efa9c1bf00ae1eba6ead2.jpg",
+      "source_manifest": "var/evaluations/2026-09-11/sewer2403-paired-manifest.json",
+      "width": 720,
+      "height": 576,
+      "dataset_annotation_reference": [
+        {
+          "label": "AJ",
+          "bbox_xyxy": [
+            268.0,
+            73.0,
+            544.0,
+            354.0
+          ]
+        }
+      ],
+      "optional_geometry_roi_xyxy": null,
+      "geometry_roi_source": null,
+      "modified": false
+    },
+    {
+      "id": "05_dark_obstruction",
+      "description": "暗光、遮挡块与堵塞候选",
+      "image": "05_dark_obstruction/image.jpg",
+      "prompt": "05_dark_obstruction/prompt.md",
+      "dataset": "Sewer2403 user-supplied source archive",
+      "source_sample_id": "sewer2403-DS_000252_png_jpg.rf.45281a04d7e8b0202a06d36401759c23",
+      "source_group_id": "source:ds_000252_png",
+      "source_image": "var/datasets/sewer2403_source/extracted/市政下水雨污管道缺陷数据2403/images/DS_000252_png_jpg.rf.45281a04d7e8b0202a06d36401759c23.jpg",
+      "source_manifest": "var/evaluations/2026-09-11/sewer2403-paired-manifest.json",
+      "width": 640,
+      "height": 640,
+      "dataset_annotation_reference": [
+        {
+          "label": "BLOCK",
+          "bbox_xyxy": [
+            181.0,
+            275.0,
+            532.0,
+            581.0
+          ]
+        }
+      ],
+      "optional_geometry_roi_xyxy": null,
+      "geometry_roi_source": null,
+      "modified": false
+    },
+    {
+      "id": "06_blur_reflection",
+      "description": "模糊、水面反光与非五类标注",
+      "image": "06_blur_reflection/image.jpg",
+      "prompt": "06_blur_reflection/prompt.md",
+      "dataset": "Sewer2403 user-supplied source archive",
+      "source_sample_id": "sewer2403-e49a6609ec14c20a3b3e8817d19932b7",
+      "source_group_id": "source:e49a6609ec14c20a3b3e8817d19932b7",
+      "source_image": "var/datasets/sewer2403_source/extracted/市政下水雨污管道缺陷数据2403/images/e49a6609ec14c20a3b3e8817d19932b7.jpg",
+      "source_manifest": "var/evaluations/2026-09-11/sewer2403-paired-manifest.json",
+      "width": 1920,
+      "height": 1080,
+      "dataset_annotation_reference": [],
+      "optional_geometry_roi_xyxy": null,
+      "geometry_roi_source": null,
+      "modified": false
+    }
+  ],
+  "source_manifest_provenance": {
+    "applies_to": "Original 36-sample experiment manifest, not the six-image pack",
+    "text": "Seed 20260911 GT-only selection before v2 changes, excluding all 12 previous pilot source groups. Six each PL/BX/FS/AJ/BLOCK/target-empty OTHER. BLOCK: 2 CJ, 2 JG, 2 ZW. One image per filename-derived group; no recovered original training split and possible training overlap. Target-empty is annotated OTHER, not normal. No prediction-based selection."
+  }
+}

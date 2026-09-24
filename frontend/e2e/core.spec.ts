@@ -12,6 +12,18 @@ test("workbench layout, new inspection dialog and narrow-screen navigation", asy
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "从一份现场影像开始" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "检查助手", exact: true })).toBeVisible();
+  const separator = page.getByRole("separator", { name: "调整检查助手宽度" });
+  const handle = (await separator.boundingBox())!;
+  const originalWidth = await page.locator(".assistant-workspace").evaluate((node) => node.clientWidth);
+  await page.mouse.move(handle.x + handle.width / 2, handle.y + 80);
+  await page.mouse.down();
+  await page.mouse.move(handle.x - 140, handle.y + 80);
+  await page.mouse.up();
+  await expect.poll(() => page.locator(".assistant-workspace").evaluate((node) => node.clientWidth))
+    .toBeGreaterThan(originalWidth + 130);
+  const resizedWidth = await separator.getAttribute("aria-valuenow");
+  await page.reload();
+  await expect(separator).toHaveAttribute("aria-valuenow", resizedWidth!);
   await page.screenshot({ path: path.join(output, "screenshots/workbench-desktop.png"), fullPage: true });
   await page.getByRole("button", { name: "新建检查", exact: true }).click();
   await expect(page.getByRole("dialog")).toBeVisible();
@@ -23,6 +35,7 @@ test("workbench layout, new inspection dialog and narrow-screen navigation", asy
   await expect(page.getByRole("heading", { name: "检查助手", exact: true })).not.toBeVisible();
   await page.getByRole("button", { name: "显示检查助手" }).click();
   await page.setViewportSize({ width: 390, height: 844 });
+  await expect(separator).not.toBeVisible();
   await expect(page.getByRole("button", { name: "打开任务导航" })).toBeVisible();
   await expect(page.getByRole("button", { name: "新建检查", exact: true })).not.toBeVisible();
   await page.getByRole("button", { name: "打开任务导航" }).click();
@@ -89,6 +102,79 @@ async function review(page: Page, taskId: string): Promise<void> {
   await writeFile(path.join(output, `${taskId}-report.json`), JSON.stringify(report, null, 2));
 }
 
+test("pure YOLO geometry draft is preserved through guided VLM recovery", async ({ page }) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await mkdir(path.join(output, "screenshots"), { recursive: true });
+  await page.goto("/");
+  await expect(page.getByRole("heading", { name: "检查助手", exact: true })).toBeVisible();
+
+  await page.getByLabel("对话附件（可选）").setInputFiles(
+    path.join(output, "service/fixtures/image.png"),
+  );
+  await page.getByLabel("检查模式", { exact: true }).selectOption("yolo_only");
+  await page.getByLabel("对话内容", { exact: true }).fill(
+    "浏览器验收纯 YOLO 图片：请检查五类缺陷",
+  );
+  const sourceAdmission = page.waitForResponse((response) =>
+    /\/api\/sessions\/[^/]+\/turns$/.test(response.url())
+      && response.request().method() === "POST",
+  );
+  await page.getByRole("button", { name: "发送消息", exact: true }).click();
+  const sourceResponse = await sourceAdmission;
+  expect(sourceResponse.status()).toBe(202);
+  const sourceTurn = await sourceResponse.json();
+  let sourceTaskId = "";
+  await expect.poll(async () => {
+    const saved = await (await page.request.get(
+      `/api/sessions/${sourceTurn.session_id}/turns/${sourceTurn.request_id}`,
+    )).json();
+    expect(saved.status).not.toBe("failed");
+    sourceTaskId = saved.linked_task_id ?? "";
+    return saved.status;
+  }).toBe("completed");
+  expect(sourceTaskId).toMatch(/^[0-9a-f-]{36}$/);
+  await expect.poll(async () => {
+    const saved = await (await page.request.get(`/api/tasks/${sourceTaskId}`)).json();
+    return saved.snapshot.runtime_status;
+  }).toBe("completed");
+  await expect(page.locator(".assistant-context code")).toHaveText(sourceTaskId.slice(0, 8));
+
+  const geometryDraft = "对原图像素框 [1, 1, 8, 8] 做分割和相对量化";
+  await page.getByLabel("对话内容", { exact: true }).fill(geometryDraft);
+  const newAdmission = page.waitForResponse((response) =>
+    new URL(response.url()).pathname === "/api/tasks"
+      && response.request().method() === "POST",
+  );
+  await page.getByRole("button", { name: "用原图新建复检", exact: true }).click();
+  const newResponse = await newAdmission;
+  expect(newResponse.status()).toBe(201);
+  const newTask = await newResponse.json();
+  const newTaskId = newTask.snapshot.task_id as string;
+  expect(newTaskId).not.toBe(sourceTaskId);
+
+  const sourceStored = await (await page.request.get(`/api/tasks/${sourceTaskId}`)).json();
+  const newStored = await (await page.request.get(`/api/tasks/${newTaskId}`)).json();
+  expect(sourceStored.inspection_mode).toBe("yolo_only");
+  expect(newStored.inspection_mode).toBe("yolo_vlm");
+  expect(newStored.input_asset).toEqual(sourceStored.input_asset);
+  expect(newStored.parent_task_id ?? null).toBeNull();
+  await expect(page.locator(".assistant-context code")).toHaveText(newTaskId.slice(0, 8));
+  await expect(page.getByLabel("对话内容", { exact: true })).toHaveValue(geometryDraft);
+  await expect(page.getByRole("button", { name: "发送消息", exact: true })).toBeDisabled();
+  await expect(page.getByText(/当前草稿已保留/)).toBeVisible();
+
+  await review(page, newTaskId);
+  await expect(page.getByRole("button", { name: "发送消息", exact: true })).toBeEnabled();
+  await expect(page.getByLabel("对话内容", { exact: true })).toHaveValue(geometryDraft);
+  await expect(page.locator(".assistant-context code")).toHaveText(newTaskId.slice(0, 8));
+  await page.screenshot({
+    path: path.join(output, "screenshots/07-guided-recovery.png"),
+    fullPage: true,
+  });
+  expect(errors).toEqual([]);
+});
+
 test("image/video dialogue, durable review, evidence reports and saved comparison", async ({ page }) => {
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
@@ -151,6 +237,7 @@ test("image/video dialogue, durable review, evidence reports and saved compariso
 
   const second = await inspect(page, "image.png", "浏览器验收图片二：请检查并复核");
   await review(page, second);
+  await page.getByText("更换任务或对比结果", { exact: true }).click();
   await page.getByLabel("关联已有任务（可选）").selectOption(second);
   await page.getByLabel("对比参考任务（可选）").selectOption(first);
   await page.getByLabel("对话内容", { exact: true }).fill("比较这两份已保存检查结果并导出报告");

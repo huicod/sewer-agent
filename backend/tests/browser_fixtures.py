@@ -208,6 +208,7 @@ class BrowserInspectionStarter(InspectionStarter):
                     detector=self.detector,
                     force_review=force_review,
                     plan=plan,
+                    inspection_mode=record.inspection_mode,
                 )
             )
             try:

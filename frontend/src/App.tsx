@@ -3,7 +3,9 @@ import zhCN from "antd/locale/zh_CN";
 import { FileSearchOutlined, InfoCircleOutlined, MenuOutlined, MessageOutlined, UploadOutlined } from "@ant-design/icons";
 import { WorkspaceSidebar } from "./WorkspaceSidebar";
 import { TaskCard } from "./TaskCard";
-import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { GuidedRestartAction } from "./GuidedRestartAction";
+import { useAssistantResize } from "./useAssistantResize";
+import { type CSSProperties, type FormEvent, useEffect, useMemo, useRef, useState } from "react";
 
 import {
   ApiError,
@@ -189,6 +191,7 @@ function TurnCard({ turn, sessionId, linkedTask, resending, onResend }: TurnCard
         {turn.status === "completed" && turn.linked_task_id ? (
           <p className="linked-status">{linkedTaskStatus(linkedTask)}</p>
         ) : null}
+        {turn.task_id || turn.linked_task_id ? <p className="turn-context">任务 {(turn.task_id ?? turn.linked_task_id)?.slice(0, 8)}</p> : null}
         {turn.status === "completed" ? (
           <ComparisonPanel sessionId={sessionId} requestId={turn.request_id} />
         ) : null}
@@ -213,6 +216,9 @@ function Workbench({ pollIntervalMs = 2_000 }: AppProps) {
   const [conversationInspectionMode, setConversationInspectionMode] =
     useState<InspectionMode>(DEFAULT_INSPECTION_MODE);
   const [selectedTaskId, setSelectedTaskId] = useState("");
+  const [followFocusedTask, setFollowFocusedTask] = useState(true);
+  const [restartingGuided, setRestartingGuided] = useState(false);
+  const [waitingGuidedTaskId, setWaitingGuidedTaskId] = useState("");
   const [selectedReferenceTaskId, setSelectedReferenceTaskId] = useState("");
   const [selectedVideoFrame, setSelectedVideoFrame] = useState<SelectedVideoFrame | null>(null);
   const [loading, setLoading] = useState(true);
@@ -229,6 +235,41 @@ function Workbench({ pollIntervalMs = 2_000 }: AppProps) {
   const pendingSubmission = useRef<PendingSubmission | null>(null);
   const pendingTurn = useRef<PendingTurn | null>(null);
   const navigationToggle = useRef<HTMLButtonElement>(null);
+  const workspaceContent = useRef<HTMLElement>(null);
+  const { width: assistantWidth, separatorProps } = useAssistantResize(workspaceContent);
+  const followCreatedTurn = useRef<string | null>(null);
+  const focusedTask = tasks.find((task) => task.snapshot.task_id === focusedTaskId) ?? tasks[0];
+  const contextTask = conversationFile ? undefined : tasks.find((task) => task.snapshot.task_id === (
+    selectedVideoFrame?.parentTaskId ?? (followFocusedTask ? focusedTask?.snapshot.task_id : selectedTaskId)
+  ));
+  const effectiveTaskId = contextTask?.snapshot.task_id ?? "";
+  const effectiveMode = selectedVideoFrame ? DEFAULT_INSPECTION_MODE
+    : contextTask ? inspectionModeOf(contextTask) : conversationInspectionMode;
+  const waitingForGuided = Boolean(waitingGuidedTaskId && effectiveTaskId === waitingGuidedTaskId &&
+    contextTask && isActiveTask(contextTask));
+
+  function discussFocusedTask() {
+    followCreatedTurn.current = null;
+    setFollowFocusedTask(true);
+    setSelectedTaskId("");
+    setSelectedReferenceTaskId("");
+    setSelectedVideoFrame(null);
+    setConversationFile(null);
+    if (conversationFileInput.current) conversationFileInput.current.value = "";
+    pendingTurn.current = null;
+  }
+
+  useEffect(() => {
+    const requestId = followCreatedTurn.current;
+    if (!requestId) return;
+    const linkedId = turns.find((turn) => turn.request_id === requestId)?.linked_task_id;
+    if (linkedId && tasks.some((task) => task.snapshot.task_id === linkedId)) {
+      followCreatedTurn.current = null;
+      setFocusedTaskId(linkedId);
+      setFollowFocusedTask(true);
+      setSelectedTaskId("");
+    }
+  }, [tasks, turns]);
 
   function closeNavigation() {
     setSidebarOpen(false);
@@ -265,6 +306,9 @@ function Workbench({ pollIntervalMs = 2_000 }: AppProps) {
       setConversationFile(null);
       setConversationInspectionMode(DEFAULT_INSPECTION_MODE);
       setSelectedTaskId("");
+      setFollowFocusedTask(true);
+      setWaitingGuidedTaskId("");
+      followCreatedTurn.current = null;
       setSelectedReferenceTaskId("");
       setSelectedVideoFrame(null);
       pendingTurn.current = null;
@@ -480,6 +524,7 @@ function Workbench({ pollIntervalMs = 2_000 }: AppProps) {
       pendingSubmission.current = null;
       setTasks((current) => upsertTask(current, created));
       setFocusedTaskId(created.snapshot.task_id);
+      if (followFocusedTask) setSelectedReferenceTaskId("");
       setIntakeOpen(false);
       setInstruction("");
       setDirectFile(null);
@@ -508,14 +553,14 @@ function Workbench({ pollIntervalMs = 2_000 }: AppProps) {
           : {}),
       });
       setTurns((current) => upsertTurn(current, created));
+      if (submission.input_asset && !submission.task_id) followCreatedTurn.current = created.request_id;
       pendingTurn.current = null;
       setConversationText("");
       setConversationFile(null);
       setConversationInspectionMode(DEFAULT_INSPECTION_MODE);
-      setSelectedTaskId("");
       setSelectedReferenceTaskId("");
       setSelectedVideoFrame(null);
-      conversationForm.current?.reset();
+      if (conversationFileInput.current) conversationFileInput.current.value = "";
     } catch (nextError) {
       const message = formatError(nextError);
       setConversationError(
@@ -530,13 +575,13 @@ function Workbench({ pollIntervalMs = 2_000 }: AppProps) {
 
   async function submitTurn(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!session || activeTurnIds.length > 0) return;
+    if (!session || activeTurnIds.length > 0 || restartingGuided || waitingForGuided) return;
     const cleanText = conversationText.trim();
     if (!cleanText) {
       setConversationError("请输入对话内容");
       return;
     }
-    const taskId = selectedVideoFrame?.parentTaskId ?? (selectedTaskId || null);
+    const taskId = selectedVideoFrame?.parentTaskId ?? (effectiveTaskId || null);
     const referenceTaskId = selectedReferenceTaskId || null;
     if (referenceTaskId && (conversationFile || selectedVideoFrame)) {
       setConversationError("保存结果对比不能同时上传新附件");
@@ -548,7 +593,7 @@ function Workbench({ pollIntervalMs = 2_000 }: AppProps) {
       pending && pending.sessionId === session.session_id && pending.text === cleanText &&
       pending.task_id === taskId && pending.file === conversationFile &&
       pending.reference_task_id === referenceTaskId &&
-      inspectionModeOf(pending) === conversationInspectionMode &&
+      inspectionModeOf(pending) === effectiveMode &&
       sameAssetRef(pending.frameAsset, selectedFrameAsset),
     );
     if (!sameIntent) {
@@ -566,7 +611,7 @@ function Workbench({ pollIntervalMs = 2_000 }: AppProps) {
           input_asset: inputAsset,
           task_id: taskId,
           reference_task_id: referenceTaskId,
-          inspection_mode: conversationInspectionMode,
+          inspection_mode: effectiveMode,
           file: conversationFile,
           frameAsset: selectedFrameAsset,
         };
@@ -582,13 +627,14 @@ function Workbench({ pollIntervalMs = 2_000 }: AppProps) {
   }
 
   const hasActiveTurn = activeTurnIds.length > 0;
+  const composerBusy = turnSubmitting || hasActiveTurn || restartingGuided;
   const pendingMatchesComposer = Boolean(
     pendingTurn.current &&
     pendingTurn.current.sessionId === session?.session_id &&
     pendingTurn.current.text === conversationText.trim() &&
-    pendingTurn.current.task_id === (selectedTaskId || null) &&
+    pendingTurn.current.task_id === (effectiveTaskId || null) &&
     pendingTurn.current.reference_task_id === (selectedReferenceTaskId || null) &&
-    inspectionModeOf(pendingTurn.current) === conversationInspectionMode &&
+    inspectionModeOf(pendingTurn.current) === effectiveMode &&
     pendingTurn.current.file === conversationFile &&
     sameAssetRef(pendingTurn.current.frameAsset, selectedVideoFrame?.frame.asset ?? null),
   );
@@ -597,14 +643,13 @@ function Workbench({ pollIntervalMs = 2_000 }: AppProps) {
     setAssistantOpen(true);
     setSelectedVideoFrame({ parentTaskId, frame });
     setSelectedTaskId(parentTaskId);
+    setFollowFocusedTask(false);
     setSelectedReferenceTaskId("");
     setConversationFile(null);
     setConversationInspectionMode(DEFAULT_INSPECTION_MODE);
     if (conversationFileInput.current) conversationFileInput.current.value = "";
     pendingTurn.current = null;
   }
-
-  const focusedTask = tasks.find((task) => task.snapshot.task_id === focusedTaskId) ?? tasks[0];
 
   return (
     <Layout className="workbench">
@@ -614,7 +659,12 @@ function Workbench({ pollIntervalMs = 2_000 }: AppProps) {
           tasks={tasks}
           activeTaskId={focusedTask?.snapshot.task_id ?? ""}
           loading={loading}
-          onSelectTask={(id) => { setFocusedTaskId(id); if (sidebarOpen) closeNavigation(); }}
+          onSelectTask={(id) => {
+            followCreatedTurn.current = null;
+            setFocusedTaskId(id);
+            if (followFocusedTask && !composerBusy) { setSelectedReferenceTaskId(""); pendingTurn.current = null; }
+            if (sidebarOpen) closeNavigation();
+          }}
           onNewInspection={() => { setIntakeOpen(true); setSidebarOpen(false); }}
         />
       </Layout.Sider>
@@ -635,7 +685,8 @@ function Workbench({ pollIntervalMs = 2_000 }: AppProps) {
             {!session && !loading ? <Button onClick={() => void startNewSession()}>新建会话</Button> : null}
           </div>
         ) : null}
-        <Layout.Content className={`workspace-content${assistantOpen ? "" : " workspace-content--wide"}`}>
+        <Layout.Content ref={workspaceContent} style={{ "--assistant-width": `${assistantWidth}px` } as CSSProperties}
+          className={`workspace-content${assistantOpen ? "" : " workspace-content--wide"}`}>
           <div className="inspection-workspace">
             <div className="workspace-breadcrumb"><FileSearchOutlined aria-hidden="true" /><span>检查任务</span><span>/</span><span>{focusedTask ? focusedTask.snapshot.task_id.slice(0, 8) : "工作台"}</span></div>
             <section className="inspection-detail" aria-label="检查详情">
@@ -668,6 +719,7 @@ function Workbench({ pollIntervalMs = 2_000 }: AppProps) {
             </section>
             <footer className="workspace-footer">{tasks.length} 项检查任务<span>结果以原始证据与复核记录为准</span></footer>
           </div>
+          {assistantOpen ? <div {...separatorProps} className="assistant-resizer" aria-label="调整检查助手宽度" title="拖动调整助手宽度；也可使用左右方向键" /> : null}
           <aside className="assistant-workspace" hidden={!assistantOpen}>
       <section className="conversation-panel" aria-labelledby="conversation-title">
         <div className="tasks__heading">
@@ -677,7 +729,7 @@ function Workbench({ pollIntervalMs = 2_000 }: AppProps) {
           </div>
           <span>{turns.length} 条</span>
         </div>
-        <p className="conversation-note">上传影像发起检查，或关联任务继续追问。</p>
+        <p className="conversation-note">自动带上当前任务，继续追问或处理证据。</p>
         <details className="assistant-help">
           <summary>可用操作与说明</summary>
           <p>可以询问已存证据、请求报告，或对新图或关联原图提出“必要时按需增强后再检查”。关联原图片可请求一次追加复检或增强。附件与已有任务二选一；对比结果时需选择两个已存任务。</p>
@@ -697,6 +749,35 @@ function Workbench({ pollIntervalMs = 2_000 }: AppProps) {
         </div>
         {conversationError ? <div className="conversation-error" role="alert">{conversationError}</div> : null}
         <form ref={conversationForm} className="conversation-form" onSubmit={(event) => void submitTurn(event)}>
+          <section className="assistant-context" aria-label="当前对话上下文">
+            <div className="assistant-context__heading"><strong>{conversationFile ? "新附件检查" : contextTask ? "正在讨论的任务" : "会话对话"}</strong>
+              {contextTask ? <code>{contextTask.snapshot.task_id.slice(0, 8)}</code> : null}</div>
+            <p title={contextTask?.instruction}>{conversationFile?.name ?? contextTask?.instruction ?? "上传图片开始检查，或选择一个已有任务。"}</p>
+            {contextTask ? <small>{INSPECTION_MODE_TEXT[effectiveMode]} · {followFocusedTask ? "跟随当前任务" : "已固定对话任务"}</small> : null}
+            {focusedTask && (effectiveTaskId !== focusedTask.snapshot.task_id || !followFocusedTask) ? (
+              <Button type="link" size="small" disabled={composerBusy} onClick={discussFocusedTask}>讨论当前查看的任务</Button>
+            ) : null}
+          </section>
+          <GuidedRestartAction task={contextTask ?? null} disabled={composerBusy || Boolean(selectedVideoFrame)}
+            onBusyChange={(busy) => {
+              if (busy && contextTask) {
+                setSelectedTaskId(contextTask.snapshot.task_id);
+                setFollowFocusedTask(false);
+                followCreatedTurn.current = null;
+              }
+              setRestartingGuided(busy);
+            }}
+            onAdmitted={(task) => setTasks((current) => upsertTask(current, task))}
+            onStarted={(task) => {
+              setTasks((current) => upsertTask(current, task));
+              setFocusedTaskId(task.snapshot.task_id);
+              setSelectedTaskId(task.snapshot.task_id);
+              setFollowFocusedTask(false);
+              setSelectedReferenceTaskId("");
+              setWaitingGuidedTaskId(task.snapshot.task_id);
+              pendingTurn.current = null;
+            }} />
+          {waitingForGuided ? <p className="assistant-baseline-note" role="status">原图复检任务尚未完成，当前草稿已保留。待任务已完成或部分完成后，可继续发送工具请求；若等待人工复核，请先查看证据并复核。</p> : null}
           {selectedVideoFrame ? (
             <section className="task-hint" aria-label="已选视频证据帧">
               <p>已选视频证据帧：帧 {selectedVideoFrame.frame.frame_index} · {selectedVideoFrame.frame.timestamp_seconds} 秒</p>
@@ -723,11 +804,17 @@ function Workbench({ pollIntervalMs = 2_000 }: AppProps) {
             <Input.TextArea
               aria-labelledby="conversation-input-label"
               value={conversationText}
-              onChange={(event) => setConversationText(event.target.value)}
+              onChange={(event) => {
+                setConversationText(event.target.value);
+                if (followFocusedTask && contextTask) {
+                  setSelectedTaskId(contextTask.snapshot.task_id);
+                  setFollowFocusedTask(false);
+                }
+              }}
               maxLength={4_000}
               rows={3}
               placeholder="例如：请检查这份影像，或解释上一项检查结果"
-              disabled={!session || turnSubmitting || hasActiveTurn}
+              disabled={!session || composerBusy}
             />
           </label>
           <div className="conversation-options">
@@ -747,34 +834,39 @@ function Workbench({ pollIntervalMs = 2_000 }: AppProps) {
                   if (nextFile) {
                     setSelectedVideoFrame(null);
                     setSelectedTaskId("");
+                    setFollowFocusedTask(false);
                     setSelectedReferenceTaskId("");
                   }
                 }}
-                disabled={!session || turnSubmitting || hasActiveTurn}
+                disabled={!session || composerBusy}
               />
             </label>
             <InspectionModeField
-              value={conversationInspectionMode}
-              disabled={!isImageFile(conversationFile) || turnSubmitting || hasActiveTurn}
+              value={effectiveMode}
+              disabled={!isImageFile(conversationFile) || composerBusy}
               disabledReason={selectedVideoFrame
                 ? "视频证据帧工具仅使用 YOLO＋VLM 复检。"
                 : conversationFile
                   ? "视频仅使用 YOLO＋VLM 复检。"
-                  : selectedTaskId
+                  : effectiveTaskId
                     ? "关联任务沿用已保存的检查模式，不能在这里改写。"
                     : "选择新图片后可更改检查模式；视频仅使用 YOLO＋VLM 复检。"}
               onChange={setConversationInspectionMode}
             />
+            <details className="assistant-target-options">
+            <summary>更换任务或对比结果</summary>
             <label className="field">
               <span>关联已有任务（可选）</span>
               <select
-                value={selectedTaskId}
+                value={effectiveTaskId}
                 onChange={(event) => {
                   const nextTaskId = event.target.value;
                   const nextTask = tasks.find((task) => task.snapshot.task_id === nextTaskId);
                   pendingTurn.current = null;
                   setSelectedVideoFrame(null);
                   setSelectedTaskId(nextTaskId);
+                  setFollowFocusedTask(false);
+                  followCreatedTurn.current = null;
                   setSelectedReferenceTaskId("");
                   setConversationInspectionMode(nextTask
                     ? inspectionModeOf(nextTask)
@@ -784,9 +876,9 @@ function Workbench({ pollIntervalMs = 2_000 }: AppProps) {
                     if (conversationFileInput.current) conversationFileInput.current.value = "";
                   }
                 }}
-                disabled={!session || turnSubmitting || hasActiveTurn}
+                disabled={!session || composerBusy}
               >
-                <option value="">不关联任务</option>
+                <option value="">会话对话（不指定任务）</option>
                 {tasks.map((task) => (
                   <option key={task.snapshot.task_id} value={task.snapshot.task_id}>
                     {task.snapshot.task_id.slice(0, 8)} · {task.instruction}
@@ -800,25 +892,28 @@ function Workbench({ pollIntervalMs = 2_000 }: AppProps) {
                 value={selectedReferenceTaskId}
                 onChange={(event) => {
                   setSelectedReferenceTaskId(event.target.value);
+                  setSelectedTaskId(effectiveTaskId);
+                  setFollowFocusedTask(false);
                   if (event.target.value) {
                     setConversationFile(null);
                     if (conversationFileInput.current) conversationFileInput.current.value = "";
                   }
                 }}
-                disabled={!session || turnSubmitting || hasActiveTurn || !selectedTaskId || Boolean(selectedVideoFrame)}
+                disabled={!session || composerBusy || !effectiveTaskId || Boolean(selectedVideoFrame)}
               >
                 <option value="">不对比</option>
-                {tasks.filter((task) => task.snapshot.task_id !== selectedTaskId).map((task) => (
+                {tasks.filter((task) => task.snapshot.task_id !== effectiveTaskId).map((task) => (
                   <option key={task.snapshot.task_id} value={task.snapshot.task_id}>
                     {task.snapshot.task_id.slice(0, 8)} · {task.instruction}
                   </option>
                 ))}
               </select>
             </label>
+            </details>
           </div>
           <div className="form-footer">
             <small>{hasActiveTurn ? "当前消息完成后可继续对话" : `${conversationText.length} / 4000`}</small>
-            <Button type="primary" htmlType="submit" disabled={!session || turnSubmitting || hasActiveTurn}>
+            <Button type="primary" htmlType="submit" disabled={!session || composerBusy || waitingForGuided}>
               {turnSubmitting ? "正在发送…" : pendingMatchesComposer ? "重新发送" : "发送消息"}
             </Button>
           </div>

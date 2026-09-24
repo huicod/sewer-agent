@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, expect, it, vi } from "vitest";
 import App from "./App";
@@ -29,6 +29,50 @@ function restore(tasks: ReturnType<typeof task>[]) {
   return fetch;
 }
 afterEach(() => { localStorage.clear(); vi.unstubAllGlobals(); });
+
+it("restarts a detector-only original with guided review, preserves the draft and waits before sending", async () => {
+  localStorage.setItem("pipe-inspector.session-id", sessionId);
+  const source = { ...task(firstId, "纯 YOLO 原图"), inspection_mode: "yolo_only" };
+  source.snapshot.runtime_status = "completed";
+  const guided = { ...task(secondId, "原图复检"), inspection_mode: "yolo_vlm" };
+  let completed = false;
+  const json = (value: unknown) => new Response(JSON.stringify(value), { headers: { "content-type": "application/json" } });
+  const fetch = vi.fn(async (url: string, init?: RequestInit) => {
+    if (url === `/api/sessions/${sessionId}`) return json({ session: { session_id: sessionId, created_at: source.created_at }, tasks: [source] });
+    if (url.endsWith("/turns") && !init) return json([]);
+    if (url === "/api/tasks") return json(guided);
+    if (url === `/api/tasks/${secondId}/start`) return json({ ...guided, snapshot: { ...guided.snapshot, runtime_status: "running" } });
+    if (url === `/api/tasks/${secondId}`) return json({ ...guided, snapshot: { ...guided.snapshot, runtime_status: completed ? "completed" : "running" } });
+    if (url.endsWith("/turns") && init?.method === "POST") return json({
+      ...JSON.parse(String(init.body)), session_id: sessionId, status: "completed", stage: "finished",
+      reply: "几何请求已接收（测试夹具）", linked_task_id: secondId,
+      created_at: source.created_at, updated_at: source.created_at, attempts: 1, error_code: null,
+    });
+    throw new Error(`unexpected ${url}`);
+  });
+  vi.stubGlobal("fetch", fetch);
+  const user = userEvent.setup();
+  render(<App pollIntervalMs={50} />);
+  await screen.findByRole("button", { name: "用原图新建复检" });
+  const input = screen.getByLabelText<HTMLTextAreaElement>("对话内容", { exact: true });
+  await user.type(input, "对原图进行分割与相对量化");
+  await user.click(screen.getByRole("button", { name: "用原图新建复检" }));
+  await screen.findByText(/原图复检任务尚未完成/);
+  expect(input.value).toBe("对原图进行分割与相对量化");
+  expect((screen.getByRole("button", { name: "发送消息" }) as HTMLButtonElement).disabled).toBe(true);
+  expect(screen.getByLabelText<HTMLSelectElement>("关联已有任务（可选）").value).toBe(secondId);
+  const createPayload = JSON.parse(String(fetch.mock.calls.find(([url]) => url === "/api/tasks")![1]!.body));
+  expect(createPayload).toMatchObject({ inspection_mode: "yolo_vlm", input_asset: source.input_asset });
+  expect(createPayload.instruction).not.toContain("分割");
+  completed = true;
+  await waitFor(() => expect((screen.getByRole("button", { name: "发送消息" }) as HTMLButtonElement).disabled).toBe(false));
+  await user.click(screen.getByRole("button", { name: "发送消息" }));
+  await screen.findByText("几何请求已接收（测试夹具）");
+  const submission = fetch.mock.calls.find(([url, init]) => url.endsWith("/turns") && init?.method === "POST")!;
+  expect(JSON.parse(String(submission[1]!.body))).toMatchObject({
+    task_id: secondId, inspection_mode: "yolo_vlm", input_asset: null, text: "对原图进行分割与相对量化",
+  });
+});
 
 it("switches inspection detail without silently changing the assistant's selected task", async () => {
   const fetch = restore([task(firstId, "上游管段"), task(secondId, "下游管段")]);
@@ -79,4 +123,44 @@ it("keeps the displayed inspection when the assistant accepts a message about an
   expect(within(screen.getByRole("region", { name: "检查详情" }))
     .getByRole("heading", { name: "下游管段" })).toBeTruthy();
   expect(fetch).toHaveBeenCalledTimes(3);
+});
+
+it("automatically associates the displayed task and keeps it after sending", async () => {
+  const fetch = restore([task(firstId, "上游管段")]);
+  const user = userEvent.setup();
+  render(<App pollIntervalMs={60_000} />);
+  await screen.findByRole("button", { name: "查看任务：上游管段" });
+  expect((screen.getByLabelText("关联已有任务（可选）") as HTMLSelectElement).value).toBe(firstId);
+  for (const text of ["解释结果", "再解释原始证据"]) {
+    fetch.mockResolvedValueOnce(new Response(JSON.stringify({
+      request_id: crypto.randomUUID(), session_id: sessionId, text,
+      input_asset: null, task_id: firstId,
+      created_at: "2026-09-24T10:00:00Z", updated_at: "2026-09-24T10:00:00Z",
+      status: "completed", stage: "finished", reply: `${text}已回答`,
+      linked_task_id: firstId, error_code: null, attempts: 1,
+    }), { status: 202, headers: { "content-type": "application/json" } }));
+    await user.type(screen.getByLabelText("对话内容", { exact: true }), text);
+    await user.click(screen.getByRole("button", { name: "发送消息" }));
+    await screen.findByText(`${text}已回答`);
+    expect((screen.getByLabelText("关联已有任务（可选）") as HTMLSelectElement).value).toBe(firstId);
+  }
+  expect(fetch).toHaveBeenCalledTimes(4);
+  for (const call of fetch.mock.calls.slice(2)) {
+    const payload = JSON.parse(String((call as unknown as [string, RequestInit])[1].body));
+    expect(payload.task_id).toBe(firstId);
+    expect(payload.input_asset).toBeNull();
+  }
+});
+
+it("pins a draft target while browsing and lets the user explicitly use the displayed task", async () => {
+  restore([task(firstId, "上游管段"), task(secondId, "下游管段")]);
+  const user = userEvent.setup();
+  render(<App pollIntervalMs={60_000} />);
+  await screen.findByRole("button", { name: "查看任务：上游管段" });
+  await user.type(screen.getByLabelText("对话内容", { exact: true }), "解释这个任务");
+  await user.click(screen.getByRole("button", { name: "查看任务：下游管段" }));
+  expect((screen.getByLabelText("关联已有任务（可选）") as HTMLSelectElement).value).toBe(firstId);
+  await user.click(screen.getByRole("button", { name: "讨论当前查看的任务" }));
+  expect((screen.getByLabelText("关联已有任务（可选）") as HTMLSelectElement).value).toBe(secondId);
+  expect((screen.getByLabelText("对话内容", { exact: true }) as HTMLTextAreaElement).value).toBe("解释这个任务");
 });

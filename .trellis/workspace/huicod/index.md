@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 50
-- **Last Active**: 2026-09-23
+- **Total Sessions**: 52
+- **Last Active**: 2026-09-24
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~1602 | Active |
+| `journal-1.md` | ~1662 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,8 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 52 | 2026-09-24 | Assistant resize and contextual task recovery | - | `-` |
+| 51 | 2026-09-24 | 六图人工测试示例包 | - | `-` |
 | 50 | 2026-09-23 | Ant Design 巡检工作台与本地预览 | - | `-` |
 | 49 | 2026-09-23 | 图片纯YOLO/复检模式与缓存图像级评测完成 | - | `-` |
 | 48 | 2026-09-23 | 记录60图图像级多标签复算与框级口径对照 | - | `-` |

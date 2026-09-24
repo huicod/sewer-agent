@@ -1600,3 +1600,63 @@ Completed authorized frontend redesign and restarted loopback service; evidence 
 ### Next Steps
 
 - User visual acceptance at localhost:8000 through the existing port forward
+
+
+## Session 51: 六图人工测试示例包
+
+**Date**: 2026-09-24
+**Task**: 六图人工测试示例包
+
+### Summary
+
+Small diverse manual image pack prepared without application changes, model calls or human review submissions. Dataset references are not prescribed results or a new held-out benchmark.
+
+### Main Changes
+
+- jj kvlkotxo: example/ six original JPEGs, Chinese prompts, sources and result worksheet; portable local ZIP
+
+### Git Commits
+
+(No commits - planning session)
+
+### Testing
+
+- [OK] Verified six source-identical decodable images, dimensions/group uniqueness/label coverage/ROI bounds, local links and 15-file ZIP; independent workflow-doc review resolved
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- User downloads example/manual-test-pack.zip and starts with 01, 05, 06; fill example/RESULTS.md with observed outcomes
+
+
+## Session 52: Assistant resize and contextual task recovery
+
+**Date**: 2026-09-24
+**Task**: Assistant resize and contextual task recovery
+
+### Summary
+
+Addressed manual-test feedback with persistent assistant resizing, automatic task context with draft pinning, and same-original guided recovery for detector-only tasks; refreshed examples and running service.
+
+### Main Changes
+
+- jj kvlkotxo; frontend interaction plus synthetic fixture inspection-mode alignment. Production backend unchanged.
+
+### Git Commits
+
+(No commits - planning session)
+
+### Testing
+
+- [OK] 19 frontend suites / 157 tests passed; final affected component 4/4; 4 synthetic browser journeys passed; production build and HTTP assets/health passed.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- User resumes example01: refresh page, use same-original guided recovery if source is pure YOLO, review actual evidence, then send retained geometry prompt.
