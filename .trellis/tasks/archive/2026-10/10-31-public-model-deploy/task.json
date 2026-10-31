@@ -3,7 +3,7 @@
   "name": "public-model-deploy",
   "title": "Public model access and single-command deployment",
   "description": "Publish the existing model repository as requested and make a clean GPU-host installation usable with the default shared API key in one command.",
-  "status": "in_progress",
+  "status": "completed",
   "dev_type": null,
   "scope": null,
   "package": null,
@@ -11,16 +11,18 @@
   "creator": "huicod",
   "assignee": "huicod",
   "createdAt": "2026-10-31",
-  "completedAt": null,
+  "completedAt": "2026-10-31",
   "branch": "dev/agent-v1",
   "base_branch": "dev/agent-v1",
   "worktree_path": null,
-  "commit": null,
+  "commit": "5996671389c7c7f5587819e1d8ae9b4954b0420a",
   "pr_url": null,
   "subtasks": [],
   "children": [],
   "parent": null,
   "relatedFiles": [],
   "notes": "",
-  "meta": {}
+  "meta": {
+    "model_revision": "e542e8d77a94496c431d829c1fa541c363c4baf6"
+  }
 }

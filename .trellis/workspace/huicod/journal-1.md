@@ -1787,3 +1787,29 @@ Shipped a documented Docker deployment with isolated PostgreSQL roles, Temporal 
 ### Next Steps
 
 - On the target NVIDIA Docker host, use the manual sample in DOCKER.md to verify container GPU access and the configured external model provider.
+
+
+## Session 57: Publish models and verify single-key Docker setup
+
+**Date**: 2026-10-31
+**Task**: Publish models and verify single-key Docker setup
+**Branch**: `dev/agent-v1`
+
+### Summary
+
+Published the existing seven-model bundle with source notices, shipped anonymous provisioning and single-key Docker startup, and verified fresh installs and persistent data.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `55f936bf` | (see git log) |
+| `59966713` | (see git log) |
+
+### Testing
+
+- [OK] All 15 downloaded assets matched on AutoDL; the cache passed again with an offline proxy. GitHub workflow 41172667988 passed using the same deployment CLI with real models.
+
+### Status
+
+[OK] **Completed**

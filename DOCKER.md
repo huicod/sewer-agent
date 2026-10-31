@@ -4,7 +4,7 @@
 
 宿主机需要 Docker Engine、Docker Compose v2（建议 2.30 或更新）、Python 3.10+（仅配置/模型准备），以及支持 CUDA 12.8 的 NVIDIA 驱动和已配置的 [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html)。主机不必安装项目的 Node、PyTorch、PostgreSQL 或 Temporal。构建时需联网下载公开依赖；运行对话、VLM 复检时需访问配置的 API。准备足够的镜像构建空间（建议至少 25 GiB 可用）和媒体存储空间；完整模型包另需约 1.07 GiB。
 
-已在[干净的 Docker 主机](https://github.com/huicod/sewer-agent/actions/runs/41168745232)验证镜像构建、网页和 CPU 服务、数据库初始化及容器重建后的图片和会话。七个真实模型另在 RTX 4080 SUPER 上逐一完成了推理。Docker 中的 GPU 和外部 API 仍需在部署主机上，用第 3 节的示例检查。
+已在[干净的 Docker 主机](https://github.com/huicod/sewer-agent/actions/runs/41172667988)验证一键命令可以匿名下载完整模型包，使用一把测试 Key 启动网页和 CPU 服务、初始化数据库，并在容器重建后读回原图片和会话。七个真实模型另在 RTX 4080 SUPER 上逐一完成了推理。Docker 中的 GPU 和外部 API 仍需在部署主机上，用第 3 节的示例检查。
 
 ## 1. 新机一键部署
 
