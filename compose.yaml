@@ -1,0 +1,192 @@
+name: ${COMPOSE_PROJECT_NAME:-sewer-agent}
+
+x-app-environment: &app-environment
+  SEWER_DB_HOST: postgres
+  SEWER_DB_PORT: "5432"
+  SEWER_DB_NAME: sewer_agent
+  SEWER_DB_USER: sewer_agent
+  SEWER_DB_PASSWORD: ${SEWER_APP_DB_PASSWORD:?Run python3 scripts/docker_setup.py first}
+  SEWER_TEMPORAL_ADDRESS: temporal:7233
+  SEWER_TEMPORAL_NAMESPACE: default
+  SEWER_TASK_QUEUE: sewer-inspection
+  SEWER_ASSET_ROOT: /app/var/assets
+  SEWER_MODEL_ROOT: /models
+  SEWER_DETECTOR_PATH: /models/detector/best.pt
+  SEWER_ENHANCEMENT_MODELS_DIR: /models/enhancement
+  SEWER_GEOMETRY_MODELS_DIR: /models/geometry
+  SEWER_DETECTOR_DEVICE: "0"
+  SEWER_ENHANCEMENT_DEVICE: cuda:0
+  SEWER_GEOMETRY_DEVICE: cuda:0
+  SEWER_WEB_DIST: /app/frontend/dist
+  SEWER_LLM_BASE_URL: ${SEWER_LLM_BASE_URL:-}
+  SEWER_LLM_MODEL: ${SEWER_LLM_MODEL:-}
+  SEWER_LLM_API_KEY: ${SEWER_LLM_API_KEY:-}
+  SEWER_VLM_BASE_URL: ${SEWER_VLM_BASE_URL:-}
+  SEWER_VLM_MODEL: ${SEWER_VLM_MODEL:-}
+  SEWER_VLM_API_KEY: ${SEWER_VLM_API_KEY:-}
+  DASHSCOPE_API_KEY: ${DASHSCOPE_API_KEY:-}
+  SEWER_API_ENABLE_THINKING: ${SEWER_API_ENABLE_THINKING:-false}
+  SEWER_API_MAX_OUTPUT_TOKENS: ${SEWER_API_MAX_OUTPUT_TOKENS:-4096}
+  SEWER_API_TIMEOUT_SECONDS: ${SEWER_API_TIMEOUT_SECONDS:-60}
+  SEWER_MAX_UPLOAD_BYTES: ${SEWER_MAX_UPLOAD_BYTES:-1073741824}
+
+x-app: &app
+  image: sewer-agent:${SEWER_IMAGE_TAG:-local}
+  build:
+    context: .
+    dockerfile: Dockerfile
+  init: true
+  environment: *app-environment
+  read_only: true
+  tmpfs:
+    - /tmp:mode=1777
+  volumes:
+    - assets:/app/var/assets
+    - type: bind
+      source: ${SEWER_MODELS_DIR:-./models}
+      target: /models
+      read_only: true
+      bind:
+        create_host_path: false
+  stop_grace_period: 2m
+  logging:
+    driver: json-file
+    options:
+      max-size: 10m
+      max-file: "3"
+
+services:
+  postgres:
+    image: postgres:14.24-bookworm
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_ADMIN_PASSWORD:?Run python3 scripts/docker_setup.py first}
+      POSTGRES_DB: postgres
+      SEWER_APP_DB_PASSWORD: ${SEWER_APP_DB_PASSWORD:?Run python3 scripts/docker_setup.py first}
+      SEWER_TEMPORAL_DB_PASSWORD: ${SEWER_TEMPORAL_DB_PASSWORD:?Run python3 scripts/docker_setup.py first}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./deploy/docker/init-postgres.sh:/docker-entrypoint-initdb.d/10-sewer.sh:ro
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -h 127.0.0.1 -U postgres -d postgres']
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 10s
+
+  temporal-schema:
+    image: temporalio/admin-tools:1.31.2
+    restart: "no"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    entrypoint: [/bin/sh, /deploy/init-temporal.sh, schema]
+    volumes:
+      - ./deploy/docker/init-temporal.sh:/deploy/init-temporal.sh:ro
+    environment:
+      SQL_PASSWORD: ${SEWER_TEMPORAL_DB_PASSWORD:?Run python3 scripts/docker_setup.py first}
+
+  temporal:
+    image: temporalio/server:1.31.2
+    restart: unless-stopped
+    depends_on:
+      temporal-schema:
+        condition: service_completed_successfully
+    environment:
+      DB: postgres12
+      DB_PORT: "5432"
+      POSTGRES_SEEDS: postgres
+      POSTGRES_USER: sewer_temporal
+      POSTGRES_PWD: ${SEWER_TEMPORAL_DB_PASSWORD:?Run python3 scripts/docker_setup.py first}
+      DBNAME: temporal
+      VISIBILITY_DBNAME: temporal_visibility
+      BIND_ON_IP: 0.0.0.0
+      # Only reachable inside the Compose network; no host port publication.
+      TEMPORAL_ALLOW_NO_AUTH: "true"
+      DYNAMIC_CONFIG_FILE_PATH: /deploy/temporal-dynamic.yaml
+    volumes:
+      - ./deploy/docker/temporal-dynamic.yaml:/deploy/temporal-dynamic.yaml:ro
+    healthcheck:
+      test: [CMD, nc, -z, 127.0.0.1, "7233"]
+      interval: 10s
+      timeout: 8s
+      retries: 30
+      start_period: 30s
+
+  temporal-namespace:
+    image: temporalio/admin-tools:1.31.2
+    restart: "no"
+    depends_on:
+      temporal:
+        condition: service_healthy
+    environment:
+      TEMPORAL_ADDRESS: temporal:7233
+    entrypoint: [/bin/sh, /deploy/init-temporal.sh, namespace]
+    volumes:
+      - ./deploy/docker/init-temporal.sh:/deploy/init-temporal.sh:ro
+
+  initialize:
+    <<: *app
+    command: [initialize]
+    restart: "no"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      temporal-namespace:
+        condition: service_completed_successfully
+
+  api:
+    <<: *app
+    command: [api]
+    restart: unless-stopped
+    depends_on:
+      initialize:
+        condition: service_completed_successfully
+    ports:
+      - "${SEWER_BIND_ADDRESS:-127.0.0.1}:${SEWER_HTTP_PORT:-8000}:8000"
+    healthcheck:
+      test: [CMD, python, deploy/docker/entrypoint.py, check, api]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
+
+  cpu-worker:
+    <<: *app
+    command: [cpu]
+    restart: unless-stopped
+    depends_on:
+      initialize:
+        condition: service_completed_successfully
+    healthcheck:
+      test: [CMD, python, deploy/docker/entrypoint.py, check, cpu]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  gpu-worker:
+    <<: *app
+    command: [gpu]
+    restart: unless-stopped
+    depends_on:
+      initialize:
+        condition: service_completed_successfully
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    healthcheck:
+      test: [CMD, python, deploy/docker/entrypoint.py, check, gpu]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+volumes:
+  postgres-data:
+  assets:

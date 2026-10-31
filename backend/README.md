@@ -9,7 +9,7 @@
 
 - Python 3.12.3；项目 `.venv` 以 `--system-site-packages` 复用服务器的 torch 2.8.0+cu128、torchvision 0.23.0+cu128，不重装 CUDA。这不是完全隔离环境。
 - 直接 Python 依赖版本固定在 `pyproject.toml`；未声明所有传递依赖及系统包完全可复现。Ultralytics 8.4.46 已通过现有权重单图 GPU 兼容验证。
-- PostgreSQL 14.24 使用原生 `14/main` 集群；Temporal Server 1.31.2 位于忽略入库的 `.tools/temporal/`。当前无 Docker/systemd；本脚本尚不是新服务器的一键安装器。
+- 原生模式：PostgreSQL 14.24 使用 `14/main` 集群；Temporal Server 1.31.2 位于忽略入库的 `.tools/temporal/`。本机管理脚本不安装系统服务；新主机可使用独立的 [Docker 部署](../DOCKER.md)。
 - Temporal 仅监听本机，不启用鉴权，不能直接暴露公网。数据库业务角色和 Temporal 角色分离。
 
 以下命令均在项目根目录执行。

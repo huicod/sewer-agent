@@ -1,0 +1,26 @@
+# Explicit build allowlist: no credentials, checkpoints, databases or host tools.
+**
+!Dockerfile
+!pyproject.toml
+!backend/
+!backend/src/
+!backend/src/**
+!scripts/
+!scripts/*.py
+!deploy/
+!deploy/**
+!frontend/
+!frontend/package.json
+!frontend/package-lock.json
+!frontend/index.html
+!frontend/tsconfig*.json
+!frontend/vite.config.ts
+!frontend/src/
+!frontend/src/**
+**/__pycache__
+**/*.pyc
+**/.env
+**/.env.*
+**/*.pt
+**/*.pth
+**/*.safetensors

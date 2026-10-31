@@ -25,6 +25,9 @@
 .env
 .env.*
 !.env.example
+!.env.docker.example
+/models/
+/backups/
 /var/
 /.tools/
 *.egg-info/

@@ -1,0 +1,180 @@
+{
+  "schema_version": 1,
+  "bundle_id": "sewer-agent-online-v1",
+  "description": "Seven pinned models for the current online application; offline experiments and training artifacts are excluded. Byte sizes check completeness, not cryptographic integrity.",
+  "models": [
+    {
+      "id": "yolo26s-sewer2403-five",
+      "name": "YOLO26s Sewer2403 five-class detector",
+      "source_url": "https://github.com/huicod/sewer-agent/tree/dev/agent-v1/yolov26/experiments/sewer2403_5class_yolo26s_img960_e100",
+      "weight_license": "unknown; project-trained checkpoint, upstream Ultralytics and dataset terms must be retained",
+      "files": [
+        {
+          "path": "detector/best.pt",
+          "source": "yolov26/experiments/sewer2403_5class_yolo26s_img960_e100/weights/best.pt",
+          "size_bytes": 20393925
+        }
+      ]
+    },
+    {
+      "id": "dehazeformer-mct",
+      "name": "DehazeFormer-MCT",
+      "source_url": "https://huggingface.co/spaces/IDKiro/DehazeFormer_Demo/tree/8e0b26c7732e2b0dc104f69c5ea30f913c878a89",
+      "weight_license": "unknown; repository code is MIT, no separate weight license recorded",
+      "code_license_section": "DehazeFormer-MCT",
+      "files": [
+        {
+          "path": "enhancement/dehazeformer-mct-8e0b26c7.pth",
+          "source": "var/models/enhancement/dehazeformer-mct-8e0b26c7.pth",
+          "size_bytes": 5927945,
+          "url": "https://huggingface.co/spaces/IDKiro/DehazeFormer_Demo/resolve/8e0b26c7732e2b0dc104f69c5ea30f913c878a89/saved_models/dehazeformer.pth"
+        }
+      ]
+    },
+    {
+      "id": "restormer-motion",
+      "name": "Restormer motion deblurring",
+      "source_url": "https://github.com/swz30/Restormer/releases/tag/v1.0",
+      "weight_license": "unknown; repository code is MIT, no separate weight license recorded",
+      "code_license_section": "Restormer",
+      "files": [
+        {
+          "path": "enhancement/restormer-motion-v1.0.pth",
+          "source": "var/models/enhancement/restormer-motion-v1.0.pth",
+          "size_bytes": 104700429,
+          "url": "https://github.com/swz30/Restormer/releases/download/v1.0/motion_deblurring.pth"
+        }
+      ]
+    },
+    {
+      "id": "realesr-general-x4v3",
+      "name": "Real-ESRGAN general x4v3",
+      "source_url": "https://github.com/xinntao/Real-ESRGAN/releases/tag/v0.2.5.0",
+      "weight_license": "unknown; repository code is BSD-3-Clause, no separate weight license recorded",
+      "code_license_section": "Real-ESRGAN SRVGGNetCompact",
+      "files": [
+        {
+          "path": "enhancement/realesr-general-x4v3-v0.2.5.0.pth",
+          "source": "var/models/enhancement/realesr-general-x4v3-v0.2.5.0.pth",
+          "size_bytes": 4885111,
+          "url": "https://github.com/xinntao/Real-ESRGAN/releases/download/v0.2.5.0/realesr-general-x4v3.pth"
+        }
+      ]
+    },
+    {
+      "id": "darkir-384",
+      "name": "DarkIR-m low-light restoration",
+      "source_url": "https://huggingface.co/Cidaut/DarkIR/tree/8a73ebf271c513dfda9d1df444762d8aa0b42138",
+      "weight_license": "CC-BY-4.0 (upstream model card); code is MIT",
+      "code_license_section": "DarkIR",
+      "files": [
+        {
+          "path": "enhancement/darkir-384-hf-8a73ebf2.pt",
+          "source": "var/models/enhancement/darkir-384-hf-8a73ebf2.pt",
+          "size_bytes": 13397397,
+          "url": "https://huggingface.co/Cidaut/DarkIR/resolve/8a73ebf271c513dfda9d1df444762d8aa0b42138/DarkIR_384.pt"
+        }
+      ]
+    },
+    {
+      "id": "sam2.1-hiera-large",
+      "name": "SAM 2.1 Hiera Large",
+      "source_url": "https://huggingface.co/facebook/sam2.1-hiera-large/tree/665f8e2ad61cf5f53d65644ff27c8ee525124610",
+      "weight_license": "Apache-2.0 (upstream model card)",
+      "files": [
+        {
+          "path": "geometry/sam2.1-hiera-large/model.safetensors",
+          "source": "var/models/geometry/sam2.1-hiera-large/model.safetensors",
+          "size_bytes": 897897416,
+          "url": "https://huggingface.co/facebook/sam2.1-hiera-large/resolve/665f8e2ad61cf5f53d65644ff27c8ee525124610/model.safetensors"
+        },
+        {
+          "path": "geometry/sam2.1-hiera-large/config.json",
+          "source": "var/models/geometry/sam2.1-hiera-large/config.json",
+          "size_bytes": 5705,
+          "url": "https://huggingface.co/facebook/sam2.1-hiera-large/resolve/665f8e2ad61cf5f53d65644ff27c8ee525124610/config.json",
+          "json_fields": {
+            "model_type": "sam2_video"
+          }
+        },
+        {
+          "path": "geometry/sam2.1-hiera-large/preprocessor_config.json",
+          "source": "var/models/geometry/sam2.1-hiera-large/preprocessor_config.json",
+          "size_bytes": 683,
+          "url": "https://huggingface.co/facebook/sam2.1-hiera-large/resolve/665f8e2ad61cf5f53d65644ff27c8ee525124610/preprocessor_config.json",
+          "json_fields": {
+            "image_processor_type": "Sam2ImageProcessorFast",
+            "processor_class": "Sam2VideoProcessor"
+          }
+        },
+        {
+          "path": "geometry/sam2.1-hiera-large/processor_config.json",
+          "source": "var/models/geometry/sam2.1-hiera-large/processor_config.json",
+          "size_bytes": 95,
+          "url": "https://huggingface.co/facebook/sam2.1-hiera-large/resolve/665f8e2ad61cf5f53d65644ff27c8ee525124610/processor_config.json",
+          "json_fields": {
+            "processor_class": "Sam2VideoProcessor"
+          }
+        },
+        {
+          "path": "geometry/sam2.1-hiera-large/video_preprocessor_config.json",
+          "source": "var/models/geometry/sam2.1-hiera-large/video_preprocessor_config.json",
+          "size_bytes": 705,
+          "url": "https://huggingface.co/facebook/sam2.1-hiera-large/resolve/665f8e2ad61cf5f53d65644ff27c8ee525124610/video_preprocessor_config.json",
+          "json_fields": {
+            "processor_class": "Sam2VideoProcessor",
+            "video_processor_type": "Sam2VideoVideoProcessor"
+          }
+        },
+        {
+          "path": "geometry/sam2.1-hiera-large/provenance.json",
+          "source": "var/models/geometry/sam2.1-hiera-large/provenance.json",
+          "generated_json": {
+            "repo_id": "facebook/sam2.1-hiera-large",
+            "revision": "665f8e2ad61cf5f53d65644ff27c8ee525124610"
+          }
+        }
+      ]
+    },
+    {
+      "id": "depth-anything-v2-small",
+      "name": "Depth Anything V2 Small",
+      "source_url": "https://huggingface.co/depth-anything/Depth-Anything-V2-Small-hf/tree/5426e4f0f36572d16453bbda7a8389317b1bef99",
+      "weight_license": "Apache-2.0 (upstream model card)",
+      "files": [
+        {
+          "path": "geometry/depth-anything-v2-small/model.safetensors",
+          "source": "var/models/geometry/depth-anything-v2-small/model.safetensors",
+          "size_bytes": 99173660,
+          "url": "https://huggingface.co/depth-anything/Depth-Anything-V2-Small-hf/resolve/5426e4f0f36572d16453bbda7a8389317b1bef99/model.safetensors"
+        },
+        {
+          "path": "geometry/depth-anything-v2-small/config.json",
+          "source": "var/models/geometry/depth-anything-v2-small/config.json",
+          "size_bytes": 950,
+          "url": "https://huggingface.co/depth-anything/Depth-Anything-V2-Small-hf/resolve/5426e4f0f36572d16453bbda7a8389317b1bef99/config.json",
+          "json_fields": {
+            "model_type": "depth_anything"
+          }
+        },
+        {
+          "path": "geometry/depth-anything-v2-small/preprocessor_config.json",
+          "source": "var/models/geometry/depth-anything-v2-small/preprocessor_config.json",
+          "size_bytes": 775,
+          "url": "https://huggingface.co/depth-anything/Depth-Anything-V2-Small-hf/resolve/5426e4f0f36572d16453bbda7a8389317b1bef99/preprocessor_config.json",
+          "json_fields": {
+            "image_processor_type": "DPTImageProcessor"
+          }
+        },
+        {
+          "path": "geometry/depth-anything-v2-small/provenance.json",
+          "source": "var/models/geometry/depth-anything-v2-small/provenance.json",
+          "generated_json": {
+            "repo_id": "depth-anything/Depth-Anything-V2-Small-hf",
+            "revision": "5426e4f0f36572d16453bbda7a8389317b1bef99"
+          }
+        }
+      ]
+    }
+  ]
+}

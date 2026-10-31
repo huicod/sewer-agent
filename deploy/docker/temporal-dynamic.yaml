@@ -1,0 +1,4 @@
+# Use the same workflow ID length limit as the native SQL development configuration.
+limit.maxIDLength:
+  - value: 255
+    constraints: {}
