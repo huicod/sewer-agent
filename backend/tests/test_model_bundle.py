@@ -129,6 +129,17 @@ def test_upload_operations_ignore_unrelated_and_local_readme(tmp_path, tiny_mani
     assert b"unknown" in operations["README.md"].lower()
 
 
+def test_model_card_uses_portable_license_reference(tiny_manifest):
+    card = bundle.bundle_metadata(tiny_manifest)["README.md"].decode()
+    _, metadata, body = card.split("---\n", 2)
+    # The Hub rejects relative license_link metadata, but accepts relative Markdown links.
+    urls = [line.partition(":")[2].strip() for line in metadata.splitlines()
+            if line.startswith("license_link:")]
+    assert all(url.startswith("https://") for url in urls)
+    assert "license: other" in metadata.splitlines()
+    assert "[Model license notices](LICENSES.md)" in body
+
+
 class FakeApi:
     def __init__(self, *, existing=None):
         self.existing = existing

@@ -193,12 +193,12 @@ def bundle_metadata(manifest: dict) -> dict[str, bytes]:
         for model in manifest["models"]
     )
     card = (
-        "---\nlicense: other\nlicense_name: mixed-upstream-terms\n"
-        "license_link: LICENSES.md\ntags:\n- sewer-inspection\n- model-bundle\n---\n\n"
+        "---\nlicense: other\ntags:\n- sewer-inspection\n- model-bundle\n---\n\n"
         "# Sewer Agent online model bundle\n\n"
         "Seven pinned models for detector, enhancement, segmentation, and relative depth. "
         "This package contains no training dataset, uploaded user media, database, "
         "or API credentials.\n\n"
+        "[Model license notices](LICENSES.md)\n\n"
         "| Model | Weight terms | Source |\n|---|---|---|\n" + rows + "\n\n"
         "`unknown` means a separate weight license has not been established by the project; "
         "the architecture's code license must not be treated as a blanket weight license. "

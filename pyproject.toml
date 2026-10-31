@@ -46,7 +46,7 @@ where = ["backend/src"]
 
 [tool.pytest.ini_options]
 testpaths = ["backend/tests"]
-pythonpath = ["backend/src"]
+pythonpath = ["backend/src", "."]
 asyncio_mode = "auto"
 markers = ["integration: requires local services", "gpu: requires existing local checkpoint and GPU", "live_api: requires explicitly configured external API"]
 
