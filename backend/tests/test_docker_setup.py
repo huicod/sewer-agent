@@ -47,6 +47,9 @@ def test_rejects_compose_interpolation_in_model_path(tmp_path):
 def compose(tmp_path, monkeypatch):
     # Let Compose represent environment interpolation and mount resolution. All real local
     # writes go to the isolated deployment config; record every command before Docker.
+    template = docker_setup.REPO_ROOT / ".env.docker.example"
+    (tmp_path / template.name).write_bytes(template.read_bytes())
+    monkeypatch.setattr(docker_setup, "REPO_ROOT", tmp_path)
     settings = {
         "SEWER_LLM_BASE_URL": "https://dashscope.aliyuncs.com/compatible-mode/v1",
         "SEWER_LLM_MODEL": "qwen3.8-max",

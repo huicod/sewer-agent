@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import argparse
-import fcntl
 import getpass
 import json
 import os
@@ -78,7 +77,10 @@ def store_shared_key(output: Path, key: str) -> None:
     original = output.read_bytes()
     placeholder = b"DASHSCOPE_API_KEY="
     lines = original.splitlines(keepends=True)
-    matches = [i for i, line in enumerate(lines) if line.startswith(placeholder)]
+    matches = [
+        i for i, line in enumerate(lines)
+        if re.match(rb"\s*(?:export\s+)?DASHSCOPE_API_KEY\s*=", line)
+    ]
     if len(matches) != 1 or lines[matches[0]].rstrip(b"\r\n") != placeholder:
         raise ValueError("Set DASHSCOPE_API_KEY in the existing Docker configuration and retry.")
     i = matches[0]
@@ -96,6 +98,10 @@ def store_shared_key(output: Path, key: str) -> None:
 
 
 def deploy(output: Path, models_dir: Path | None, services: list[str]) -> None:
+    if not sys.platform.startswith("linux"):
+        raise ValueError("Run Docker deployment on the Linux GPU host.")
+    import fcntl
+
     if output.name == ".env" or output.is_symlink():
         raise ValueError("Choose a dedicated Docker configuration file, such as .env.docker.")
     # Serialize two concurrent first launches, including config creation and initialization.
@@ -181,6 +187,7 @@ def deploy(output: Path, models_dir: Path | None, services: list[str]) -> None:
             ],
             cwd=REPO_ROOT,
             env=network_env,
+            umask=0o022,  # public model directories must be traversable by container UID 10001
             check=True,
         )
         subprocess.run(
