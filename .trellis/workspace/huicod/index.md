@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 55
-- **Last Active**: 2026-09-24
+- **Total Sessions**: 56
+- **Last Active**: 2026-10-31
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~1753 | Active |
+| `journal-1.md` | ~1789 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 56 | 2026-10-31 | Portable Docker deployment and private model bundle | `3a805d36`, `895098d2`, `09195ec6` | `dev/agent-v1` |
 | 55 | 2026-09-24 | 修复 reduced-motion 下菜单抖动及屏幕外定位 | - | `-` |
 | 54 | 2026-09-24 | Conversation archive, rename and pin controls | - | `-` |
 | 53 | 2026-09-24 | Independent conversations, repeatable image tools and unified reports | - | `-` |

@@ -1751,3 +1751,39 @@ Added persistent per-conversation more actions and archive view; current drafts/
 ### Status
 
 [OK] **Completed**
+
+
+## Session 56: Portable Docker deployment and private model bundle
+
+**Date**: 2026-10-31
+**Task**: Portable Docker deployment and private model bundle
+**Branch**: `dev/agent-v1`
+
+### Summary
+
+Shipped a documented Docker deployment with isolated PostgreSQL roles, Temporal initialization, persistent database/media volumes, and seven separately provisioned models.
+
+### Main Changes
+
+- Pinned the private model revision in DOCKER.md and published SHA-256 for each weight.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `3a805d36` | (see git log) |
+| `895098d2` | (see git log) |
+| `09195ec6` | (see git log) |
+
+### Testing
+
+- [OK] Real Docker CPU stack and upload persistence passed on GitHub; three-DB/media backup and restore passed on PostgreSQL 14.24.
+- [OK] All seven staged models ran on native CUDA. A full private-Hub fetch into an empty directory matched all 15 required source files.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- On the target NVIDIA Docker host, use the manual sample in DOCKER.md to verify container GPU access and the configured external model provider.
