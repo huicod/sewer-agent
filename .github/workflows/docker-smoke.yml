@@ -31,12 +31,7 @@ jobs:
     env:
       COMPOSE_PROJECT_NAME: sewer-ci-${{ github.run_id }}-${{ github.run_attempt }}
       SEWER_HTTP_PORT: '18881'
-      SEWER_LLM_BASE_URL: http://127.0.0.1:9/v1
-      SEWER_LLM_MODEL: docker-smoke
-      SEWER_LLM_API_KEY: synthetic-ci-only
-      SEWER_VLM_BASE_URL: http://127.0.0.1:9/v1
-      SEWER_VLM_MODEL: docker-smoke
-      SEWER_VLM_API_KEY: synthetic-ci-only
+      DASHSCOPE_API_KEY: synthetic-ci-only
     steps:
       - uses: actions/checkout@v6
         with:
@@ -48,26 +43,21 @@ jobs:
           sudo rm -rf -- /usr/local/lib/android /usr/local/.ghcup /usr/share/dotnet
           df -h /
 
-      - name: Prepare isolated configuration and build production image
+      - name: Deploy from an empty model directory with one shared key
         run: |
-          mkdir -p "$RUNNER_TEMP/sewer-smoke/models"
-          python3 scripts/docker_setup.py --output .env.docker --models-dir "$RUNNER_TEMP/sewer-smoke/models"
-          docker compose --env-file .env.docker config --quiet
-          docker compose --env-file .env.docker build api
+          mkdir -p "$RUNNER_TEMP/sewer-smoke"
+          python3 scripts/docker_setup.py up --services api cpu-worker
+          cp .env.docker "$RUNNER_TEMP/sewer-smoke/first-deploy.env"
+          docker compose --env-file .env.docker run --rm --no-deps --entrypoint temporal temporal-namespace operator namespace describe --namespace default >/dev/null
 
-      - name: Check that an empty model mount blocks startup
+      - name: Check that an empty model mount blocks the container entrypoint
         run: |
-          if docker compose --env-file .env.docker run --rm --no-deps initialize >"$RUNNER_TEMP/sewer-smoke/preflight.log" 2>&1; then
+          mkdir -p "$RUNNER_TEMP/sewer-smoke/empty-models"
+          if SEWER_MODELS_DIR="$RUNNER_TEMP/sewer-smoke/empty-models" docker compose --env-file .env.docker run --rm --no-deps initialize >"$RUNNER_TEMP/sewer-smoke/preflight.log" 2>&1; then
             echo 'An empty model mount unexpectedly passed startup checks' >&2
             exit 1
           fi
           grep -Fq 'detector weights are missing or empty' "$RUNNER_TEMP/sewer-smoke/preflight.log"
-
-      - name: Start web, CPU worker, PostgreSQL and Temporal with synthetic model mount
-        run: |
-          python3 backend/tests/docker_smoke_fixture.py models
-          docker compose --env-file .env.docker up --detach --no-build --wait --wait-timeout 300 api cpu-worker
-          docker compose --env-file .env.docker run --rm --no-deps --entrypoint temporal temporal-namespace operator namespace describe --namespace default >/dev/null
 
       - name: Verify database roles and HTTP uploads
         run: |
@@ -88,9 +78,10 @@ jobs:
       - name: Recreate containers and verify the retained records and bytes
         run: |
           docker compose --env-file .env.docker down
-          docker compose --env-file .env.docker up --detach --no-build --wait --wait-timeout 300 api cpu-worker
+          env -u DASHSCOPE_API_KEY python3 scripts/docker_setup.py up --services api cpu-worker
+          cmp -s .env.docker "$RUNNER_TEMP/sewer-smoke/first-deploy.env"
           python3 backend/tests/docker_smoke_fixture.py verify
-          echo 'Web assets, API, CPU worker, database initialization and persistent upload passed. GPU inference is a separate acceptance check.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Public model download, one-key startup, web and CPU services, database initialization and persistent upload passed. GPU inference is a separate acceptance check.' >> "$GITHUB_STEP_SUMMARY"
 
       - name: Dispose of this CI project
         if: always() && hashFiles('.env.docker') != ''

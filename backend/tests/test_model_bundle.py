@@ -1,6 +1,7 @@
 """Model delivery must keep exact assets, versions, and private upload boundaries."""
 
 import copy
+import hashlib
 import io
 import json
 from types import SimpleNamespace
@@ -122,7 +123,7 @@ def test_upload_operations_ignore_unrelated_and_local_readme(tmp_path, tiny_mani
     operations = bundle.upload_operations(tmp_path, manifest=tiny_manifest)
     assert set(operations) == {
         *(asset["path"] for asset in bundle.asset_entries(tiny_manifest)),
-        "README.md", "models.json", "LICENSES.md",
+        "README.md", "models.json", "LICENSES.md", "MODEL-NOTICES.md",
     }
     assert b"UNTRUSTED_LOCAL_SECRET" not in operations["README.md"]
     assert b"PRIVATE_KEY" not in b"".join(v for v in operations.values() if isinstance(v, bytes))
@@ -138,6 +139,7 @@ def test_model_card_uses_portable_license_reference(tiny_manifest):
     assert all(url.startswith("https://") for url in urls)
     assert "license: other" in metadata.splitlines()
     assert "[Model license notices](LICENSES.md)" in body
+    assert "[Weight licenses and attribution](MODEL-NOTICES.md)" in body
 
 
 class FakeApi:
@@ -179,7 +181,7 @@ def test_new_upload_is_private_and_allowlisted(tmp_path, tiny_manifest, monkeypa
     bundle.upload_bundle(tmp_path, "test/models", manifest=tiny_manifest)
     assert api.created == [{"repo_id": "test/models", "repo_type": "model", "private": True}]
     operations = api.commits[0]["operations"]
-    assert len(operations) == 18
+    assert len(operations) == 19
     assert all(operation["path_in_repo"] != ".env" for operation in operations)
 
 
@@ -276,3 +278,99 @@ def test_fetch_ignores_unrelated_remote_files(tmp_path, tiny_manifest, monkeypat
 def test_fetch_rejects_floating_revision(tmp_path):
     with pytest.raises(bundle.BundleError, match="immutable"):
         bundle.fetch_bundle(tmp_path, "test/models", "main")
+
+
+@pytest.fixture
+def public_release(tmp_path, tiny_manifest, monkeypatch):
+    entries = bundle.asset_entries(tiny_manifest)
+    data = {}
+    checksums = []
+    for asset in entries:
+        name = asset["path"]
+        meta = asset.get("generated_json", asset.get("json_fields"))
+        data[name] = json.dumps(meta).encode() if meta is not None else b"test"
+        if meta is None:
+            checksums.append(f"{hashlib.sha256(data[name]).hexdigest()}  {name}\n")
+    checksum_path = tmp_path / "release.sha256"
+    checksum_path.write_text("".join(checksums))
+    revision_file = tmp_path / "revision.txt"
+    revision_file.write_text("a" * 40 + "\n")
+    monkeypatch.setattr(bundle, "CHECKSUM_PATH", checksum_path)
+    monkeypatch.setattr(bundle, "REVISION_PATH", revision_file)
+    monkeypatch.setattr(bundle, "load_manifest", lambda: tiny_manifest)
+    monkeypatch.setenv("HF_TOKEN", "must-never-be-sent")
+    monkeypatch.setattr(bundle, "_hub", lambda: pytest.fail("public fetch accessed the HF SDK"))
+    requests = []
+
+    def urlopen(request, timeout):
+        prefix = f"https://huggingface.co/{bundle.PUBLIC_REPO}/resolve/{'a' * 40}/"
+        assert request.full_url.startswith(prefix)
+        assert request.get_header("Authorization") is None
+        name = request.full_url.removeprefix(prefix)
+        requests.append(name)
+        return io.BytesIO(data[name])
+
+    monkeypatch.setattr(bundle.urllib.request, "urlopen", urlopen)
+    return data, requests
+
+
+def test_public_fetch_verifies_new_bytes_before_install_and_reuses_completed_files(
+    tmp_path, public_release,
+):
+    data, requests = public_release
+    target = tmp_path / "models"
+    weight = "enhancement/dehazeformer-mct-8e0b26c7.pth"
+    data[weight] = b"FAKE"  # The size is correct but the checksum belongs to the release.
+    with pytest.raises(bundle.BundleError, match="SHA-256 differs"):
+        bundle.public_fetch_bundle(target)
+    assert (target / "detector/best.pt").read_bytes() == b"test"
+    assert not (target / weight).exists()
+    assert not list(target.rglob(".model-*"))
+
+    data[weight] = b"test"
+    bundle.public_fetch_bundle(target)
+    assert requests.count("detector/best.pt") == 1
+    assert set(requests) == set(data)
+    assert all((target / name).read_bytes() == value for name, value in data.items())
+    assert (target / "LICENSES.md").is_file()
+
+    requests.clear()
+    bundle.public_fetch_bundle(target)
+    assert not requests
+    (target / weight).write_bytes(b"FAKE")
+    with pytest.raises(bundle.BundleError, match="existing file is not reusable"):
+        bundle.public_fetch_bundle(target)
+    assert (target / weight).read_bytes() == b"FAKE"
+    assert not requests
+
+
+def test_incomplete_release_checksums_refuse_download(tmp_path, public_release):
+    _, requests = public_release
+    listed = bundle.CHECKSUM_PATH.read_text().splitlines(keepends=True)
+    bundle.CHECKSUM_PATH.write_text("".join(listed[1:]))
+    with pytest.raises(bundle.BundleError, match="checksums do not match"):
+        bundle.public_fetch_bundle(tmp_path / "models")
+    assert not requests
+
+
+def test_public_fetch_rejects_unpinned_release(tmp_path, public_release):
+    _, requests = public_release
+    bundle.REVISION_PATH.write_text("main\n")
+    with pytest.raises(bundle.BundleError, match="immutable"):
+        bundle.public_fetch_bundle(tmp_path / "models")
+    assert not requests
+
+
+def test_metadata_upgrade_preserves_unrecognized_content(tmp_path, tiny_manifest, monkeypatch):
+    card = tmp_path / "README.md"
+    old_card = b"previously generated model card"
+    card.write_bytes(old_card)
+    old_digest = hashlib.sha256(old_card).hexdigest()
+    monkeypatch.setitem(bundle.LEGACY_METADATA_SHA256, "README.md", old_digest)
+    bundle._save_metadata(tmp_path, tiny_manifest)
+    assert "MODEL-NOTICES.md" in card.read_text()
+    assert (tmp_path / "MODEL-NOTICES.md").read_bytes() == bundle.NOTICES_PATH.read_bytes()
+    card.write_text("my custom model card")
+    with pytest.raises(bundle.BundleError, match="existing bundle metadata differs"):
+        bundle._save_metadata(tmp_path, tiny_manifest)
+    assert card.read_text() == "my custom model card"

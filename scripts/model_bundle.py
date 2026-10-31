@@ -4,6 +4,8 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
+import http.client
 import io
 import json
 import os
@@ -11,11 +13,22 @@ import re
 import shutil
 import sys
 import tempfile
+import urllib.error
+import urllib.parse
 import urllib.request
 from pathlib import Path, PurePosixPath
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 MANIFEST_PATH = REPO_ROOT / "deploy" / "models.json"
+CHECKSUM_PATH = REPO_ROOT / "deploy" / "model-weights.sha256"
+REVISION_PATH = REPO_ROOT / "deploy" / "model-revision.txt"
+NOTICES_PATH = REPO_ROOT / "deploy" / "MODEL-NOTICES.md"
+PUBLIC_REPO = "suwewa/sewer-agent-models"
+# Only the two generated files from the original private release may be upgraded in place.
+LEGACY_METADATA_SHA256 = {
+    "README.md": "4e2f0bde45fefe920a316740c0bbee696110ae88ea27af4ad6e4c043aa9369ff",
+    "models.json": "58778b070d4aa87e86a07dd303a97072134be3fb0236d188d4c5aaaaccedb891",
+}
 LICENSE_PATH = (
     REPO_ROOT / "backend/src/pipe_inspector/vision/_enhancement_vendor/LICENSES.md"
 )
@@ -107,6 +120,13 @@ def _validate_file(path: Path, asset: dict) -> None:
         raise BundleError(
             f"model size differs: {name} (expected {asset['size_bytes']}, found {size})"
         )
+    elif "sha256" in asset:
+        digest = hashlib.sha256()
+        with path.open("rb") as stream:
+            while chunk := stream.read(1024 * 1024):
+                digest.update(chunk)
+        if digest.hexdigest() != asset["sha256"]:
+            raise BundleError(f"model SHA-256 differs: {name}")
 
 
 def check_bundle(directory: Path, manifest_path: Path | None = None, *, manifest=None) -> list[str]:
@@ -146,8 +166,8 @@ def _install(directory: Path, asset: dict, writer) -> bool:
             writer(output)
         _validate_file(temporary, asset)
         # link() refuses an existing destination, unlike replace()/rename().
+        os.chmod(temporary, 0o644)
         os.link(temporary, target)
-        os.chmod(target, 0o644)
     except FileExistsError as error:
         raise BundleError(f"model target appeared during preparation: {asset['path']}") from error
     finally:
@@ -198,6 +218,7 @@ def bundle_metadata(manifest: dict) -> dict[str, bytes]:
         "Seven pinned models for detector, enhancement, segmentation, and relative depth. "
         "This package contains no training dataset, uploaded user media, database, "
         "or API credentials.\n\n"
+        "[Weight licenses and attribution](MODEL-NOTICES.md) · "
         "[Model license notices](LICENSES.md)\n\n"
         "| Model | Weight terms | Source |\n|---|---|---|\n" + rows + "\n\n"
         "`unknown` means a separate weight license has not been established by the project; "
@@ -214,24 +235,35 @@ def bundle_metadata(manifest: dict) -> dict[str, bytes]:
         "README.md": card.encode("utf-8"),
         "models.json": _json_bytes(manifest),
         "LICENSES.md": _license_notices(manifest).encode("utf-8"),
+        "MODEL-NOTICES.md": NOTICES_PATH.read_bytes(),
     }
 
 
 def _save_metadata(directory: Path, manifest: dict) -> None:
     for name, content in bundle_metadata(manifest).items():
         target = _path(directory, name)
-        if target.exists():
-            if (
-                not target.is_file()
-                or target.stat().st_size != len(content)
-                or target.read_bytes() != content
-            ):
+        replacing = target.exists()
+        if replacing:
+            if not target.is_file() or target.stat().st_size > 1024 * 1024:
+                raise BundleError(f"invalid existing bundle metadata: {name}")
+            existing = target.read_bytes()
+            if existing == content:
+                continue
+            if LEGACY_METADATA_SHA256.get(name) != hashlib.sha256(existing).hexdigest():
                 raise BundleError(
                     f"existing bundle metadata differs; choose a new directory: {name}"
                 )
-            continue
-        with target.open("xb") as output:
-            output.write(content)
+        descriptor, temporary = tempfile.mkstemp(prefix=".metadata-", dir=target.parent)
+        try:
+            with os.fdopen(descriptor, "wb") as output:
+                output.write(content)
+                os.fchmod(output.fileno(), 0o644)
+            if replacing:
+                os.replace(temporary, target)
+            else:
+                os.link(temporary, target)
+        finally:
+            Path(temporary).unlink(missing_ok=True)
 
 
 def prepare_bundle(source_root: Path, output: Path, *, manifest=None) -> None:
@@ -247,18 +279,14 @@ def prepare_bundle(source_root: Path, output: Path, *, manifest=None) -> None:
     _save_metadata(output, manifest)
 
 
-def _download_one(directory: Path, asset: dict) -> None:
-    if "generated_json" in asset:
-        _install(directory, asset, lambda output: output.write(
-            _json_bytes(asset["generated_json"])
-        ))
-        return
-    url = asset.get("url", "")
+def _download_file(directory: Path, asset: dict, url: str) -> None:
     if not url.startswith(("https://huggingface.co/", "https://github.com/")):
         raise BundleError(f"no approved public source for {asset['path']}")
 
     def writer(output):
-        limit = asset["size_bytes"] if "json_fields" not in asset else 1024 * 1024
+        is_json = "generated_json" in asset or "json_fields" in asset
+        limit = 1024 * 1024 if is_json else asset["size_bytes"]
+        print(f"Downloading {asset['path']}", file=sys.stderr, flush=True)
         request = urllib.request.Request(url, headers={"User-Agent": "sewer-agent-model-setup/1"})
         with urllib.request.urlopen(request, timeout=60) as response:
             count = 0
@@ -268,7 +296,22 @@ def _download_one(directory: Path, asset: dict) -> None:
                     raise BundleError(f"download exceeds expected model size: {asset['path']}")
                 output.write(data)
 
-    _install(directory, asset, writer)
+    try:
+        _install(directory, asset, writer)
+    except (urllib.error.URLError, TimeoutError, ConnectionError, http.client.HTTPException) as exc:
+        reason = (f"HTTP {exc.code}" if isinstance(exc, urllib.error.HTTPError)
+                  else type(exc).__name__)
+        raise BundleError(
+            f"download failed for {asset['path']} ({reason}); rerun to reuse completed files"
+        ) from None
+
+
+def _download_one(directory: Path, asset: dict) -> None:
+    if "generated_json" in asset:
+        data = _json_bytes(asset["generated_json"])
+        _install(directory, asset, lambda output: output.write(data))
+    else:
+        _download_file(directory, asset, asset.get("url", ""))
 
 
 def download_bundle(directory: Path, detector: Path, *, manifest=None) -> None:
@@ -278,6 +321,33 @@ def download_bundle(directory: Path, detector: Path, *, manifest=None) -> None:
     for asset in entries[1:]:
         _download_one(directory, asset)
     _require_complete(directory, manifest)
+    _save_metadata(directory, manifest)
+
+
+def public_fetch_bundle(directory: Path) -> None:
+    """Fetch only missing assets from the pinned public release; no SDK or token is used."""
+    manifest = load_manifest()
+    entries = asset_entries(manifest)
+    weights = {a["path"] for a in entries if "json_fields" not in a and "generated_json" not in a}
+    checksums = {}
+    for line in CHECKSUM_PATH.read_text(encoding="utf-8").splitlines():
+        match = re.fullmatch(r"([0-9a-f]{64})  (.+)", line)
+        if not match or match[2] in checksums:
+            raise BundleError("invalid release weight checksum list")
+        checksums[match[2]] = match[1]
+    if weights != checksums.keys():
+        raise BundleError("release weight checksums do not match the model manifest")
+
+    revision = REVISION_PATH.read_text(encoding="ascii").removesuffix("\n")
+    if not re.fullmatch(r"[0-9a-f]{40}", revision):
+        raise BundleError("public model release must pin a full immutable Hugging Face revision")
+    base_url = f"https://huggingface.co/{PUBLIC_REPO}/resolve/{revision}"
+    for asset in entries:
+        name = asset["path"]
+        if name in checksums:
+            asset = {**asset, "sha256": checksums[name]}
+        url = f"{base_url}/{urllib.parse.quote(name)}"
+        _download_file(directory, asset, url)
     _save_metadata(directory, manifest)
 
 
@@ -392,6 +462,8 @@ def main(argv=None) -> int:
     fetch.add_argument("--directory", type=Path, required=True)
     fetch.add_argument("--repo-id", required=True)
     fetch.add_argument("--revision", required=True)
+    public = commands.add_parser("fetch-public", help="fetch the pinned public bundle anonymously")
+    public.add_argument("--directory", type=Path, required=True)
     args = parser.parse_args(argv)
     try:
         if args.command == "list":
@@ -415,6 +487,9 @@ def main(argv=None) -> int:
         elif args.command == "fetch":
             fetch_bundle(args.directory, args.repo_id, args.revision)
             print("Seven-model bundle fetched and validated.")
+        elif args.command == "fetch-public":
+            public_fetch_bundle(args.directory)
+            print("Seven public models are ready; all weight SHA-256 checks passed.")
     except BundleError as error:
         print(f"error: {error}", file=sys.stderr)
         return 1

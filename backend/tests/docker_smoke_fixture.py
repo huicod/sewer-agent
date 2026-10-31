@@ -1,4 +1,4 @@
-"""CI-only synthetic model mount and HTTP checks for the Docker deployment smoke job."""
+"""CI-only upload and persistence checks for the Docker deployment smoke job."""
 
 import argparse
 import base64
@@ -8,30 +8,11 @@ import re
 import urllib.request
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[2]
 # A real, synthetic 4x3 RGB PNG. Its bytes must survive a full container recreation.
 PNG = base64.b64decode(
     "iVBORw0KGgoAAAANSUhEUgAAAAQAAAADCAIAAAA7ljmRAAAAFElEQVR4nGNMaVnJ"
     "AANMDEgAhQMAOkwBlzSCyAwAAAAASUVORK5CYII="
 )
-
-
-def seed_models(directory: Path) -> None:
-    if any(directory.iterdir()):
-        raise RuntimeError("CI model mount must be empty")
-    manifest = json.loads((ROOT / "deploy/models.json").read_text())
-    for model in manifest["models"]:
-        for item in model["files"]:
-            target = directory / item["path"]
-            target.parent.mkdir(parents=True, exist_ok=True)
-            metadata = item.get("generated_json", item.get("json_fields"))
-            if metadata is not None:
-                target.write_text(json.dumps(metadata))
-            else:
-                # Exercise real mount paths, permissions and size checks. Never load these.
-                with target.open("xb") as out:
-                    out.write(b"SYNTHETIC CI PLACEHOLDER, NO MODEL PARAMETERS\n")
-                    out.truncate(item["size_bytes"])
 
 
 def request(path: str, *, method="GET", body=None, content_type=None, status=200) -> bytes:
@@ -96,14 +77,12 @@ def verify_records(state_file: Path) -> None:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("operation", choices=("models", "seed", "verify"))
+    parser.add_argument("operation", choices=("seed", "verify"))
     operation = parser.parse_args().operation
     if os.environ.get("GITHUB_ACTIONS") != "true" or not os.environ.get("RUNNER_TEMP"):
         parser.error("requires a disposable GitHub Actions runner")
     workspace = Path(os.environ["RUNNER_TEMP"]) / "sewer-smoke"
-    if operation == "models":
-        seed_models(workspace / "models")
-    elif operation == "seed":
+    if operation == "seed":
         seed_records(workspace / "records.json")
     else:
         verify_records(workspace / "records.json")

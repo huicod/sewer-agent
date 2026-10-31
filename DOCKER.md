@@ -6,74 +6,49 @@
 
 已在[干净的 Docker 主机](https://github.com/huicod/sewer-agent/actions/runs/41168745232)验证镜像构建、网页和 CPU 服务、数据库初始化及容器重建后的图片和会话。七个真实模型另在 RTX 4080 SUPER 上逐一完成了推理。Docker 中的 GPU 和外部 API 仍需在部署主机上，用第 3 节的示例检查。
 
-## 1. 取得代码和模型
+## 1. 新机一键部署
 
-用有权访问 GitHub 仓库的账号取得代码：
+先从有权访问私有 GitHub 仓库的账号取得代码，也可以使用项目维护者交付的代码副本。
 
 ```bash
 git clone --branch dev/agent-v1 --single-branch https://github.com/huicod/sewer-agent.git
 cd sewer-agent
+python3 scripts/docker_setup.py up
 ```
 
-以下命令都在仓库根目录执行。模型目录默认 `./models/`，不进入 Git 或 Docker 镜像。三种准备方式任选一种：
+首次按提示输入 **阿里云百炼北京地域的 API Key**，输入时字符不会显示。该账号须已开通默认模型 `qwen3.8-max`。同一把 Key 用于对话及图片复检，也可以通过部署环境提供 `DASHSCOPE_API_KEY`。[百炼模型与视觉能力](https://help.aliyun.com/zh/model-studio/vision-model/)
 
-**从 Hugging Face 取回完整模型包**：目前的[模型仓库](https://huggingface.co/suwewa/sewer-agent-models)在 `suwewa` 的个人账户下，且为私有。所有者可在部署服务器上用自己的只读 Token 下载；电脑上已有的登录不会自动传到服务器，运行中的容器不需要 Token。下面的命令固定到与这版代码配套的[模型提交](https://huggingface.co/suwewa/sewer-agent-models/tree/19f0aaea138cd6ac27440b418706e2852584acd0)。
+脚本创建权限为 `0600` 的 `.env.docker`，生成三份数据库密码，匿名下载约 1.07 GiB 的模型到 `./models/`，校验七个权重的 SHA-256，然后构建镜像并等待服务就绪。模型下载用 Python 标准库，版本随代码固定。再次运行同一命令可复用已下载的完整文件、配置及两个持久卷。启动成功后在宿主机打开 `http://127.0.0.1:8000`。[公开模型包](https://huggingface.co/suwewa/sewer-agent-models) · [本版固定提交](deploy/model-revision.txt)
 
-```bash
-python3 -m venv .venv
-.venv/bin/python -m pip install 'huggingface_hub==0.36.2'
-.venv/bin/hf auth login
-.venv/bin/python scripts/model_bundle.py fetch \
-  --repo-id suwewa/sewer-agent-models \
-  --revision 19f0aaea138cd6ac27440b418706e2852584acd0 --directory ./models
-```
+## 2. 使用其他 API 或自备模型
 
-**交给其他人部署**：个人私有仓库不能靠发送链接让对方读取。可由所有者下载上面的 `models/` 目录，按各权重的使用条款交给获准人员；接收方将完整目录放在项目根目录，直接执行下方的 `check`，无需登录 Hugging Face。若需团队自行下载，可改用组织私有仓库，成员使用自己的账号，并将上面的仓库名、提交号替换为团队版本。详见 [Hugging Face 私有仓库权限](https://huggingface.co/docs/huggingface_hub/main/guides/repository#update-visibility)。
-
-**已有训练好的检测器**：将本项目五类 YOLO26s 的 `best.pt` 路径交给准备脚本；脚本从各模型的原始来源下载另外六个固定版本，并生成几何模型要求的来源记录。
-
-```bash
-python3 scripts/model_bundle.py download --detector /path/to/best.pt --directory ./models
-```
-
-**在已有本机资产的原服务器上**：从当前项目的既有位置复制清单中的文件，不下载、不改源文件。
-
-```bash
-python3 scripts/model_bundle.py prepare --source-root . --output ./models
-```
-
-每种方式完成后执行：
-
-```bash
-python3 scripts/model_bundle.py check --directory ./models
-(cd ./models && sha256sum -c ../deploy/model-weights.sha256)
-```
-
-清单 [deploy/models.json](deploy/models.json) 包含 7 个权重和 8 个必要的配置/来源文件：`detector/best.pt`、`enhancement/` 下四个增强模型、`geometry/` 下 SAM2.1 和 Depth Anything V2 Small 的完整目录。第一条命令检查文件和配置；第二条逐个读取权重，确认与此版本发布的字节完全一致，适合在交接后运行。使用其他训练版本时需更新清单、校验值和对应验证。容器用户 UID 10001 需要读取模型目录和文件。Qwen 走远程 API，无需 Qwen 权重。
-
-## 2. 配置 API 和本地端口
+使用其他地域、模型服务或端口时，可先生成配置，再编辑 `.env.docker` 并启动。配置文件已经存在时直接编辑即可。
 
 ```bash
 python3 scripts/docker_setup.py
+# 编辑 .env.docker 后启动
+python3 scripts/docker_setup.py up
 ```
 
-这会从 `.env.docker.example` 创建权限为 `0600` 的 **`.env.docker`**，并生成三份独立数据库密码。不会读取或覆盖原生部署的 `.env`，也不会覆盖已有配置。模型在其他位置时，首次生成可加 `--models-dir /absolute/path/to/models`，或直接修改 `.env.docker` 中的 `SEWER_MODELS_DIR`。
+- 默认北京百炼配置只需 `DASHSCOPE_API_KEY`。使用其他兼容服务时，分别设置 `SEWER_LLM_BASE_URL`、`SEWER_LLM_MODEL`、`SEWER_LLM_API_KEY` 及对应的 `SEWER_VLM_*`。视觉端点和账号必须支持图片输入。服务商允许时，两处可以填同一把 Key。
+- 网页默认仅绑定 `127.0.0.1:8000`。端口被占用时，在配置文件把 `SEWER_HTTP_PORT` 改为其他空闲端口。远程访问可按第 3 节使用 SSH 转发。
+- 若已有这版模型，把完整目录放在 `./models/`，或在配置文件设置 `SEWER_MODELS_DIR`。目录内直接包含 `detector/`、`enhancement/`、`geometry/`，需要允许容器用户 UID 10001 读取。运行 `up` 时会核验本地文件，缺失的文件将自动下载。
+- 只想先下载模型时运行 `python3 scripts/model_bundle.py fetch-public --directory ./models`。从原服务器已有资产整理模型可用 `python3 scripts/model_bundle.py prepare --source-root . --output ./models`。权重的原始来源和各自条款见[模型说明](deploy/MODEL-NOTICES.md)。
 
-在 `.env.docker` 中填写：
+请安全保存 `.env.docker`。有数据的数据库卷需要使用原密码，重新生成密码不会轮换数据库中的角色凭据。
 
-- 使用官方 Qwen：设置 `DASHSCOPE_API_KEY`，并确认 LLM/VLM 地址、模型名和账号所属区域匹配。模板中的模型名是示例。
-- 使用其他兼容服务：分别设置 `SEWER_LLM_BASE_URL`、`SEWER_LLM_MODEL`、`SEWER_LLM_API_KEY` 及对应 `SEWER_VLM_*`。视觉端点须支持图像输入。
-- 默认网页仅绑定主机 `127.0.0.1:8000`。若与现有服务并行使用，把 `SEWER_HTTP_PORT` 改为 `18000`。项目尚无公网用户鉴权，远程访问用 SSH 端口转发。
+## 3. 检查服务、试用和停止
 
-不要重新生成正在使用的数据库卷所对应的密码；改变配置文件并不会自动轮换 PostgreSQL 角色密码。不要提交 `.env.docker`、HF Token 或真实媒体。
+```bash
+docker compose --env-file .env.docker ps -a
+```
 
-## 3. 首次启动、检查和停止
+需要手动分步排查时，先确认模型已下载，再依次执行以下命令。
 
 ```bash
 docker compose --env-file .env.docker config --quiet
 docker compose --env-file .env.docker build initialize
 docker compose --env-file .env.docker up -d --no-build --wait --wait-timeout 360
-docker compose --env-file .env.docker ps -a
 ```
 
 `build initialize` 构建一次应用镜像，API、初始化任务及两个 worker 复用它。镜像内编译前端，安装 FFmpeg/ffprobe 和固定的 PyTorch 2.8.0、torchvision 0.23.0 CUDA 12.8 轮子。使用 Compose [服务依赖](https://docs.docker.com/compose/how-tos/startup-order/)等待首启完成，[GPU 设备](https://docs.docker.com/compose/how-tos/gpu-support/)只分配给串行 GPU worker。
@@ -131,7 +106,7 @@ dc up -d --no-build --wait --wait-timeout 360
 
 ## 5. 模型维护与排错
 
-向自己的 Hugging Face 仓库存储此包时，在**持有模型文件的机器**登录有写权限的账号，然后显式指定目标。上传工具只发送清单列出的模型/配置以及生成的模型卡、来源和许可说明，不复制训练集、`.env`、用户媒体或数据库。新仓库默认私有。如果目标是组织私有仓库，向有读权限的成员提供命令返回的仓库 ID 和提交号。第三方模型的来源和许可分别列出，不把架构代码许可等同于权重的统一再分发许可。
+本节仅供需要发布新权重的维护者使用。向自己的 Hugging Face 仓库存储此包时，在**持有模型文件的机器**登录有写权限的账号，然后显式指定目标。上传工具只发送清单列出的模型/配置以及生成的模型卡、来源和许可说明，不复制训练集、`.env`、用户媒体或数据库。新仓库默认私有。如果目标是组织私有仓库，向有读权限的成员提供命令返回的仓库 ID 和提交号。第三方模型的来源和许可分别列出，不把架构代码许可等同于权重的统一再分发许可。
 
 ```bash
 hf auth login

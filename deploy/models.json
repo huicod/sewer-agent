@@ -7,7 +7,7 @@
       "id": "yolo26s-sewer2403-five",
       "name": "YOLO26s Sewer2403 five-class detector",
       "source_url": "https://github.com/huicod/sewer-agent/tree/dev/agent-v1/yolov26/experiments/sewer2403_5class_yolo26s_img960_e100",
-      "weight_license": "unknown; project-trained checkpoint, upstream Ultralytics and dataset terms must be retained",
+      "weight_license": "AGPL-3.0 in checkpoint metadata; fine-tuned from Ultralytics YOLO26s 8.4.46 on Sewer2403; separate training dataset terms are not recorded",
       "files": [
         {
           "path": "detector/best.pt",
