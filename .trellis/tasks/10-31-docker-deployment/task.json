@@ -12,8 +12,8 @@
   "assignee": "huicod",
   "createdAt": "2026-10-31",
   "completedAt": null,
-  "branch": null,
-  "base_branch": "main",
+  "branch": "deploy/docker-compose",
+  "base_branch": "dev/agent-v1",
   "worktree_path": null,
   "commit": null,
   "pr_url": null,
@@ -22,5 +22,7 @@
   "parent": null,
   "relatedFiles": [],
   "notes": "",
-  "meta": {}
+  "meta": {
+    "model_revision": "19f0aaea138cd6ac27440b418706e2852584acd0"
+  }
 }

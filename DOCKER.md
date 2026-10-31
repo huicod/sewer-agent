@@ -4,23 +4,36 @@
 
 宿主机需要 Docker Engine、Docker Compose v2（建议 2.30 或更新）、Python 3.10+（仅配置/模型准备），以及支持 CUDA 12.8 的 NVIDIA 驱动和已配置的 [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html)。主机不必安装项目的 Node、PyTorch、PostgreSQL 或 Temporal。构建时需联网下载公开依赖；运行对话、VLM 复检时需访问配置的 API。准备足够的镜像构建空间（建议至少 25 GiB 可用）和媒体存储空间；完整模型包另需约 1.07 GiB。
 
+已在[干净的 Docker 主机](https://github.com/huicod/sewer-agent/actions/runs/41168745232)验证镜像构建、网页和 CPU 服务、数据库初始化及容器重建后的图片和会话。七个真实模型另在 RTX 4080 SUPER 上逐一完成了推理。Docker 中的 GPU 和外部 API 仍需在部署主机上，用第 3 节的示例检查。
+
 ## 1. 取得代码和模型
 
-从有权访问仓库的账号克隆 `dev/agent-v1`，以下命令都在仓库根目录执行。模型目录默认 `./models/`，不进入 Git 或 Docker 镜像。三种准备方式任选一种：
+用有权访问 GitHub 仓库的账号取得代码：
+
+```bash
+git clone --branch dev/agent-v1 --single-branch https://github.com/huicod/sewer-agent.git
+cd sewer-agent
+```
+
+以下命令都在仓库根目录执行。模型目录默认 `./models/`，不进入 Git 或 Docker 镜像。三种准备方式任选一种：
+
+**从 Hugging Face 取回完整模型包**：目前的[模型仓库](https://huggingface.co/suwewa/sewer-agent-models)在 `suwewa` 的个人账户下，且为私有。所有者可在部署服务器上用自己的只读 Token 下载；电脑上已有的登录不会自动传到服务器，运行中的容器不需要 Token。下面的命令固定到与这版代码配套的[模型提交](https://huggingface.co/suwewa/sewer-agent-models/tree/19f0aaea138cd6ac27440b418706e2852584acd0)。
+
+```bash
+python3 -m venv .venv
+.venv/bin/python -m pip install 'huggingface_hub==0.36.2'
+.venv/bin/hf auth login
+.venv/bin/python scripts/model_bundle.py fetch \
+  --repo-id suwewa/sewer-agent-models \
+  --revision 19f0aaea138cd6ac27440b418706e2852584acd0 --directory ./models
+```
+
+**交给其他人部署**：个人私有仓库不能靠发送链接让对方读取。可由所有者下载上面的 `models/` 目录，按各权重的使用条款交给获准人员；接收方将完整目录放在项目根目录，直接执行下方的 `check`，无需登录 Hugging Face。若需团队自行下载，可改用组织私有仓库，成员使用自己的账号，并将上面的仓库名、提交号替换为团队版本。详见 [Hugging Face 私有仓库权限](https://huggingface.co/docs/huggingface_hub/main/guides/repository#update-visibility)。
 
 **已有训练好的检测器**：将本项目五类 YOLO26s 的 `best.pt` 路径交给准备脚本；脚本从各模型的原始来源下载另外六个固定版本，并生成几何模型要求的来源记录。
 
 ```bash
 python3 scripts/model_bundle.py download --detector /path/to/best.pt --directory ./models
-```
-
-**已有完整 Hugging Face 包的读权限**：在 Python 虚拟环境中安装 `huggingface_hub==0.36.2`；私有仓库先用 `hf auth login` 登入有读取权限的账号。发布者提供模型仓库名和完整 40 位提交号，将其填入下面两个变量。固定提交可避免下载的模型与当前代码不匹配。
-
-```bash
-python -m pip install 'huggingface_hub==0.36.2'
-hf auth login
-python scripts/model_bundle.py fetch --repo-id "$MODEL_REPO" \
-  --revision "$MODEL_REVISION" --directory ./models
 ```
 
 **在已有本机资产的原服务器上**：从当前项目的既有位置复制清单中的文件，不下载、不改源文件。
@@ -33,9 +46,10 @@ python3 scripts/model_bundle.py prepare --source-root . --output ./models
 
 ```bash
 python3 scripts/model_bundle.py check --directory ./models
+(cd ./models && sha256sum -c ../deploy/model-weights.sha256)
 ```
 
-清单 [deploy/models.json](deploy/models.json) 包含 7 个权重和 8 个必要的配置/来源文件：`detector/best.pt`、`enhancement/` 下四个增强模型、`geometry/` 下 SAM2.1 和 Depth Anything V2 Small 的完整目录。文件大小与元数据检查用于发现缺失或版本不匹配，不代替可信来源或实际推理验证。使用其他训练版本时需明确更新清单和对应验证。容器用户 UID 10001 需要读取模型目录和文件。Qwen 走远程 API，无需 Qwen 权重。
+清单 [deploy/models.json](deploy/models.json) 包含 7 个权重和 8 个必要的配置/来源文件：`detector/best.pt`、`enhancement/` 下四个增强模型、`geometry/` 下 SAM2.1 和 Depth Anything V2 Small 的完整目录。第一条命令检查文件和配置；第二条逐个读取权重，确认与此版本发布的字节完全一致，适合在交接后运行。使用其他训练版本时需更新清单、校验值和对应验证。容器用户 UID 10001 需要读取模型目录和文件。Qwen 走远程 API，无需 Qwen 权重。
 
 ## 2. 配置 API 和本地端口
 
@@ -117,7 +131,7 @@ dc up -d --no-build --wait --wait-timeout 360
 
 ## 5. 模型维护与排错
 
-向自己的 Hugging Face 仓库存储此包时，在**持有模型文件的机器**登录有写权限的账号，然后显式指定目标。上传工具只发送清单列出的模型/配置以及生成的模型卡、来源和许可说明，不复制训练集、`.env`、用户媒体或数据库。新仓库默认私有。向使用者提供命令返回的仓库 ID 和提交号，私有仓库还需授予读取权限。第三方模型的来源和许可分别列出，不把架构代码许可等同于权重的统一再分发许可。
+向自己的 Hugging Face 仓库存储此包时，在**持有模型文件的机器**登录有写权限的账号，然后显式指定目标。上传工具只发送清单列出的模型/配置以及生成的模型卡、来源和许可说明，不复制训练集、`.env`、用户媒体或数据库。新仓库默认私有。如果目标是组织私有仓库，向有读权限的成员提供命令返回的仓库 ID 和提交号。第三方模型的来源和许可分别列出，不把架构代码许可等同于权重的统一再分发许可。
 
 ```bash
 hf auth login
