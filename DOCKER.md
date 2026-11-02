@@ -55,7 +55,7 @@ docker compose --env-file .env.docker up -d --no-build --wait --wait-timeout 360
 
 启动顺序：PostgreSQL 创建角色与 `sewer_agent`、`temporal`、`temporal_visibility` 三个库 → 同版本 Temporal 1.31.2 管理工具准备两个工作流库的表 → Temporal 启动并注册 `default` namespace → 应用初始化业务表 → 启动网页/API 和 CPU、GPU worker。`temporal-schema`、`temporal-namespace`、`initialize` 正常状态为 **Exited (0)**，其余五个服务应运行且健康。数据库及 Temporal 不发布主机端口。
 
-在主机浏览器打开 `http://127.0.0.1:8000`（端口随配置调整）。远程主机可在自己电脑运行 `ssh -N -L 18000:127.0.0.1:8000 <SSH别名>`，打开 `http://127.0.0.1:18000`。先确认页面能列出会话；然后用“手动提交”上传仓库 `example/` 中的示例图片并选择“纯 YOLO”，检查成功生成任务结果和媒体证据。手动纯 YOLO 不调用检查 VLM；对话入口或 VLM 复检使用部署者的 API 账户。几何与增强按界面明确选择验证，不凭首页健康检查宣称模型推理通过。
+在主机浏览器打开 `http://127.0.0.1:8000`（端口随配置调整）。远程主机可在自己电脑运行 `ssh -N -L 18000:127.0.0.1:8000 <SSH别名>`，打开 `http://127.0.0.1:18000`。先确认页面能列出会话；然后点击“新建检查”，从浏览器所在电脑选择示例图片，填写检查指令，选择“纯 YOLO（不复检）”并提交。在“任务与证据”点击“启动检查”后，查看任务结果和媒体证据。手动纯 YOLO 不调用检查 VLM；对话入口或 VLM 复检使用部署者的 API 账户。几何与增强按界面明确选择验证，不凭首页健康检查宣称模型推理通过。
 
 ```bash
 docker compose --env-file .env.docker logs --tail=80 initialize gpu-worker
