@@ -6,6 +6,42 @@
 本机启动、SSH访问与停止/恢复见 **[运行手册](RUNNING.md)**。
 现有功能已收口并可人工试用，验收清单也在运行手册；规范检索待指定版本/原文，不宣称首版全项完成。
 
+## 新机部署（从克隆到打开网页）
+
+**准备主机和账号。** 完整项目需要 Linux x86-64 主机、NVIDIA GPU、支持 CUDA 12.8 的驱动、已配置的 NVIDIA Container Toolkit、Git、Python 3.10+，以及可用的 Docker Engine 和 Compose v2（建议 2.30+）。镜像构建建议预留至少 25 GiB，模型另需约 1.07 GiB；上传的图片和视频还会占用存储空间。主机需能联网下载镜像、依赖和模型，并访问配置的 API。安装步骤见 [Docker Engine](https://docs.docker.com/engine/install/) 和 [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html)。
+
+1. **在新服务器克隆部署分支。** 使用有该私有 GitHub 仓库读取权限的账号。当前 Docker 部署代码在 `dev/agent-v1`，克隆时请指定分支。
+
+   ```bash
+   git clone --branch dev/agent-v1 --single-branch https://github.com/huicod/sewer-agent.git
+   cd sewer-agent
+   ```
+
+2. **启动整个项目。** 在刚克隆的目录中运行：
+
+   ```bash
+   python3 scripts/docker_setup.py up
+   ```
+
+   首次启动会提示输入**阿里云百炼北京地域的 API Key**（输入时不回显）。默认模型为 `qwen3.8-max`，账号需已开通该模型；对话和图片复检共用这把 Key。脚本会自动从 [Hugging Face](https://huggingface.co/suwewa/sewer-agent-models) 匿名下载并校验 7 个模型，生成数据库密码，初始化 PostgreSQL 和 Temporal，再启动网页、API、CPU 和 GPU 工作进程。使用其他 API 服务时，先按[部署指南](https://github.com/huicod/sewer-agent/blob/dev/agent-v1/DOCKER.md)配置文字和视觉端点，再运行启动命令。
+
+3. **打开网页并验证一次检测。** 等启动命令提示服务就绪后，可在服务器查看状态：
+
+   ```bash
+   docker compose --env-file .env.docker ps -a
+   curl -fsS http://127.0.0.1:8000/health
+   ```
+
+   正常时健康接口返回 `"status":"alive"`，三个初始化任务显示 `Exited (0)`。如果浏览器就在部署主机上，打开 `http://127.0.0.1:8000`。如果部署在远程服务器，请在**自己电脑**另开终端，替换 SSH 用户名和主机名后运行并保持连接：
+
+   ```bash
+   ssh -N -L 18000:127.0.0.1:8000 your-user@your-server
+   ```
+
+   然后在自己电脑打开 `http://127.0.0.1:18000`。点击“新建检查”，从浏览器所在电脑选择一张管道图片（可下载[仓库示例图](https://github.com/huicod/sewer-agent/blob/dev/agent-v1/example/01_wall_trace/image.jpg)），填写检查指令并选择“纯 YOLO（不复检）”。点击“提交检查”，在“任务与证据”中点击“启动检查”并查看结果。要验证 API Key，可再发送一条对话或启用 VLM 复检。
+
+**停止与恢复。** 在项目目录执行 `docker compose --env-file .env.docker down` 可停止服务并保留数据卷；下次再运行 `python3 scripts/docker_setup.py up`。请保留 `.env.docker`，其中保存 API Key 和数据库密码。`down -v` 会删除数据库及媒体卷。端口调整、自备模型和备份恢复见[完整 Docker 部署指南](https://github.com/huicod/sewer-agent/blob/dev/agent-v1/DOCKER.md)。
+
 ## 初版原型快照：v0.1.0-prototype
 
 2026-09-16 按用户要求暂停在线验收，保存当前代码供后续迭代；这不是已通过人工验收的正式生产版本。
