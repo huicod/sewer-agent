@@ -1,0 +1,23 @@
+{
+  "id": "12_block_deposit",
+  "title": "BLOCK · 沉积与堵塞",
+  "provenance": "Original synthetic teaching media created for this demonstration. No uploaded reference, dataset photograph or site footage was used.",
+  "intended_visual_labels": [
+    "BLOCK"
+  ],
+  "observation_guide": "管底有明显隆起的砂砾堆，上方仍能看到通行空间。观察堆积区域与普通湿痕、淤泥颜色之间的差别。",
+  "ground_truth": null,
+  "model_outputs": null,
+  "size_pixels": [
+    960,
+    540
+  ],
+  "public_media": "block-deposit.jpg",
+  "public_prompt": "block-deposit-prompt.md",
+  "kind": "ai_generated_synthetic_still",
+  "generator": "OpenAI built-in image generation tool, no input images",
+  "generation_prompt": "Scientific-educational visualization for a public sewer CCTV software demonstration. Original simulated photorealistic inspection frame of a fictional underground drain, wide 16:9. Industrial crawler headlamp, centered-distance perspective, moderately muted true colors, slightly grainy sensor. Frame the key feature toward center or mid-periphery so it is easy for a technical reader to locate. Single realistic still, coherent geometry. Do not include text, people, logos, dates, labels, borders, boxes, graphic overlays, rulers, or any external/source images. A low, wide mound of tan grit, gravel and small trapped fragments spans much of the invert in a gray concrete storm drain and rises into the lower third of the opening; some dark bore remains freely visible above the mound. Close, low camera viewpoint from upstream, a narrow wet path along the edge catches light and explains partial obstruction. No human figures, street text, branches, wall fractures or cluttered props.",
+  "processing": "Resized to 960 × 540, add a visible SYNTHETIC DEMO provenance label, encode as JPEG.",
+  "local_media": "image.jpg",
+  "local_prompt": "prompt.md"
+}

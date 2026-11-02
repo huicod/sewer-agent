@@ -1,0 +1,23 @@
+{
+  "id": "09_pl_fracture",
+  "title": "PL · 管壁破裂",
+  "provenance": "Original synthetic teaching media created for this demonstration. No uploaded reference, dataset photograph or site footage was used.",
+  "intended_visual_labels": [
+    "PL"
+  ],
+  "observation_guide": "上方偏右有一条分叉暗线，边缘不规则。沿它追踪连续性，同时观察管壁接缝、光照阴影与水面的边界。",
+  "ground_truth": null,
+  "model_outputs": null,
+  "size_pixels": [
+    960,
+    540
+  ],
+  "public_media": "pl-fracture.jpg",
+  "public_prompt": "pl-fracture-prompt.md",
+  "kind": "ai_generated_synthetic_still",
+  "generator": "OpenAI built-in image generation tool, no input images",
+  "generation_prompt": "Scientific-educational visualization for a public sewer CCTV software demonstration. Original simulated photorealistic inspection frame of a fictional underground drain, wide 16:9. Industrial crawler headlamp, centered-distance perspective, moderately muted true colors, slightly grainy sensor. Frame the key feature toward center or mid-periphery so it is easy for a technical reader to locate. Single realistic still, coherent geometry. Do not include text, people, logos, dates, labels, borders, boxes, graphic overlays, rulers, or any external/source images. One visibly broken reinforced concrete wall, close view, a jagged branching dark fracture opens diagonally across the upper-right pipe wall and interrupts its surface texture. Small broken lips and unequal offsets at the fissure, not an ordinary smooth circumferential joint. Shallow water below, darker vanishing point to the left. No branches, obstruction or extensive corrosion.",
+  "processing": "Resized to 960 × 540, add a visible SYNTHETIC DEMO provenance label, encode as JPEG.",
+  "local_media": "image.jpg",
+  "local_prompt": "prompt.md"
+}

@@ -166,12 +166,18 @@
     "image": {
       "file": "07_lighting_review/image.jpg",
       "prompt": "07_lighting_review/prompt.md",
-      "size": [960, 540]
+      "size": [
+        960,
+        540
+      ]
     },
     "video": {
       "file": "08_video_timeline/clip.mp4",
       "prompt": "08_video_timeline/prompt.md",
-      "size": [960, 540],
+      "size": [
+        960,
+        540
+      ],
       "codec": "H.264, yuv420p, no audio",
       "duration_seconds": 8,
       "frames_per_second": 12,
@@ -182,5 +188,77 @@
   "source_manifest_provenance": {
     "applies_to": "Original 36-sample experiment manifest, not the six-image pack",
     "text": "Seed 20260911 GT-only selection before v2 changes, excluding all 12 previous pilot source groups. Six each PL/BX/FS/AJ/BLOCK/target-empty OTHER. BLOCK: 2 CJ, 2 JG, 2 ZW. One image per filename-derived group; no recovered original training split and possible training overlap. Target-empty is annotated OTHER, not normal. No prediction-based selection."
-  }
+  },
+  "extended_examples": [
+    {
+      "id": "09_pl_fracture",
+      "material": "synthetic_image",
+      "file": "09_pl_fracture/image.jpg",
+      "prompt": "09_pl_fracture/prompt.md",
+      "provenance": "09_pl_fracture/source.json"
+    },
+    {
+      "id": "10_bx_deformation",
+      "material": "synthetic_image",
+      "file": "10_bx_deformation/image.jpg",
+      "prompt": "10_bx_deformation/prompt.md",
+      "provenance": "10_bx_deformation/source.json"
+    },
+    {
+      "id": "11_fs_corrosion",
+      "material": "synthetic_image",
+      "file": "11_fs_corrosion/image.jpg",
+      "prompt": "11_fs_corrosion/prompt.md",
+      "provenance": "11_fs_corrosion/source.json"
+    },
+    {
+      "id": "12_block_deposit",
+      "material": "synthetic_image",
+      "file": "12_block_deposit/image.jpg",
+      "prompt": "12_block_deposit/prompt.md",
+      "provenance": "12_block_deposit/source.json"
+    },
+    {
+      "id": "13_aj_lateral",
+      "material": "synthetic_image",
+      "file": "13_aj_lateral/image.jpg",
+      "prompt": "13_aj_lateral/prompt.md",
+      "provenance": "13_aj_lateral/source.json"
+    },
+    {
+      "id": "14_multi_defect",
+      "material": "synthetic_image",
+      "file": "14_multi_defect/image.jpg",
+      "prompt": "14_multi_defect/prompt.md",
+      "provenance": "14_multi_defect/source.json"
+    },
+    {
+      "id": "15_video_structure",
+      "material": "synthetic_video",
+      "file": "15_video_structure/clip.mp4",
+      "prompt": "15_video_structure/prompt.md",
+      "provenance": "15_video_structure/source.json"
+    },
+    {
+      "id": "16_video_flow",
+      "material": "synthetic_video",
+      "file": "16_video_flow/clip.mp4",
+      "prompt": "16_video_flow/prompt.md",
+      "provenance": "16_video_flow/source.json"
+    },
+    {
+      "id": "17_field_multi",
+      "material": "private_field_image",
+      "file": "17_field_multi/image.jpg",
+      "prompt": "17_field_multi/prompt.md",
+      "provenance": "17_field_multi/source.json"
+    },
+    {
+      "id": "18_field_video",
+      "material": "private_field_video",
+      "file": "18_field_video/clip.mp4",
+      "prompt": "18_field_video/prompt.md",
+      "provenance": "18_field_video/source.json"
+    }
+  ]
 }

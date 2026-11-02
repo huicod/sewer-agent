@@ -1,0 +1,15 @@
+{
+  "kind": "continuous_field_video_excerpt",
+  "file": "clip.mp4",
+  "source": "var/datasets/videos-1/W90-W89_20260611151716.mp4",
+  "width": 1280,
+  "height": 720,
+  "fps": 25,
+  "duration_seconds": 10.4,
+  "frames": 260,
+  "note": "Continuous excerpt from the end of the user-supplied CCTV source. The top 312 rows of the original 1920x1080 image were blacked out before resizing. Audio and source metadata removed. Original timestamps mapped to a 25 fps stream; times in the provided clip start at zero. No independent per-frame reference annotations. Private project only.",
+  "source_time_seconds_approx": [
+    12.04,
+    22.44
+  ]
+}

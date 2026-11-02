@@ -1,0 +1,50 @@
+{
+  "id": "14_multi_defect",
+  "title": "同框复核 · 破裂与沉积",
+  "provenance": "Original synthetic teaching media created for this demonstration. No uploaded reference, dataset photograph or site footage was used.",
+  "intended_visual_labels": [
+    "PL",
+    "BLOCK"
+  ],
+  "observation_guide": "同一帧中，右侧管壁有分叉裂隙，左下管底有砂砾堆。分别检查两个区域，记录可能漏掉的线索。",
+  "ground_truth": null,
+  "model_outputs": {
+    "detector": "UltralyticsDetector / sewer2403_5class_yolo26s_img960_e100/weights/best.pt, CPU, imgsz 960, conf 0.25, batch 1",
+    "note": "One local run on the published JPEG; scores rounded to four decimals, coordinates to one decimal in original image pixels. These are unreviewed candidates.",
+    "detections": [
+      {
+        "label": "BLOCK",
+        "score": 0.7765,
+        "bbox_xyxy": [
+          0.0,
+          315.3,
+          353.0,
+          527.7
+        ]
+      },
+      {
+        "label": "PL",
+        "score": 0.6236,
+        "bbox_xyxy": [
+          538.7,
+          0.0,
+          960.0,
+          492.2
+        ]
+      }
+    ]
+  },
+  "size_pixels": [
+    960,
+    540
+  ],
+  "public_media": "multi-defect.jpg",
+  "public_prompt": "multi-defect-prompt.md",
+  "kind": "ai_generated_synthetic_still",
+  "generator": "OpenAI built-in image generation tool, no input images",
+  "generation_prompt": "Create a single contact sheet containing FOUR independent, original photorealistic synthetic municipal sewer CCTV camera frames for an educational software demo. Exact flush 2x2 grid with four equal landscape 16:9 quadrants. Overall image ratio 16:9. Each quadrant is a different plausible camera photograph filling the entire quadrant; no panel borders, whitespace or gaps. No labels, watermarks, writing, overlay, people, private location details or text. Nothing photographic is supplied as input. Muted authentic inspection-headlamp lighting, practical older camera color, modest sharpness, slight moist specular reflections. Four distinct camera positions and wall textures; each has a recognizable pipe bore or curved wall. Every quadrant depicts a single coherent natural fictional pipe scene with two clearly separated visual features: a prominent, high-contrast jagged open longitudinal diagonal fracture with two or three branches on the center-right gray cement wall, AND a smaller but clearly localized piled-up sand/gravel/mud obstruction in lower-left foreground with water flowing around it. Give both high visibility: the fissure is about a third of the image in extent, with chipped lips and shadows. Avoid confusing it with an intact ring joint. Keep the deposit about the lower fifth to third of the frame, no heaps that hide the crack. Top-left: low forward camera, bore disappears leftward, strong uneven fracture and separate low tan gravel mound. Top-right: near forward-facing shot lit from camera, coarse pale concrete, dark open split and a smaller triangular mound along invert. Bottom left: side-on light, distinct large branching angular broken wall near center, mud and loose small stones confined to foreground lower left. Bottom right: near-frontal small storm drain, large branched fracture on the right face and clear wedge of light sandy sediment blocking lower left. Different realistic textures and tones for each. All cues must be on the same frame, do not split a single quadrant.",
+  "processing": "Extracted the lower-left quadrant of an independently generated 2×2 sheet. Trimmed a 2 px edge, resized to 960 × 540, added SYNTHETIC DEMO, then encoded JPEG.",
+  "selection_note": "This illustrative frame was chosen after running the real detector on several original synthetic candidates. It is selected for demonstration and is not an independent accuracy or generalization evaluation.",
+  "local_media": "image.jpg",
+  "local_prompt": "prompt.md"
+}

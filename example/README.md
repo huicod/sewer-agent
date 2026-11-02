@@ -1,6 +1,8 @@
 # 人工测试示例
 
-首次体验可以用 **07 图片 → 08 视频**。07 用同一张模拟管道图做检测和证据追问，08 把同一场景做成 8 秒短片，演示扫描、时间线、选帧和帧工具。两份素材都带有 `SYNTHETIC DEMO` 标记，可用于公开操作演示。制作来源和短片时间段见 [素材记录](sources.json)。
+**按类别演示：**09–13 各放一类，14 演示同图两类；15、16 用分段短片演示时间线。要对照现场原件，17 一张图同时标有三类，18 是连续现场录像。公开素材可在[文档演示案例页](https://huicod.github.io/projects/sewer-agent/examples/)逐项下载。
+
+首次体验也可以用 **07 图片 → 08 视频**。07 用同一张模拟管道图做检测和证据追问，08 把同一场景做成 8 秒短片，演示扫描、时间线、选帧和帧工具。两份素材都带有 `SYNTHETIC DEMO` 标记，可用于公开操作演示。制作来源和短片时间段见 [素材记录](sources.json)。
 
 要在已有现场样本中核对细线、暗部和反光，可按 01 → 05 → 06 的顺序体验。01–06 来自用户提供的数据集，每项保留原图和分轮指令。
 
@@ -14,6 +16,16 @@
 | 06 | [模糊反光](06_blur_reflection/image.jpg) · [prompt](06_blur_reflection/prompt.md) | 模糊、水面、反光、非五类情况与不确定性 | 纯 YOLO 无框结果的解释 |
 | 07 | [模拟管道图](07_lighting_review/image.jpg) · [分轮指令](07_lighting_review/prompt.md) | 纯 YOLO 原始结果、引用已存证据 | 用原图新建复检，对照两轮报告 |
 | 08 | [模拟短片 MP4](08_video_timeline/clip.mp4) · [分轮指令](08_video_timeline/prompt.md) | 视频扫描、时间范围、选帧 | 对已存帧做低照度增强，核对父任务 |
+| 09 | [模拟破裂](09_pl_fracture/image.jpg) · [分轮指令](09_pl_fracture/prompt.md) | PL：分叉细线与接缝 | 同图复检 |
+| 10 | [模拟变形](10_bx_deformation/image.jpg) · [分轮指令](10_bx_deformation/prompt.md) | BX：截面压扁与透视 | 对照候选框 |
+| 11 | [模拟腐蚀](11_fs_corrosion/image.jpg) · [分轮指令](11_fs_corrosion/prompt.md) | FS：粗糙剥蚀与水渍 | 定位纹理变化 |
+| 12 | [模拟堆积](12_block_deposit/image.jpg) · [分轮指令](12_block_deposit/prompt.md) | BLOCK：堆积边缘与水面 | 检查剩余可见通道 |
+| 13 | [模拟支管暗接](13_aj_lateral/image.jpg) · [分轮指令](13_aj_lateral/prompt.md) | AJ：侧壁支管开口 | 核对开口边缘 |
+| 14 | [模拟一图两类](14_multi_defect/image.jpg) · [分轮指令](14_multi_defect/prompt.md) | PL 与 BLOCK 同图 | 逐类核对漏检与重复框 |
+| 15 | [结构变化分段短片](15_video_structure/clip.mp4) · [分轮指令](15_video_structure/prompt.md) | PL、BX、FS 三个场景 | 查看跨段事件时间 |
+| 16 | [支管与堆积分段短片](16_video_flow/clip.mp4) · [分轮指令](16_video_flow/prompt.md) | AJ、BLOCK、PL＋BLOCK | 末段同帧多类 |
+| 17 | [现场一图三类](17_field_multi/image.jpg) · [分轮指令](17_field_multi/prompt.md) | PL、FS、BLOCK 参考标注共 6 框 | 标注与检测逐框对照 |
+| 18 | [连续现场片段](18_field_video/clip.mp4) · [分轮指令](18_field_video/prompt.md) | 在实际录像中检查画质与覆盖 | 区分候选、证据帧和复检状态 |
 
 ## 01–06 现场图片的操作步骤
 
@@ -60,6 +72,6 @@
 
 每张图的观察重点是测试线索，**不是规定模型必须给出的答案**。原数据集的五类标注保存在 [sources.json](sources.json)；这是既有示例图的来源参考，可能与模型训练或以往实验重合，不能用这 6 张图推算准确率。06 的五类标注为空，但原数据属于非五类异常，**不是已验证的正常样本**。
 
-01–06 的图像按源文件原样复制；原有文字及 05 的蓝色遮挡块均保留。07–08 的明暗和移动由制作过程模拟。运行对话和复检时使用当前配置的服务，检测输出和审核意见请以实际任务为准。
+01–06 的图像按源文件原样复制；原有文字及 05 的蓝色遮挡块均保留。07–16 是带有模拟标记的公开教学素材。17 保留原始图像及数据参考框，18 是处理过的真实录像。新增示例的来源与变换见各目录中的 `source.json`。运行对话和复检时使用当前配置的服务，检测输出和审核意见请以实际任务为准。
 
 结果可填写 [RESULTS.md](RESULTS.md)。这组示例适合测试操作流程；评估误报率或检出率需要另备独立的标注数据。

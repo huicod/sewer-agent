@@ -1,0 +1,23 @@
+{
+  "id": "10_bx_deformation",
+  "title": "BX · 管道变形",
+  "provenance": "Original synthetic teaching media created for this demonstration. No uploaded reference, dataset photograph or site footage was used.",
+  "intended_visual_labels": [
+    "BX"
+  ],
+  "observation_guide": "前部轮廓局部内凹，较远的轮廓提供形状参照。用相邻截面的差异检查透视和镜头倾斜能否解释所见。",
+  "ground_truth": null,
+  "model_outputs": null,
+  "size_pixels": [
+    960,
+    540
+  ],
+  "public_media": "bx-deformation.jpg",
+  "public_prompt": "bx-deformation-prompt.md",
+  "kind": "ai_generated_synthetic_still",
+  "generator": "OpenAI built-in image generation tool, no input images",
+  "generation_prompt": "Scientific-educational visualization for a public sewer CCTV software demonstration. Original simulated photorealistic inspection frame of a fictional underground drain, wide 16:9. Industrial crawler headlamp, centered-distance perspective, moderately muted true colors, slightly grainy sensor. Frame the key feature toward center or mid-periphery so it is easy for a technical reader to locate. Single realistic still, coherent geometry. Do not include text, people, logos, dates, labels, borders, boxes, graphic overlays, rulers, or any external/source images. Camera looking straight down the center of a deformed ochre ribbed plastic drainage pipe, top wall buckled downward on the left, so the closest pipe cross section looks visibly pinched, broad and flattened while several downstream rings recover a round contour. Show the inward folds, neutral longitudinal camera angle and regular rings for perspective comparison. Dry invert with only a trace of silt. No jagged cracks, side outlet, logos, overlaid graphics or human figures.",
+  "processing": "Resized to 960 × 540, add a visible SYNTHETIC DEMO provenance label, encode as JPEG.",
+  "local_media": "image.jpg",
+  "local_prompt": "prompt.md"
+}

@@ -1,0 +1,23 @@
+{
+  "id": "13_aj_lateral",
+  "title": "AJ · 支管暗接",
+  "provenance": "Original synthetic teaching media created for this demonstration. No uploaded reference, dataset photograph or site footage was used.",
+  "intended_visual_labels": [
+    "AJ"
+  ],
+  "observation_guide": "侧壁伸出一段支管，能辨认支管口、外缘与主通道各自的方向。注意规则接入口与异常突入的可见差异。",
+  "ground_truth": null,
+  "model_outputs": null,
+  "size_pixels": [
+    960,
+    540
+  ],
+  "public_media": "aj-lateral.jpg",
+  "public_prompt": "aj-lateral-prompt.md",
+  "kind": "ai_generated_synthetic_still",
+  "generator": "OpenAI built-in image generation tool, no input images",
+  "generation_prompt": "Scientific-educational visualization for a public sewer CCTV software demonstration. Original simulated photorealistic inspection frame of a fictional underground drain, wide 16:9. Industrial crawler headlamp, centered-distance perspective, moderately muted true colors, slightly grainy sensor. Frame the key feature toward center or mid-periphery so it is easy for a technical reader to locate. Single realistic still, coherent geometry. Do not include text, people, logos, dates, labels, borders, boxes, graphic overlays, rulers, or any external/source images. Close sewer CCTV view toward a lateral pipe connection opening on the upper left sidewall at about ten o'clock. A short circular clay pipe mouth projects visibly into the host gray concrete pipe with a crude, irregular mortar annulus and a chipped rim. Show both the small dark lateral lumen and the distinct main sewer vanishing point at the right, with a little water below. Avoid portraying a hole through the roof into open sky, avoid cracks or heavy debris.",
+  "processing": "Resized to 960 × 540, add a visible SYNTHETIC DEMO provenance label, encode as JPEG.",
+  "local_media": "image.jpg",
+  "local_prompt": "prompt.md"
+}

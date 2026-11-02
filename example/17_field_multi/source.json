@@ -1,0 +1,69 @@
+{
+  "kind": "field_image",
+  "dataset": "Sewer2403",
+  "snapshot": "merged_five_v1",
+  "split": "test",
+  "sample_id": "sewer2403__13-08115R-mp4_000603-237_jpg.rf.ea55290fce8a0e44037b042efd4f1d92",
+  "image": "image.jpg",
+  "dimensions": [
+    640,
+    640
+  ],
+  "source_reference_annotations": [
+    {
+      "label": "PL",
+      "bbox_xyxy": [
+        451,
+        99,
+        574,
+        300
+      ]
+    },
+    {
+      "label": "FS",
+      "bbox_xyxy": [
+        43,
+        346,
+        136,
+        640
+      ]
+    },
+    {
+      "label": "BLOCK",
+      "bbox_xyxy": [
+        240,
+        271,
+        400,
+        371
+      ]
+    },
+    {
+      "label": "BLOCK",
+      "bbox_xyxy": [
+        231,
+        330,
+        407,
+        509
+      ]
+    },
+    {
+      "label": "BLOCK",
+      "bbox_xyxy": [
+        234,
+        430,
+        428,
+        640
+      ]
+    },
+    {
+      "label": "BLOCK",
+      "bbox_xyxy": [
+        234,
+        181,
+        432,
+        508
+      ]
+    }
+  ],
+  "note": "User-supplied image. Source masking preserved. Selected by class diversity as a teaching example, not a new independent test or human inspection conclusion."
+}

@@ -1,0 +1,57 @@
+{
+  "id": "15_video_structure",
+  "title": "结构线索短片",
+  "provenance": "Original synthetic teaching media created for this demonstration. No uploaded reference, dataset photograph or site footage was used.",
+  "intended_visual_labels": [
+    "PL",
+    "BX",
+    "FS"
+  ],
+  "observation_guide": "0–<3 秒展示破裂场景，3–<6 秒展示变形场景，6–<9 秒展示腐蚀场景。三个镜头来自不同的模拟图片。",
+  "ground_truth": null,
+  "model_outputs": null,
+  "size_pixels": [
+    960,
+    540
+  ],
+  "public_media": "structure-pass.mp4",
+  "public_prompt": "structure-pass-prompt.md",
+  "kind": "edited_synthetic_video",
+  "encoding": "H.264 in MP4, yuv420p, no audio",
+  "duration_seconds": 9,
+  "frames_per_second": 12,
+  "frame_count": 108,
+  "editing": "Three independently generated scenes joined with hard cuts. Odd shots scale from 1.000 to 1.055; the middle shot scales from 1.055 to 1.000. The upper-left shot marker is a production overlay.",
+  "chapters": [
+    {
+      "start_seconds": 0,
+      "end_seconds_exclusive": 3,
+      "source_case": "09_pl_fracture",
+      "source_image": "pl-fracture.jpg",
+      "intended_visual_labels": [
+        "PL"
+      ]
+    },
+    {
+      "start_seconds": 3,
+      "end_seconds_exclusive": 6,
+      "source_case": "10_bx_deformation",
+      "source_image": "bx-deformation.jpg",
+      "intended_visual_labels": [
+        "BX"
+      ]
+    },
+    {
+      "start_seconds": 6,
+      "end_seconds_exclusive": 9,
+      "source_case": "11_fs_corrosion",
+      "source_image": "fs-corrosion.jpg",
+      "intended_visual_labels": [
+        "FS"
+      ]
+    }
+  ],
+  "selection_note": "The third shot comes from a synthetic still chosen after testing the still with the project detector. The observed still-image scores do not describe this video.",
+  "local_media": "clip.mp4",
+  "local_prompt": "prompt.md"
+}

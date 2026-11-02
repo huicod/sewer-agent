@@ -1,0 +1,39 @@
+{
+  "id": "11_fs_corrosion",
+  "title": "FS · 管壁腐蚀",
+  "provenance": "Original synthetic teaching media created for this demonstration. No uploaded reference, dataset photograph or site footage was used.",
+  "intended_visual_labels": [
+    "FS"
+  ],
+  "observation_guide": "上方管壁有成片浅灰色粗糙剥蚀与外露骨料，下方管壁相对平整。对照斑块边界、纹理与照明变化。",
+  "ground_truth": null,
+  "model_outputs": {
+    "detector": "UltralyticsDetector / sewer2403_5class_yolo26s_img960_e100/weights/best.pt, CPU, imgsz 960, conf 0.25, batch 1",
+    "note": "One local run on the published JPEG; scores rounded to four decimals, coordinates to one decimal in original image pixels. These are unreviewed candidates.",
+    "detections": [
+      {
+        "label": "FS",
+        "score": 0.448,
+        "bbox_xyxy": [
+          94.4,
+          0.0,
+          948.1,
+          403.6
+        ]
+      }
+    ]
+  },
+  "size_pixels": [
+    960,
+    540
+  ],
+  "public_media": "fs-corrosion.jpg",
+  "public_prompt": "fs-corrosion-prompt.md",
+  "kind": "ai_generated_synthetic_still",
+  "generator": "OpenAI built-in image generation tool, no input images",
+  "generation_prompt": "Create a single contact sheet containing FOUR independent, original photorealistic synthetic municipal sewer CCTV camera frames for an educational software demo. Exact flush 2x2 grid with four equal landscape 16:9 quadrants. Overall image ratio 16:9. Each quadrant is a different plausible camera photograph filling the entire quadrant; no panel borders, whitespace or gaps. No labels, watermarks, writing, overlay, people, private location details or text. Nothing photographic is supplied as input. Muted authentic inspection-headlamp lighting, practical older camera color, modest sharpness, slight moist specular reflections. Four distinct camera positions and wall textures; each has a recognizable pipe bore or curved wall. Show FOUR DIFFERENT types of widespread gray concrete wall material degradation: top left: in older large cast concrete sewer pipe looking straight down barrel, pale powdery leached, corroded concrete and salt stains on the upper and BOTH sidewalls, rough aggregate exposed, muted sepia gray footage and puddle below. Top right: close sidewall view of acid-eroded concrete over much of a ring, mottled granular cream/white surface, washed-out gray and tan patch tapering toward intact material, dark opening diagonally right, no black fracture lines. Bottom left: a dark damp, brownish concrete sewer tube looking straight forward, broad blotched streaky brown areas and pocked, delaminated concrete around the entire barrel, inside-camera light reveals rough aggregate, deep bore black. Bottom right: rough porous whitish-gray concrete crown has progressively spalled and pitted with crumbling uneven grain and exposed aggregate on a much smoother dark gray wall; angle from axial pipe CCTV, no longitudinal narrow crack, avoid structured brick or ribbed material. Use weathering rather than metal rust, no debris piles or openings on the side.",
+  "processing": "Extracted the lower-right quadrant of an independently generated 2×2 sheet. Trimmed a 2 px edge, applied PIL contrast 0.80 and brightness 1.15, resized to 960 × 540, added SYNTHETIC DEMO, then encoded JPEG.",
+  "selection_note": "This illustrative frame was chosen after running the real detector on several original synthetic candidates. It is selected for demonstration and is not an independent accuracy or generalization evaluation.",
+  "local_media": "image.jpg",
+  "local_prompt": "prompt.md"
+}
