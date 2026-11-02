@@ -21,6 +21,7 @@ import {
   isAssetRecord,
   isComparisonResult,
   isEnhancementDetail,
+  isExampleVideoList,
   isGeometryDetail,
   isHumanReviewDetail,
   isHumanReviewRecord,
@@ -113,6 +114,15 @@ export function uploadAsset(file: File): Promise<AssetRecord> {
   const body = new FormData();
   body.append("file", file);
   return requestJson<AssetRecord>("/api/assets", isAssetRecord, { method: "POST", body });
+}
+
+export function listExampleVideos() {
+  return requestJson("/api/example-videos", isExampleVideoList);
+}
+
+export function createExampleVideoAsset(id: string): Promise<AssetRecord> {
+  return requestJson(`/api/example-videos/${encodeURIComponent(id)}/asset`,
+    (asset): asset is AssetRecord => isAssetRecord(asset) && asset.kind === "video", { method: "POST" });
 }
 
 export function getAsset(ref: { asset_id: string; version: number }): Promise<AssetRecord> {

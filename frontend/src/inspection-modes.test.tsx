@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import App from "./test/InspectionWorkbench";
+import InspectionConversation, { type ConversationDraft } from "./InspectionConversation";
 import { isTaskRecord, isTurnRecord } from "./validators";
 
 const sessionId = "33333333-3333-4333-8333-333333333333";
@@ -104,6 +105,90 @@ afterEach(() => {
 });
 
 describe("image inspection modes", () => {
+  it("reuses a server example asset and the request ID on retry after restoring the session draft", async () => {
+    const catalog = [
+      { id: "pipe-opening", title: "支管接入", instruction: "检查支管接入口" },
+      { id: "wall-trace", title: "管壁线条", instruction: "检查管壁线条" },
+    ];
+    const video = { ...uploadedImage, kind: "video", media_type: "video/mp4", duration_seconds: 4 };
+    const posts: object[] = [];
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url === "/api/example-videos") return response(catalog);
+      if (url === "/api/example-videos/wall-trace/asset") return response(video, 201);
+      if (url === "/api/tasks") {
+        posts.push(JSON.parse(String(init?.body)));
+        return posts.length === 1 ? response({ detail: "请重试" }, 503) : response(task("yolo_vlm"), 201);
+      }
+      if (url.endsWith("/turns")) return response([]);
+      return response({ session: { session_id: sessionId, created_at: createdAt }, tasks: [] });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const cache = new Map<string, ConversationDraft>();
+    const user = userEvent.setup();
+    const component = (key: string) => <InspectionConversation key={key} sessionId={sessionId} draftCache={cache} />;
+    const view = render(component("first"));
+    await screen.findByText(sessionId);
+    let panel = within(await openDirectPanel(user));
+    expect(fetchMock.mock.calls.some(([url]) => url.includes("example-videos"))).toBe(false);
+    await user.selectOptions(panel.getByLabelText("素材来源"), "example");
+    await panel.findByRole("option", { name: "支管接入" });
+    await user.selectOptions(panel.getByLabelText("项目示例视频"), "pipe-opening");
+    expect(panel.getByLabelText<HTMLTextAreaElement>("检查要求").value).toBe("检查支管接入口");
+    await user.clear(panel.getByLabelText("检查要求"));
+    await user.type(panel.getByLabelText("检查要求"), "列出证据帧");
+    await user.selectOptions(panel.getByLabelText("项目示例视频"), "wall-trace");
+    expect(panel.getByLabelText<HTMLTextAreaElement>("检查要求").value).toBe("列出证据帧");
+    expect(panel.getByLabelText<HTMLSelectElement>("检查模式").disabled).toBe(true);
+    await user.click(panel.getByRole("button", { name: "提交检查" }));
+    await panel.findByRole("alert");
+
+    view.rerender(component("restored"));
+    await screen.findByText(sessionId);
+    panel = within(await openDirectPanel(user));
+    await panel.findByRole("option", { name: "管壁线条" });
+    expect(panel.getByLabelText<HTMLSelectElement>("项目示例视频").value).toBe("wall-trace");
+    expect(panel.getByLabelText<HTMLTextAreaElement>("检查要求").value).toBe("列出证据帧");
+    await user.click(panel.getByRole("button", { name: "提交检查" }));
+    await waitFor(() => expect(posts).toHaveLength(2));
+    expect(posts[0]).toEqual(posts[1]);
+    expect(posts[0]).toMatchObject({ input_asset: video.ref, inspection_mode: "yolo_vlm", instruction: "列出证据帧" });
+    const assetCalls = fetchMock.mock.calls.filter(([url]) => url.endsWith("/asset"));
+    expect(assetCalls).toEqual([["/api/example-videos/wall-trace/asset", { method: "POST" }]]);
+    expect(fetchMock.mock.calls.map(([url]) => url)).not.toContain("/api/assets");
+  });
+
+  it("allows a failed example catalog to retry and switch back to the pending file upload", async () => {
+    let catalogAttempts = 0;
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url === "/api/example-videos") return ++catalogAttempts === 1
+        ? response({ detail: "暂时不可用" }, 503)
+        : response([{ id: "clip", title: "管道示例", instruction: "视频提示" }]);
+      if (url === "/api/assets") return response(uploadedImage, 201);
+      if (url === "/api/tasks") return response(task("yolo_only"), 201);
+      if (url.endsWith("/turns")) return response([]);
+      return response({ session: { session_id: sessionId, created_at: createdAt }, tasks: [] });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+    render(<App />);
+    await screen.findByText(sessionId);
+    const panel = within(await openDirectPanel(user));
+    const file = new File(["site-photo"], "site.jpg", { type: "image/jpeg" });
+    await user.upload(panel.getByLabelText("现场文件"), file);
+    await user.selectOptions(panel.getByLabelText("检查模式"), "yolo_only");
+    await user.type(panel.getByLabelText("检查要求"), "检查接缝");
+    await user.selectOptions(panel.getByLabelText("素材来源"), "example");
+    await user.click(await panel.findByRole("button", { name: "重试读取示例" }));
+    await panel.findByRole("option", { name: "管道示例" });
+    await user.selectOptions(panel.getByLabelText("项目示例视频"), "clip");
+    await user.selectOptions(panel.getByLabelText("素材来源"), "file");
+    expect(panel.getByLabelText<HTMLInputElement>("现场文件").files?.[0]).toBe(file);
+    expect(panel.getByLabelText<HTMLSelectElement>("检查模式").value).toBe("yolo_only");
+    expect(panel.getByLabelText<HTMLTextAreaElement>("检查要求").value).toBe("检查接缝");
+    await user.click(panel.getByRole("button", { name: "提交检查" }));
+    await waitFor(() => expect(fetchMock.mock.calls.map(([url]) => url)).toContain("/api/assets"));
+    expect(fetchMock.mock.calls.some(([url]) => url.endsWith("/asset"))).toBe(false);
+  });
   it("submits pure YOLO from both new-image entry points", async () => {
     const directTask = task("yolo_only");
     const conversationTurn = turn("yolo_only");

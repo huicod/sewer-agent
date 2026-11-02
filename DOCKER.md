@@ -57,6 +57,8 @@ docker compose --env-file .env.docker up -d --no-build --wait --wait-timeout 360
 
 在主机浏览器打开 `http://127.0.0.1:8000`（端口随配置调整）。远程主机可在自己电脑运行 `ssh -N -L 18000:127.0.0.1:8000 <SSH别名>`，打开 `http://127.0.0.1:18000`。先确认页面能列出会话；然后点击“新建检查”，从浏览器所在电脑选择示例图片，填写检查指令，选择“纯 YOLO（不复检）”并提交。在“任务与证据”点击“启动检查”后，查看任务结果和媒体证据。手动纯 YOLO 不调用检查 VLM；对话入口或 VLM 复检使用部署者的 API 账户。几何与增强按界面明确选择验证，不凭首页健康检查宣称模型推理通过。
 
+同一“新建检查”窗口的“素材来源 → 项目示例”可以直接选择现场视频（18–22）。镜像包含这五段私有演示短片，点击提交时由 API 从本地导入，浏览器不传输视频文件。已有部署更新代码后重新运行 `python3 scripts/docker_setup.py up` 即可使用。
+
 ```bash
 docker compose --env-file .env.docker logs --tail=80 initialize gpu-worker
 docker compose --env-file .env.docker down

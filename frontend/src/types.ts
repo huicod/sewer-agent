@@ -3,6 +3,12 @@ export type AssetRef = {
   version: number;
 };
 
+export type ExampleVideo = {
+  id: string;
+  title: string;
+  instruction: string;
+};
+
 export type AssetRecord = {
   ref: AssetRef;
   kind: "image" | "video" | string;

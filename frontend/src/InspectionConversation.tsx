@@ -10,18 +10,21 @@ import { type CSSProperties, type FormEvent, type ReactNode, useEffect, useMemo,
 import {
   ApiError,
   cancelTask,
+  createExampleVideoAsset,
   createSession,
   createTask,
   createTurn,
   getSession,
   getTask,
   getTurn,
+  listExampleVideos,
   listTurns,
   startTask,
   uploadAsset,
 } from "./api";
 import type {
   AssetRef,
+  ExampleVideo,
   InspectionMode,
   RuntimeStatus,
   SessionRecord,
@@ -49,12 +52,14 @@ const INSPECTION_MODE_TEXT: Record<InspectionMode, string> = {
   yolo_only: "纯 YOLO（不复检）",
 };
 
+type DirectSource = "file" | "example";
+
 type PendingSubmission = {
-  file: File;
+  media: File | string;
   sessionId: string;
   instruction: string;
   requestId: string;
-  inputAsset: AssetRef;
+  inputAsset: Promise<AssetRef>;
   inspectionMode: InspectionMode;
 };
 
@@ -95,6 +100,8 @@ export type ConversationDraft = {
   pendingSubmission: { current: PendingSubmission | null };
   followCreatedTurn: { current: string | null };
   directFile: File | null;
+  directSource: DirectSource;
+  directExample: ExampleVideo | null;
   instruction: string;
   inspectionMode: InspectionMode;
 };
@@ -240,6 +247,11 @@ function Workbench({ pollIntervalMs = 2_000, sessionId, onSummary, draftCache,
   const [turns, setTurns] = useState<TurnRecord[]>([]);
   const [instruction, setInstruction] = useState(cached?.instruction ?? "");
   const [directFile, setDirectFile] = useState<File | null>(cached?.directFile ?? null);
+  const [directSource, setDirectSource] = useState<DirectSource>(cached?.directSource ?? "file");
+  const [directExample, setDirectExample] = useState<ExampleVideo | null>(cached?.directExample ?? null);
+  const [examples, setExamples] = useState<ExampleVideo[] | null>(null);
+  const [examplesError, setExamplesError] = useState<string | null>(null);
+  const [catalogAttempt, setCatalogAttempt] = useState(0);
   const [inspectionMode, setInspectionMode] = useState<InspectionMode>(cached?.inspectionMode ?? DEFAULT_INSPECTION_MODE);
   const [conversationText, setConversationText] = useState(cached?.text ?? "");
   const [conversationFile, setConversationFile] = useState<File | null>(cached?.file ?? null);
@@ -318,9 +330,20 @@ function Workbench({ pollIntervalMs = 2_000, sessionId, onSummary, draftCache,
       text: conversationText, file: conversationFile, mode: conversationInspectionMode,
       taskId: selectedTaskId, follow: followFocusedTask, referenceId: selectedReferenceTaskId,
       frame: selectedVideoFrame, focusedId: focusedTaskId, waitingGuidedId: waitingGuidedTaskId,
-      detailsOpen, pendingTurn, pendingSubmission, followCreatedTurn, directFile, instruction, inspectionMode,
+      detailsOpen, pendingTurn, pendingSubmission, followCreatedTurn, directFile, directSource,
+      directExample, instruction, inspectionMode,
     });
   });
+
+  useEffect(() => {
+    if (!intakeOpen || directSource !== "example" || examples !== null) return;
+    let active = true;
+    setExamplesError(null);
+    listExampleVideos()
+      .then((catalog) => { if (active) setExamples(catalog); })
+      .catch((reason) => { if (active) setExamplesError(formatError(reason)); });
+    return () => { active = false; };
+  }, [intakeOpen, directSource, examples, catalogAttempt]);
 
   useEffect(() => {
     if (!session || !onSummary) return;
@@ -526,10 +549,11 @@ function Workbench({ pollIntervalMs = 2_000, sessionId, onSummary, draftCache,
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!session) return;
-    const file = directFile;
+    const media = directSource === "example" ? directExample?.id : directFile;
+    const mode = directSource === "example" ? DEFAULT_INSPECTION_MODE : inspectionMode;
     const cleanInstruction = instruction.trim();
-    if (!file) {
-      setError("请选择现场图片或视频");
+    if (!media) {
+      setError(directSource === "example" ? "请选择项目示例视频" : "请选择现场图片或视频");
       return;
     }
     if (!cleanInstruction) {
@@ -543,38 +567,48 @@ function Workbench({ pollIntervalMs = 2_000, sessionId, onSummary, draftCache,
       let pending = pendingSubmission.current;
       if (
         !pending ||
-        pending.file !== file ||
+        pending.media !== media ||
         pending.sessionId !== session.session_id ||
         pending.instruction !== cleanInstruction ||
-        pending.inspectionMode !== inspectionMode
+        pending.inspectionMode !== mode
       ) {
-        const reusableAsset = pending && pending.file === file &&
-          pending.sessionId === session.session_id && pending.instruction === cleanInstruction
-          ? pending.inputAsset
-          : null;
-        const inputAsset = reusableAsset ?? (await uploadAsset(file)).ref;
+        const reusableAsset = pending?.media === media && pending.sessionId === session.session_id
+          ? pending.inputAsset : null;
+        const inputAsset = reusableAsset ?? (typeof media === "string"
+          ? createExampleVideoAsset(media) : uploadAsset(media)).then((asset) => asset.ref);
         pending = {
-          file,
+          media,
           sessionId: session.session_id,
           instruction: cleanInstruction,
           requestId: crypto.randomUUID(),
           inputAsset,
-          inspectionMode,
+          inspectionMode: mode,
         };
         pendingSubmission.current = pending;
+      }
+      let inputAsset: AssetRef;
+      try {
+        inputAsset = await pending.inputAsset;
+      } catch (nextError) {
+        if (pendingSubmission.current?.inputAsset === pending.inputAsset) pendingSubmission.current = null;
+        throw nextError;
       }
       const created = await createTask({
         request_id: pending.requestId,
         session_id: session.session_id,
-        input_asset: pending.inputAsset,
+        input_asset: inputAsset,
         instruction: cleanInstruction,
         inspection_mode: pending.inspectionMode,
       });
       const savedDraft = draftCache?.get(session.session_id);
+      const draftMedia = savedDraft?.directSource === "example" ? savedDraft.directExample?.id : savedDraft?.directFile;
       if (savedDraft?.pendingSubmission.current?.requestId === pending.requestId &&
-          savedDraft.instruction.trim() === pending.instruction && savedDraft.directFile === pending.file) {
+          savedDraft.instruction.trim() === pending.instruction && draftMedia === pending.media) {
         savedDraft.instruction = "";
         savedDraft.directFile = null;
+        savedDraft.directSource = "file";
+        savedDraft.directExample = null;
+        savedDraft.inspectionMode = DEFAULT_INSPECTION_MODE;
         savedDraft.focusedId = created.snapshot.task_id;
       }
       if (pendingSubmission.current?.requestId === pending.requestId) pendingSubmission.current = null;
@@ -584,6 +618,8 @@ function Workbench({ pollIntervalMs = 2_000, sessionId, onSummary, draftCache,
       setIntakeOpen(false);
       setInstruction("");
       setDirectFile(null);
+      setDirectSource("file");
+      setDirectExample(null);
       setInspectionMode(DEFAULT_INSPECTION_MODE);
       form.current?.reset();
     } catch (nextError) {
@@ -975,6 +1011,19 @@ function Workbench({ pollIntervalMs = 2_000, sessionId, onSummary, draftCache,
         {error ? <div className="conversation-error" role="alert">{error}</div> : null}
         <form ref={form} onSubmit={(event) => void submit(event)}>
           <label className="field">
+            <span>素材来源</span>
+            <select value={directSource} disabled={!session || submitting} onChange={(event) => {
+              const source = event.target.value as DirectSource;
+              setDirectSource(source);
+              setError(null);
+              if (source === "example" && !instruction.trim()) setInstruction(directExample?.instruction ?? "");
+              if (source === "file" && instruction === directExample?.instruction) setInstruction("");
+            }}>
+              <option value="file">上传现场文件</option>
+              <option value="example">项目示例</option>
+            </select>
+          </label>
+          <div hidden={directSource !== "file"}><label className="field">
             <span>现场文件</span>
             <input
               ref={fileInput}
@@ -987,11 +1036,33 @@ function Workbench({ pollIntervalMs = 2_000, sessionId, onSummary, draftCache,
               }}
               disabled={!session || submitting}
             />
-          </label>
+          </label></div>
+          {directSource === "example" ? <>
+            <label className="field">
+              <span>项目示例视频</span>
+              <select value={directExample?.id ?? ""} disabled={!session || submitting || !examples?.length}
+                onChange={(event) => {
+                  const next = examples?.find((item) => item.id === event.target.value) ?? null;
+                  if (!instruction.trim() || instruction === directExample?.instruction) {
+                    setInstruction(next?.instruction ?? "");
+                  }
+                  setDirectExample(next);
+                  setError(null);
+                }}>
+                <option value="">{examplesError ? "项目示例读取失败" : examples === null ? "正在读取项目示例…" :
+                  examples.length ? "请选择示例视频" : "暂无项目示例"}</option>
+                {examples?.map((example) => <option key={example.id} value={example.id}>{example.title}</option>)}
+              </select>
+            </label>
+            <small>直接使用项目中的视频，无需上传。可在下方编辑检查要求。</small>
+            {examplesError ? <div className="conversation-error" role="alert">
+              {examplesError} <Button size="small" onClick={() => setCatalogAttempt((value) => value + 1)}>重试读取示例</Button>
+            </div> : null}
+          </> : null}
           <InspectionModeField
-            value={inspectionMode}
-            disabled={!isImageFile(directFile) || submitting}
-            disabledReason={directFile
+            value={directSource === "example" ? DEFAULT_INSPECTION_MODE : inspectionMode}
+            disabled={directSource === "example" || !isImageFile(directFile) || submitting}
+            disabledReason={directSource === "example" || directFile
               ? "视频仅使用 YOLO＋VLM 复检。"
               : "选择图片后可更改检查模式；视频仅使用 YOLO＋VLM 复检。"}
             onChange={setInspectionMode}
@@ -1010,7 +1081,8 @@ function Workbench({ pollIntervalMs = 2_000, sessionId, onSummary, draftCache,
           </label>
           <div className="form-footer">
             <small>{instruction.length} / 4000</small>
-            <Button type="primary" htmlType="submit" disabled={!session || submitting}>
+            <Button type="primary" htmlType="submit" disabled={!session || submitting ||
+              (directSource === "example" && !examples?.some((item) => item.id === directExample?.id))}>
               {submitting ? "正在提交…" : "提交检查"}
             </Button>
           </div>

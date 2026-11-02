@@ -9,6 +9,12 @@
 !scripts/*.py
 !deploy/
 !deploy/**
+!example/
+example/**
+!example/field-videos.json
+!example/*_field_*/
+example/*_field_*/**
+!example/*_field_*/clip.mp4
 !frontend/
 !frontend/package.json
 !frontend/package-lock.json

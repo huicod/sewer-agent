@@ -41,6 +41,8 @@
 
    然后在自己电脑打开 `http://127.0.0.1:18000`。点击“新建检查”，从浏览器所在电脑选择一张管道图片（可下载[仓库示例图](https://github.com/huicod/sewer-agent/blob/dev/agent-v1/example/01_wall_trace/image.jpg)），填写检查指令并选择“纯 YOLO（不复检）”。点击“提交检查”，在“任务与证据”中点击“启动检查”并查看结果。要验证 API Key，可再发送一条对话或启用 VLM 复检。
 
+**演示真实视频。** 在“新建检查 → 素材来源 → 项目示例”选择内置的现场短片，提交后启动任务。五段短片及其检查要求随 [示例目录](example/README.md) 提供，无需重新上传。
+
 **停止与恢复。** 在项目目录执行 `docker compose --env-file .env.docker down` 可停止服务并保留数据卷；下次再运行 `python3 scripts/docker_setup.py up`。请保留 `.env.docker`，其中保存 API Key 和数据库密码。`down -v` 会删除数据库及媒体卷。端口调整、自备模型和备份恢复见[完整 Docker 部署指南](https://github.com/huicod/sewer-agent/blob/dev/agent-v1/DOCKER.md)。
 
 ## 初版原型快照：v0.1.0-prototype

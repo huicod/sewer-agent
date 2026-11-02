@@ -25,6 +25,7 @@ COPY backend/src/ backend/src/
 RUN python -m pip install '.[gpu,enhancement,geometry]' && python -m pip check
 COPY scripts/ scripts/
 COPY deploy/ deploy/
+COPY --chown=sewer:sewer example/ example/
 COPY --from=frontend /web/dist/ frontend/dist/
 RUN mkdir -p /app/var/assets && chown -R sewer:sewer /app/var /home/sewer
 USER sewer

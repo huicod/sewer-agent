@@ -1,0 +1,87 @@
+{
+  "kind": "continuous_field_video_excerpt",
+  "file": "clip.mp4",
+  "source": "var/datasets/videos-1/W110_W109_20260609173429.mp4",
+  "source_time_seconds": [
+    272,
+    281
+  ],
+  "source_size": [
+    1920,
+    1080
+  ],
+  "redacted_source_rows_half_open": [
+    [
+      0,
+      302
+    ],
+    [
+      940,
+      1080
+    ]
+  ],
+  "width": 960,
+  "height": 540,
+  "fps": 15,
+  "duration_seconds": 9,
+  "frames": 135,
+  "observation_guide": "管底隆起的不规则物体和水面有明显边界。对照相邻帧，观察它是否持续占据通道，并留意近处反光。",
+  "ground_truth": null,
+  "note": "Continuous user-supplied field footage. Camera overlays blacked out before resizing; source audio, metadata and chapters omitted. No independent per-frame human defect labels for this excerpt. Private project only.",
+  "excerpt_scan": {
+    "scope": "Final packaged clip, local YOLO26s Sewer2403 five-class, imgsz 960, confidence 0.25, chunk 8. No VLM or human verification.",
+    "complete_decode": true,
+    "frames": 135,
+    "evidence_frames": 15,
+    "events": [
+      {
+        "label": "BLOCK",
+        "start": 0.0,
+        "end": 0.2,
+        "observations": 4
+      },
+      {
+        "label": "BLOCK",
+        "start": 1.0,
+        "end": 1.067,
+        "observations": 2
+      },
+      {
+        "label": "BLOCK",
+        "start": 1.933,
+        "end": 3.6,
+        "observations": 24
+      },
+      {
+        "label": "BLOCK",
+        "start": 3.6,
+        "end": 4.6,
+        "observations": 16
+      },
+      {
+        "label": "BLOCK",
+        "start": 4.533,
+        "end": 5.6,
+        "observations": 10
+      },
+      {
+        "label": "BLOCK",
+        "start": 4.933,
+        "end": 5.2,
+        "observations": 4
+      },
+      {
+        "label": "BLOCK",
+        "start": 5.067,
+        "end": 5.133,
+        "observations": 2
+      },
+      {
+        "label": "AJ",
+        "start": 6.067,
+        "end": 6.067,
+        "observations": 1
+      }
+    ]
+  }
+}

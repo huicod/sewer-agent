@@ -1,0 +1,45 @@
+{
+  "kind": "continuous_field_video_excerpt",
+  "file": "clip.mp4",
+  "source": "var/datasets/videos-1/W94_W93_20260611103910.mp4",
+  "source_time_seconds": [
+    40,
+    48
+  ],
+  "source_size": [
+    1920,
+    1080
+  ],
+  "redacted_source_rows_half_open": [
+    [
+      0,
+      302
+    ],
+    [
+      940,
+      1080
+    ]
+  ],
+  "width": 960,
+  "height": 540,
+  "fps": 15,
+  "duration_seconds": 8,
+  "frames": 120,
+  "observation_guide": "画面中数条细长物体垂入视野，可与贴在管壁上的裂纹作对照。仅从录像无法确认其材质或来源。",
+  "ground_truth": null,
+  "note": "Continuous user-supplied field footage. Camera overlays blacked out before resizing; source audio, metadata and chapters omitted. No independent per-frame human defect labels for this excerpt. Private project only.",
+  "excerpt_scan": {
+    "scope": "Final packaged clip, local YOLO26s Sewer2403 five-class, imgsz 960, confidence 0.25, chunk 8. No VLM or human verification.",
+    "complete_decode": true,
+    "frames": 120,
+    "evidence_frames": 2,
+    "events": [
+      {
+        "label": "PL",
+        "start": 4.2,
+        "end": 4.267,
+        "observations": 2
+      }
+    ]
+  }
+}

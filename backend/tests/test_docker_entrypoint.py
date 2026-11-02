@@ -9,6 +9,7 @@ import subprocess
 import sys
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import patch
 
 import pytest
 from pipe_inspector.vision.geometry_models import DEPTH_ANYTHING_V2_REVISION, SAM2_REVISION
@@ -25,7 +26,9 @@ def entry(monkeypatch):
     for key in list(os.environ):
         if key.startswith("SEWER_") or key == "DASHSCOPE_API_KEY":
             monkeypatch.delenv(key)
-    return module
+    # The entrypoint also creates variables that were absent when the fixture started.
+    with patch.dict(os.environ):
+        yield module
 
 
 @pytest.fixture

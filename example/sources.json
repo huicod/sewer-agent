@@ -259,6 +259,34 @@
       "file": "18_field_video/clip.mp4",
       "prompt": "18_field_video/prompt.md",
       "provenance": "18_field_video/source.json"
+    },
+    {
+      "id": "19_field_lateral",
+      "material": "private_field_video",
+      "file": "19_field_lateral/clip.mp4",
+      "prompt": "19_field_lateral/prompt.md",
+      "provenance": "19_field_lateral/source.json"
+    },
+    {
+      "id": "20_field_obstruction",
+      "material": "private_field_video",
+      "file": "20_field_obstruction/clip.mp4",
+      "prompt": "20_field_obstruction/prompt.md",
+      "provenance": "20_field_obstruction/source.json"
+    },
+    {
+      "id": "21_field_wall_lines",
+      "material": "private_field_video",
+      "file": "21_field_wall_lines/clip.mp4",
+      "prompt": "21_field_wall_lines/prompt.md",
+      "provenance": "21_field_wall_lines/source.json"
+    },
+    {
+      "id": "22_field_hanging",
+      "material": "private_field_video",
+      "file": "22_field_hanging/clip.mp4",
+      "prompt": "22_field_hanging/prompt.md",
+      "provenance": "22_field_hanging/source.json"
     }
   ]
 }

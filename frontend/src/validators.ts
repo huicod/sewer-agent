@@ -3,6 +3,7 @@ import type {
   AssetRef,
   ComparisonResult,
   EnhancementDetail,
+  ExampleVideo,
   Finding,
   FindingReview,
   GeometryDetail,
@@ -92,6 +93,12 @@ function isProgress(value: unknown): value is number {
 
 function isNonNegativeInteger(value: unknown): value is number {
   return typeof value === "number" && Number.isInteger(value) && value >= 0;
+}
+
+export function isExampleVideoList(value: unknown): value is ExampleVideo[] {
+  return Array.isArray(value) && value.every((item) => isRecord(item) &&
+    typeof item.id === "string" && item.id.length > 0 && typeof item.title === "string" &&
+    typeof item.instruction === "string");
 }
 
 export function isAssetRef(value: unknown): value is AssetRef {

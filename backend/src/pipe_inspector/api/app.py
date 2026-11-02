@@ -42,7 +42,7 @@ def create_app(
         max_pixels=settings.max_media_pixels,
         probe_timeout_seconds=settings.media_probe_timeout_seconds,
     )
-    app.include_router(intake_router(repo, media))
+    app.include_router(intake_router(repo, media, settings.example_root))
     app.include_router(report_router(repo))
     app.include_router(inspection_router(repo, starter or InspectionStarter(settings, repo)))
     app.include_router(

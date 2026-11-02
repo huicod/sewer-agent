@@ -12,6 +12,8 @@ on:
       - compose.yaml
       - pyproject.toml
       - deploy/**
+      - example/field-videos.json
+      - example/*_field_*/clip.mp4
       - scripts/**
       - backend/src/**
       - backend/tests/docker_smoke_fixture.py

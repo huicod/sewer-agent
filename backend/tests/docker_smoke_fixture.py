@@ -1,4 +1,4 @@
-"""CI-only upload and persistence checks for the Docker deployment smoke job."""
+"""CI-only upload, bundled-media and persistence checks for the Docker deployment smoke job."""
 
 import argparse
 import base64
@@ -27,6 +27,13 @@ def request(path: str, *, method="GET", body=None, content_type=None, status=200
 
 
 def seed_records(state_file: Path) -> None:
+    examples = json.loads(request("/api/example-videos"))
+    assert examples, "the Docker image must include the field-video catalog"
+    for example in examples:
+        path = f"/api/example-videos/{example['id']}/asset"
+        saved = json.loads(request(path, method="POST", body=b"", status=201))
+        assert saved["kind"] == "video" and saved["media_type"] == "video/mp4"
+
     session = json.loads(request("/api/sessions", method="POST", body=b"", status=201))
     session_id = session["session_id"]
     request(

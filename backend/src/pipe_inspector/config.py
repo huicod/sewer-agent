@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     )
 
     asset_root: Path = Path("var/assets")
+    example_root: Path = Path("example")
     web_dist: Path | None = None
     max_upload_bytes: int = Field(default=1024**3, gt=0)
     max_media_pixels: int = Field(default=40_000_000, gt=0)

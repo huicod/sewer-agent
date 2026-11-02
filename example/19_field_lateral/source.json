@@ -1,0 +1,180 @@
+{
+  "kind": "continuous_field_video_excerpt",
+  "file": "clip.mp4",
+  "source": "var/datasets/videos-2/W114_W115_20260610142556.mp4",
+  "usage": "User-supplied on-site footage; private project only. No public redistribution established.",
+  "source_time_seconds_approx": [
+    405.0,
+    414.0
+  ],
+  "source_size_pixels": [
+    1920,
+    1080
+  ],
+  "processing": "One continuous nine-second excerpt. Cropped original to [352,312,1568,996] (xyxy; right/bottom exclusive), physically removing the entire top and bottom OSD bands before H.264 encoding. Kept crop at its native resolution. Removed audio, chapters and original metadata; output starts at zero and is resampled to 25 fps.",
+  "width": 1216,
+  "height": 684,
+  "fps": 25,
+  "duration_seconds": 9.0,
+  "frames": 225,
+  "file_bytes": 2663544,
+  "ground_truth": null,
+  "historical_source_scan": {
+    "record": "var/evaluations/2026-09-14-video-selection/long-full/video-cost-summary.json",
+    "event_path": "coverage.events",
+    "label": "AJ",
+    "event_id": "293790aa-96d1-4e65-a3f0-061f6109e08d:v1:10149:0",
+    "start_seconds": 405.96296875,
+    "end_seconds": 417.8709375,
+    "observations": 298,
+    "representative_frame": 10169,
+    "representative_time_seconds": 406.76296875,
+    "representative_score": 0.9012000560760498,
+    "source_frame_bbox_xyxy": [
+      520.1881713867188,
+      140.2799072265625,
+      1094.29833984375,
+      670.195556640625
+    ],
+    "note": "Historical raw detector candidate. No independent frame-level ground truth or saved human confirmation for this finding."
+  },
+  "excerpt_scan": {
+    "method": "Production scan_video with the trained five-class YOLO26s best.pt, imgsz 960, conf 0.25, serial GPU, batch/chunk 8. Primary detector only; no VLM or human review during this check. Event times use the output clip clock; scores rounded to four decimal places. Multiple candidate events can correspond to the same structure.",
+    "decode_complete": true,
+    "frames": 225,
+    "adequate_frames": 225,
+    "events": [
+      {
+        "label": "AJ",
+        "start_seconds": 0.0,
+        "end_seconds": 0.96,
+        "observation_count": 24,
+        "evidence": [
+          {
+            "frame": 8,
+            "seconds": 0.32,
+            "score": 0.915
+          },
+          {
+            "frame": 24,
+            "seconds": 0.96,
+            "score": 0.9365
+          }
+        ]
+      },
+      {
+        "label": "AJ",
+        "start_seconds": 0.48,
+        "end_seconds": 5.4,
+        "observation_count": 119,
+        "evidence": [
+          {
+            "frame": 31,
+            "seconds": 1.24,
+            "score": 0.9483
+          },
+          {
+            "frame": 43,
+            "seconds": 1.72,
+            "score": 0.9495
+          },
+          {
+            "frame": 58,
+            "seconds": 2.32,
+            "score": 0.9327
+          }
+        ]
+      },
+      {
+        "label": "AJ",
+        "start_seconds": 1.6,
+        "end_seconds": 1.88,
+        "observation_count": 5,
+        "evidence": [
+          {
+            "frame": 40,
+            "seconds": 1.6,
+            "score": 0.9057
+          },
+          {
+            "frame": 47,
+            "seconds": 1.88,
+            "score": 0.7747
+          }
+        ]
+      },
+      {
+        "label": "AJ",
+        "start_seconds": 4.28,
+        "end_seconds": 5.0,
+        "observation_count": 18,
+        "evidence": [
+          {
+            "frame": 114,
+            "seconds": 4.56,
+            "score": 0.9148
+          },
+          {
+            "frame": 122,
+            "seconds": 4.88,
+            "score": 0.9115
+          }
+        ]
+      },
+      {
+        "label": "AJ",
+        "start_seconds": 5.24,
+        "end_seconds": 5.92,
+        "observation_count": 17,
+        "evidence": [
+          {
+            "frame": 137,
+            "seconds": 5.48,
+            "score": 0.9156
+          },
+          {
+            "frame": 144,
+            "seconds": 5.76,
+            "score": 0.9133
+          }
+        ]
+      },
+      {
+        "label": "AJ",
+        "start_seconds": 5.6,
+        "end_seconds": 5.6,
+        "observation_count": 1,
+        "evidence": [
+          {
+            "frame": 140,
+            "seconds": 5.6,
+            "score": 0.2724
+          }
+        ]
+      },
+      {
+        "label": "AJ",
+        "start_seconds": 5.88,
+        "end_seconds": 8.96,
+        "observation_count": 78,
+        "evidence": [
+          {
+            "frame": 151,
+            "seconds": 6.04,
+            "score": 0.9134
+          },
+          {
+            "frame": 163,
+            "seconds": 6.52,
+            "score": 0.9089
+          },
+          {
+            "frame": 195,
+            "seconds": 7.8,
+            "score": 0.905
+          }
+        ]
+      }
+    ]
+  }
+}

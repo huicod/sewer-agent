@@ -9,6 +9,12 @@ from .common import ContractModel
 from .tasks import InspectionMode, TaskSnapshot
 
 
+class ExampleVideo(ContractModel):
+    id: str = Field(pattern=r"^[0-9]+_field_[a-zA-Z0-9_-]+$")
+    title: str = Field(min_length=1)
+    instruction: str = Field(min_length=1, max_length=4000)
+
+
 class FrameSource(ContractModel):
     video_asset: AssetRef
     frame_index: int = Field(ge=0)
