@@ -1,6 +1,6 @@
 {
   "purpose": "Manual UI/workflow exploration; not a model-accuracy benchmark",
-  "selection_note": "Six samples: one each for PL, BX, FS, AJ, BLOCK, and target-empty OTHER. Six distinct source groups, visually inspected. Deliberate diversity selection; source training overlap is possible. Dataset annotations are references, not guaranteed current-model outputs or human review decisions. Empty target annotations for sample 06 mean annotated non-target defects, not verified normality. Existing OSD and blue masking blocks belong to source files. No resizing, crop, enhancement, synthetic imagery or inference performed when preparing this pack.",
+  "selection_note": "The samples array describes the six original dataset images. One each for PL, BX, FS, AJ, BLOCK, and target-empty OTHER. Six distinct source groups, visually inspected. Deliberate diversity selection; source training overlap is possible. Dataset annotations are references, not guaranteed current-model outputs or human review decisions. Empty target annotations for sample 06 mean annotated non-target defects, not verified normality. Existing OSD and blue masking blocks belong to source files. The six source images were copied unmodified.",
   "samples": [
     {
       "id": "01_wall_trace",
@@ -160,6 +160,25 @@
       "modified": false
     }
   ],
+  "synthetic_demos": {
+    "source": "One original AI-generated fictional scene from the built-in image generation tool. No reference image or site footage was used. Both derivatives carry a visible SYNTHETIC DEMO label. These assets are for workflow demonstrations and have no ground-truth defect labels.",
+    "generation_prompt": "Use case: scientific-educational. Generate one original, wide horizontal 16:9 synthetic engineering visualization for a public software demonstration, no input/reference images. Single optical-axis view from a simulated sewer inspection camera through a damp gray-brown circular concrete drain. Camera headlamp close to lens illuminates an irregular joint and a fine branching dark seam on the left wall, a broad soft shadow fades into the distance, a shallow ribbon of water makes modest reflections at the bottom. Concrete pores and staining are visible, credible lighting and perspective, multiple faint joints recede toward a dark off-center vanishing point. Neutral muted colors, modest exposure, restrained industrial CCTV camera perspective. No overlaid text, no dates, no arrows, no graphics, no watermark, no logos, no people, no equipment identifiers or existing dataset imagery.",
+    "image": {
+      "file": "07_lighting_review/image.jpg",
+      "prompt": "07_lighting_review/prompt.md",
+      "size": [960, 540]
+    },
+    "video": {
+      "file": "08_video_timeline/clip.mp4",
+      "prompt": "08_video_timeline/prompt.md",
+      "size": [960, 540],
+      "codec": "H.264, yuv420p, no audio",
+      "duration_seconds": 8,
+      "frames_per_second": 12,
+      "frame_count": 96,
+      "construction": "Affine crop / zoom of the same single synthetic still, increasing from 1.000x to 1.095x across the clip. Brightness decreases from 2 s to a minimum at 4 s, returning to baseline by 6 s. Scene structure and simulated lighting have no geographic or physical measurement meaning."
+    }
+  },
   "source_manifest_provenance": {
     "applies_to": "Original 36-sample experiment manifest, not the six-image pack",
     "text": "Seed 20260911 GT-only selection before v2 changes, excluding all 12 previous pilot source groups. Six each PL/BX/FS/AJ/BLOCK/target-empty OTHER. BLOCK: 2 CJ, 2 JG, 2 ZW. One image per filename-derived group; no recovered original training split and possible training overlap. Target-empty is annotated OTHER, not normal. No prediction-based selection."
