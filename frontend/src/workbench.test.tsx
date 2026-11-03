@@ -30,6 +30,60 @@ function restore(tasks: ReturnType<typeof task>[]) {
 }
 afterEach(() => { localStorage.clear(); vi.unstubAllGlobals(); });
 
+it("keeps the uploaded file reachable from a turn that never created a task", async () => {
+  const input = { asset_id: "11111111-1111-4111-8111-111111111111", version: 2 };
+  const createdAt = "2026-09-23T10:00:00Z";
+  const turn = { request_id: secondId, session_id: sessionId, created_at: createdAt, updated_at: createdAt,
+    text: "检查这段录像", task_id: null, input_asset: input, linked_task_id: null, status: "failed",
+    stage: "finished", reply: null, attempts: 1, error_code: "planner_failed" };
+  const fetch = restore([]);
+  fetch.mockResolvedValueOnce(new Response(JSON.stringify({ session: { session_id: sessionId, created_at: createdAt }, tasks: [] })));
+  fetch.mockResolvedValueOnce(new Response(JSON.stringify([turn])));
+  render(<App pollIntervalMs={60_000} />);
+  expect((await screen.findByRole("link", { name: "打开本轮输入文件" })).getAttribute("href"))
+    .toBe(`/api/assets/${input.asset_id}/versions/2/content`);
+});
+
+it("shows manually saved inspections in time order in a zero-message session", async () => {
+  const earlier = task(firstId, "检查管口");
+  const later = { ...task(secondId, "检查管底"), created_at: "2026-09-23T10:30:00Z" };
+  const fetch = restore([later, earlier]);
+  render(<App pollIntervalMs={60_000} />);
+  const feed = within(screen.getByLabelText("对话消息"));
+  await feed.findByText("检查管口");
+  expect(screen.queryByText("从一份现场影像开始")).toBeNull();
+  expect(feed.getAllByRole("region", { name: /^检查记录 · / }).map(el => el.ariaLabel))
+    .toEqual(["检查记录 · 检查管口", "检查记录 · 检查管底"]);
+  await userEvent.click(feed.getByRole("button", { name: "查看任务与证据 · 44444444" }));
+  expect(within(screen.getByRole("region", { name: "检查详情" })).getByRole("heading", { name: "检查管口" })).toBeTruthy();
+  expect(screen.getByText("0 条消息 · 2 项任务")).toBeTruthy();
+  expect(fetch.mock.calls.every(([url]) => !url.endsWith("/start"))).toBe(true);
+});
+
+it("keeps each saved task once when a turn creates a task and another turn refers back", async () => {
+  const manual = task(firstId, "检查原片");
+  const child = { ...task(secondId, "检查证据帧"), parent_task_id: firstId, created_at: "2026-09-23T10:21:00Z" };
+  const createdTurn = { request_id: child.request_id, session_id: sessionId, created_at: "2026-09-23T10:20:00Z",
+    updated_at: child.created_at, text: "检查证据帧", task_id: firstId, input_asset: null,
+    linked_task_id: secondId, status: "completed", stage: "finished", reply: "已提交证据帧检查", attempts: 1, error_code: null };
+  const question = { ...createdTurn, request_id: crypto.randomUUID(), created_at: "2026-09-23T10:23:00Z",
+    updated_at: "2026-09-23T10:23:00Z", text: "解释原片记录", reply: "原片检查已保存", linked_task_id: firstId };
+  const fetch = restore([child, manual]);
+  fetch.mockResolvedValueOnce(new Response(JSON.stringify({
+    session: { session_id: sessionId, created_at: manual.created_at }, tasks: [child, manual],
+  })));
+  fetch.mockResolvedValueOnce(new Response(JSON.stringify([createdTurn, question])));
+  render(<App pollIntervalMs={60_000} />);
+  const transcript = screen.getByLabelText("对话消息");
+  await within(transcript).findByText("原片检查已保存");
+  const items = [...transcript.children];
+  expect(items).toHaveLength(3);
+  expect(within(items[0] as HTMLElement).getByText("检查原片")).toBeTruthy();
+  expect(within(items[1] as HTMLElement).getByRole("region", { name: "检查记录 · 检查证据帧" })).toBeTruthy();
+  expect(within(items[1] as HTMLElement).getAllByText("检查证据帧")).toHaveLength(1);
+  expect(within(items[2] as HTMLElement).queryByRole("region", { name: /^检查记录 · / })).toBeNull();
+});
+
 it("restores the most recent linked result as the conversation context after reload", async () => {
   localStorage.setItem("pipe-inspector.session-id", sessionId);
   const tasks = [task(firstId, "最早的检查"), task(secondId, "最近的处理结果")];

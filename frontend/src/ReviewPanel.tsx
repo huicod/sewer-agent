@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { ApiError, getReview, submitReview } from "./api";
+import { EvidenceThumbnail } from "./EvidenceThumbnail";
 import type {
   AssetRef,
   DetectionLabel,
@@ -90,24 +91,8 @@ function EvidenceView({ finding }: { finding: Finding }) {
         return (
           <figure key={`${evidence.asset.asset_id}-${evidence.asset.version}-${index}`}>
             {evidence.region ? (
-              <svg
-                aria-label={label}
-                role="img"
-                viewBox={`0 0 ${evidence.region.width} ${evidence.region.height}`}
-              >
-                <image
-                  href={assetUrl(evidence.asset.asset_id, evidence.asset.version)}
-                  width={evidence.region.width}
-                  height={evidence.region.height}
-                  preserveAspectRatio="xMidYMid meet"
-                />
-                <rect
-                  x={evidence.region.bbox_xyxy[0]}
-                  y={evidence.region.bbox_xyxy[1]}
-                  width={evidence.region.bbox_xyxy[2] - evidence.region.bbox_xyxy[0]}
-                  height={evidence.region.bbox_xyxy[3] - evidence.region.bbox_xyxy[1]}
-                />
-              </svg>
+              <EvidenceThumbnail url={assetUrl(evidence.asset.asset_id, evidence.asset.version)}
+                region={evidence.region} label={label} />
             ) : (
               <a
                 aria-label={label}

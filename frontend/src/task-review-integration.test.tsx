@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -81,7 +81,8 @@ describe("TaskCard review and evidence integration", () => {
     const user = userEvent.setup();
 
     render(<App pollIntervalMs={60_000} />);
-    await screen.findByText("等待人工复核");
+    const details = await screen.findByRole("complementary", { name: "任务与证据" });
+    await within(details).findByText("等待人工复核");
     expect(fetchMock.mock.calls.some(([url]) => url === `/api/tasks/${taskId}/review`)).toBe(false);
 
     await user.click(screen.getByRole("button", { name: "开始人工复核" }));
@@ -123,6 +124,24 @@ describe("TaskCard review and evidence integration", () => {
     expect(fetchMock.mock.calls.some(([url]) => url === `/api/tasks/${taskId}/video`)).toBe(false);
     await user.click(timelineButton);
     await waitFor(() => expect(fetchMock.mock.calls.some(([url]) => url === `/api/tasks/${taskId}/video`)).toBe(true));
+  });
+
+  it("previews the exact saved evidence frame and links the original video separately", async () => {
+    const waiting = task();
+    const frameId = "66666666-6666-4666-8666-666666666666";
+    waiting.snapshot.findings[0].evidence[0].asset = { asset_id: frameId, version: 2 };
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+      if (url === `/api/sessions/${sessionId}`) return response({ session: { session_id: sessionId, created_at: createdAt }, tasks: [waiting] });
+      if (url === `/api/sessions/${sessionId}/turns`) return response([]);
+      throw new Error(`unexpected URL ${url}`);
+    }));
+    render(<App pollIntervalMs={60_000} />);
+    const link = await screen.findByRole("link", { name: "原始证据 1 · 2.5 秒" });
+    const frameUrl = `/api/assets/${frameId}/versions/2/content`;
+    expect(link.getAttribute("href")).toBe(frameUrl);
+    expect(link.querySelector("image")?.getAttribute("href")).toBe(frameUrl);
+    expect(link.querySelector("rect")?.getAttribute("width")).toBe("90");
+    expect(screen.getByRole("link", { name: "打开输入视频" }).getAttribute("href")).toBe(`/api/assets/${assetId}/versions/1/content`);
   });
 
   it("discovers a no-finding video from source metadata only after the user asks", async () => {

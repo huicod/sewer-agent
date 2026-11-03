@@ -350,6 +350,26 @@ h2 { font-size: 18px; } h3 { font-size: 16px; } h4 { font-size: 14px; }
 .conversation-workbench .turn-card { gap: 18px; }
 .conversation-workbench .turn-message--user { max-width: 88%; padding: 12px 16px; }
 .conversation-workbench .turn-message--assistant { padding: 0 4px; }
+.feed-task {
+  flex: none;
+  min-width: 0;
+  padding: 16px 18px;
+  border: 1px solid #e5eaf0;
+  border-radius: 8px;
+  color: #334155;
+  background: #fff;
+}
+.feed-task__header { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px; }
+.feed-task__header strong { color: #172b4d; font-size: 14px; }
+.feed-task__header .ant-tag { margin: 0; }
+.feed-task__meta { margin-inline-start: auto; color: #64748b; font-size: 11px; }
+.feed-task__label { font-size: 12px; font-weight: 600; color: #475569; }
+.feed-task__instruction, .feed-task__summary { margin: 12px 0; font-size: 13px; line-height: 1.65; overflow-wrap: anywhere; }
+.feed-task__instruction { padding: 8px 12px; border-radius: 6px; background: #f0f5fc; white-space: pre-wrap; }
+.feed-task__instruction p { margin: 3px 0 0; }
+.feed-task__summary strong { margin-inline-end: 6px; color: #475569; }
+.feed-task__details.ant-btn { color: #165dba; }
+.turn-message--assistant .feed-task { margin-top: 12px; }
 .turn-task-link.ant-btn { margin-top: 10px; color: #475569; font-size: 12px; }
 .turn-extra { margin-top: 8px; font-size: 11px; color: #64748b; }
 .turn-extra summary { cursor: pointer; width: fit-content; }
@@ -404,6 +424,7 @@ h2 { font-size: 18px; } h3 { font-size: 16px; } h4 { font-size: 14px; }
   .conversation-content .inspection-workspace { position: absolute; z-index: 15; inset: 0 0 0 auto; width: min(100%, 540px); box-shadow: -4px 0 16px #172b4d18; }
 }
 @media (max-width: 620px) {
+  .feed-task { padding: 12px; }
   .conversation-workbench .workspace-header { height: auto; min-height: 64px; padding-block: 10px; flex-wrap: wrap; }
   .conversation-workbench .workspace-header__actions { margin-left: auto; }
   .conversation-workbench .workspace-header__caption { display: none; }

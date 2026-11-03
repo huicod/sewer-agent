@@ -16,6 +16,12 @@ globalThis.ResizeObserver = class {
   disconnect() {}
 };
 
+// jsdom has no layout viewport. Preview tests explicitly intersect the cards they exercise.
+Object.defineProperty(window, "IntersectionObserver", {
+  configurable: true, writable: true,
+  value: class { observe() {} unobserve() {} disconnect() {} },
+});
+
 afterEach(() => {
   cleanup();
 });

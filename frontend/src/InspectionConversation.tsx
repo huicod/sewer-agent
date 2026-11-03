@@ -2,8 +2,10 @@ import { Button, ConfigProvider, Input, Layout, Modal, Spin } from "antd";
 import zhCN from "antd/locale/zh_CN";
 import { FileSearchOutlined, InfoCircleOutlined, MenuOutlined, MessageOutlined, UploadOutlined } from "@ant-design/icons";
 import { ConversationTaskHistory } from "./ConversationTaskHistory";
+import { ConversationTaskEntry } from "./ConversationTaskEntry";
 import { TaskCard } from "./TaskCard";
 import { GuidedRestartAction } from "./GuidedRestartAction";
+import { INSPECTION_MODE_TEXT } from "./taskPresentation";
 import { useAssistantResize } from "./useAssistantResize";
 import { type CSSProperties, type FormEvent, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 
@@ -47,10 +49,6 @@ const TURN_STAGE_TEXT = {
   finished: "已结束",
 } as const;
 const DEFAULT_INSPECTION_MODE: InspectionMode = "yolo_vlm";
-const INSPECTION_MODE_TEXT: Record<InspectionMode, string> = {
-  yolo_vlm: "YOLO＋VLM 复检",
-  yolo_only: "纯 YOLO（不复检）",
-};
 
 type DirectSource = "file" | "example";
 
@@ -200,17 +198,21 @@ type TurnCardProps = {
   turn: TurnRecord;
   sessionId: string;
   linkedTask: TaskRecord | undefined;
+  createdTask?: TaskRecord;
   resending: boolean;
   onResend: (turn: TurnRecord) => void;
   onViewTask: (id: string) => void;
 };
 
-function TurnCard({ turn, sessionId, linkedTask, resending, onResend, onViewTask }: TurnCardProps) {
+function TurnCard({ turn, sessionId, linkedTask, createdTask, resending, onResend, onViewTask }: TurnCardProps) {
   return (
     <article className="turn-card">
       <div className="turn-message turn-message--user">
         <span>你</span>
         <p>{turn.text}</p>
+        {turn.input_asset && !sameAssetRef(turn.input_asset, createdTask?.input_asset ?? null) ? (
+          <a href={evidenceUrl(turn.input_asset)} target="_blank" rel="noreferrer">打开本轮输入文件</a>
+        ) : null}
       </div>
       <div className="turn-message turn-message--assistant">
         <span>助手 · {TURN_STAGE_TEXT[turn.stage]}</span>
@@ -226,7 +228,8 @@ function TurnCard({ turn, sessionId, linkedTask, resending, onResend, onViewTask
         {turn.status === "completed" && turn.linked_task_id ? (
           <p className="linked-status">{linkedTaskStatus(linkedTask)}</p>
         ) : null}
-        {linkedTask ? <Button size="small" className="turn-task-link" onClick={() => onViewTask(linkedTask.snapshot.task_id)}>查看任务与证据 · {linkedTask.snapshot.task_id.slice(0, 8)}</Button> : null}
+        {createdTask && <ConversationTaskEntry task={createdTask} turnText={turn.text} onViewTask={onViewTask} />}
+        {linkedTask && linkedTask.snapshot.task_id !== createdTask?.snapshot.task_id ? <Button size="small" className="turn-task-link" onClick={() => onViewTask(linkedTask.snapshot.task_id)}>查看任务与证据 · {linkedTask.snapshot.task_id.slice(0, 8)}</Button> : null}
         {turn.status === "completed" ? (
           <details className="turn-extra" open={Boolean(turn.reference_task_id)}><summary>结果对比</summary><ComparisonPanel sessionId={sessionId} requestId={turn.request_id} /></details>
         ) : null}
@@ -284,6 +287,7 @@ function Workbench({ pollIntervalMs = 2_000, sessionId, onSummary, draftCache,
     storageKey: "pipe-inspector.detail-width", defaultWidth: 520,
   });
   const transcript = useRef<HTMLDivElement>(null);
+  const previousTimelineLength = useRef<number | null>(null);
   const newFollowCreatedTurn = useRef<string | null>(null);
   const followCreatedTurn = cached?.followCreatedTurn ?? newFollowCreatedTurn;
   const focusedTask = tasks.find((task) => task.snapshot.task_id === focusedTaskId) ?? tasks[0];
@@ -295,6 +299,29 @@ function Workbench({ pollIntervalMs = 2_000, sessionId, onSummary, draftCache,
     : contextTask ? inspectionModeOf(contextTask) : conversationInspectionMode;
   const waitingForGuided = Boolean(waitingGuidedTaskId && effectiveTaskId === waitingGuidedTaskId &&
     contextTask && isActiveTask(contextTask));
+
+  const timeline = useMemo(() => {
+    const byRequest = new Map(tasks.map((task) => [task.request_id, task]));
+    const byId = new Map(tasks.map((task) => [task.snapshot.task_id, task]));
+    const entries = turns.map((turn) => {
+      // Tasks admitted by a turn reuse that turn’s request ID. Later questions can link
+      // to the same task without owning it or changing its position in the history.
+      const createdTask = byRequest.get(turn.request_id);
+      byRequest.delete(turn.request_id);
+      return { kind: "turn" as const, turn, createdTask, created: turn.created_at,
+        linkedTask: turn.linked_task_id ? byId.get(turn.linked_task_id) : undefined };
+    });
+    const standalone = [...byRequest.values()].map((task) => ({
+      kind: "task" as const, task, created: task.created_at,
+    }));
+    return [...entries, ...standalone].sort((a, b) => Date.parse(a.created) - Date.parse(b.created));
+  }, [tasks, turns]);
+
+  function showTaskEvidence(id: string) {
+    followCreatedTurn.current = null;
+    setFocusedTaskId(id);
+    setDetailsOpen(true);
+  }
 
   function discussFocusedTask() {
     followCreatedTurn.current = null;
@@ -354,8 +381,16 @@ function Workbench({ pollIntervalMs = 2_000, sessionId, onSummary, draftCache,
   }, [session, tasks, turns, onSummary]);
 
   useEffect(() => {
-    if (transcript.current) transcript.current.scrollTop = transcript.current.scrollHeight;
-  }, [turns.length]);
+    if (loading) {
+      previousTimelineLength.current = null;
+      return;
+    }
+    const previous = previousTimelineLength.current;
+    previousTimelineLength.current = timeline.length;
+    if (transcript.current && (previous === null ? turns.length > 0 : timeline.length > previous)) {
+      transcript.current.scrollTop = transcript.current.scrollHeight;
+    }
+  }, [loading, timeline.length, turns.length]);
 
   async function startNewSession() {
     setLoading(true);
@@ -784,17 +819,20 @@ function Workbench({ pollIntervalMs = 2_000, sessionId, onSummary, draftCache,
       <section className="conversation-panel" aria-labelledby="conversation-title">
         <div className="conversation-thread-heading"><h2 id="conversation-title">检查对话</h2><span>{turns.length} 条消息 · {tasks.length} 项任务</span></div>
         <div ref={transcript} className="transcript" aria-live="polite" aria-label="对话消息">
-          {!loading && turns.length === 0 ? <div className="assistant-empty"><FileSearchOutlined aria-hidden="true" /><h3>从一份现场影像开始</h3><p>在同一个对话中检查原图、继续调用工具，并查看统一报告。</p><Button type="primary" icon={<UploadOutlined />} onClick={() => { setOptionsOpen(true); conversationFileInput.current?.click(); }}>上传现场影像</Button><p className="assistant-empty__formats">JPEG、PNG 或视频 · 同图的任务与证据保留在当前对话</p></div> : null}
-          {turns.map((turn) => (
+          {!loading && timeline.length === 0 ? <div className="assistant-empty"><FileSearchOutlined aria-hidden="true" /><h3>从一份现场影像开始</h3><p>在同一个对话中检查原图、继续调用工具，并查看统一报告。</p><Button type="primary" icon={<UploadOutlined />} onClick={() => { setOptionsOpen(true); conversationFileInput.current?.click(); }}>上传现场影像</Button><p className="assistant-empty__formats">JPEG、PNG 或视频 · 同图的任务与证据保留在当前对话</p></div> : null}
+          {timeline.map((item) => item.kind === "turn" ? (
             <TurnCard
-              key={turn.request_id}
-              turn={turn}
-              sessionId={session?.session_id ?? turn.session_id}
-              linkedTask={tasks.find((task) => task.snapshot.task_id === turn.linked_task_id)}
+              key={item.turn.request_id}
+              turn={item.turn}
+              sessionId={session?.session_id ?? item.turn.session_id}
+              linkedTask={item.linkedTask}
+              createdTask={item.createdTask}
               resending={turnSubmitting}
               onResend={(nextTurn) => void postTurn(nextTurn)}
-              onViewTask={(id) => { setFocusedTaskId(id); setDetailsOpen(true); }}
+              onViewTask={showTaskEvidence}
             />
+          ) : (
+            <ConversationTaskEntry key={item.task.snapshot.task_id} task={item.task} onViewTask={showTaskEvidence} />
           ))}
         </div>
         {conversationError ? <div className="conversation-error" role="alert">{conversationError}</div> : null}

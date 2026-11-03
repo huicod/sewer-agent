@@ -7,6 +7,8 @@ import { EnhancementPanel } from "./EnhancementPanel";
 import { GeometryPanel } from "./GeometryPanel";
 import { ImageEvidencePanel } from "./ImageEvidencePanel";
 import { ReviewPanel } from "./ReviewPanel";
+import { EvidenceThumbnail } from "./EvidenceThumbnail";
+import { inspectionResultText, INSPECTION_MODE_TEXT, REVIEW_TEXT, STATUS_COLOR, STATUS_TEXT } from "./taskPresentation";
 import type { AssetRef, InspectionMode, RuntimeStatus, TaskRecord, VideoEvidenceFrame } from "./types";
 import { VideoTimeline } from "./VideoTimeline";
 import "./task-card.css";
@@ -14,41 +16,11 @@ import "./task-card.css";
 const ACTIVE_STATUSES = new Set<RuntimeStatus>(["queued", "running", "waiting_review"]);
 const DEFAULT_INSPECTION_MODE: InspectionMode = "yolo_vlm";
 
-const RESULT_TEXT = {
-  pending: "待定",
-  normal: "正常",
-  defects_found: "发现缺陷",
-  inconclusive: "无法确定",
-} as const;
-const REVIEW_TEXT = {
-  tentative: "暂定",
-  confirmed: "已确认",
-  rejected: "已排除",
-  needs_review: "需复核",
-} as const;
 const CONFIRMATION_TEXT = {
   rules: "规则确认",
   detector_only_rules: "纯 YOLO 检测规则确认",
   human: "人工确认",
 } as const;
-const STATUS_TEXT: Record<RuntimeStatus, string> = {
-  queued: "等待处理",
-  running: "处理中",
-  waiting_review: "等待人工复核",
-  completed: "已完成",
-  partial: "部分完成",
-  failed: "处理失败",
-  cancelled: "已取消",
-};
-const STATUS_COLOR: Record<RuntimeStatus, string> = {
-  queued: "default",
-  running: "processing",
-  waiting_review: "warning",
-  completed: "success",
-  partial: "warning",
-  failed: "error",
-  cancelled: "default",
-};
 const TASK_STAGE_TEXT: Record<string, string> = {
   tools: "图片增强处理",
 };
@@ -65,10 +37,6 @@ const ACTIVE_TOOL_TEXT: Record<string, string> = {
   relative_measure: "掩膜与相对深度量化",
 };
 const GEOMETRY_TOOLS = new Set(["segment", "relative_depth", "relative_measure"]);
-const INSPECTION_MODE_TEXT: Record<InspectionMode, string> = {
-  yolo_vlm: "YOLO＋VLM 复检",
-  yolo_only: "纯 YOLO（不复检）",
-};
 
 export type TaskCardProps = {
   task: TaskRecord;
@@ -145,15 +113,6 @@ export function TaskCard({
     finding.evidence.some((evidence) => evidence.frame_index !== null),
   );
   const inspectionMode = inspectionModeOf(task);
-  const inspectionResult =
-    inspectionMode === "yolo_only" &&
-    task.snapshot.runtime_status === "completed" &&
-    task.snapshot.inspection_result === "inconclusive" &&
-    task.snapshot.processed_frames > 0 &&
-    task.snapshot.coverage.sufficient_coverage &&
-    task.snapshot.findings.length === 0
-      ? "未检出五类缺陷（未复检）"
-      : RESULT_TEXT[task.snapshot.inspection_result];
 
   async function discoverMedia() {
     if (mediaLoading || mediaKind) return;
@@ -283,7 +242,7 @@ export function TaskCard({
       <section className="task-detail-overview" aria-label="检查概览">
         <div className="task-detail-result">
           <span>检查结论</span>
-          <strong>{inspectionResult}</strong>
+          <strong>{inspectionResultText(task)}</strong>
         </div>
         <div className="task-detail-result">
           <span>检查模式</span>
@@ -301,15 +260,20 @@ export function TaskCard({
       <section className="task-detail-media" aria-label="源媒体">
         <div className="task-detail-section-heading">
           <h4>源媒体</h4>
-          {!task.frame_source && !hasVideoLocator && !mediaKind ? (
-            <Button
-              icon={<EyeOutlined aria-hidden="true" />}
-              disabled={mediaLoading}
-              loading={mediaLoading}
-              onClick={() => void discoverMedia()}
-            >
-              {mediaLoading ? "正在识别媒体…" : "查看媒体证据"}
-            </Button>
+          {!task.frame_source && !mediaKind ? (
+            <div className="task-detail-media-actions">
+              <a href={sourceUrl} target="_blank" rel="noreferrer">
+                {hasVideoLocator ? "打开输入视频" : "打开输入文件"}
+              </a>
+              <Button
+                icon={<EyeOutlined aria-hidden="true" />}
+                disabled={mediaLoading}
+                loading={mediaLoading}
+                onClick={() => void discoverMedia()}
+              >
+                {mediaLoading ? "正在识别媒体…" : "查看媒体证据"}
+              </Button>
+            </div>
           ) : null}
         </div>
         {task.frame_source ? (
@@ -368,7 +332,13 @@ export function TaskCard({
                       href={evidenceUrl(evidence.asset)}
                       target="_blank"
                       rel="noreferrer"
+                      className="finding-evidence-link"
                     >
+                      {evidence.region && !(evidence.frame_index !== null &&
+                        evidence.asset.asset_id === task.input_asset.asset_id &&
+                        evidence.asset.version === task.input_asset.version) ? (
+                        <EvidenceThumbnail url={evidenceUrl(evidence.asset)} region={evidence.region} />
+                      ) : null}
                       原始证据 {index + 1}
                       {evidence.timestamp_seconds === null ? "" : ` · ${evidence.timestamp_seconds} 秒`}
                     </a>

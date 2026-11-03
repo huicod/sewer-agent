@@ -28,7 +28,7 @@ const CONFIRMATION_TEXT = {
   human: "人工确认",
 } as const;
 
-function assetUrl(asset: AssetRef): string {
+export function assetUrl(asset: AssetRef): string {
   return `/api/assets/${encodeURIComponent(asset.asset_id)}/versions/${asset.version}/content`;
 }
 
@@ -51,8 +51,8 @@ type FindingRegion = {
   bbox: [number, number, number, number];
 };
 
-function findingRegions(
-  detail: ImageEvidenceDetail,
+export function findingRegions(
+  detail: Pick<ImageEvidenceDetail, "findings" | "input_asset">,
   width: number,
   height: number,
 ): FindingRegion[] {

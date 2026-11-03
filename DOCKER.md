@@ -16,6 +16,15 @@ cd sewer-agent
 python3 scripts/docker_setup.py up
 ```
 
+已有 `dev/agent-v1` 副本更新时，在完成下文的备份和停机步骤后拉取代码并重新构建：
+
+```bash
+git pull --ff-only origin dev/agent-v1
+python3 scripts/docker_setup.py up
+```
+
+网页随应用镜像构建。更新后，会话中可直接查看已保存的图片检查、缺陷标注和视频播放器，并打开原始文件及证据帧；使用已有镜像的 `--no-build` 启动会继续显示该镜像内的界面。
+
 首次按提示输入 **阿里云百炼北京地域的 API Key**，输入时字符不会显示。该账号须已开通默认模型 `qwen3.8-max`。同一把 Key 用于对话及图片复检，也可以通过部署环境提供 `DASHSCOPE_API_KEY`。[百炼模型与视觉能力](https://help.aliyun.com/zh/model-studio/vision-model/)
 
 脚本创建权限为 `0600` 的 `.env.docker`，生成三份数据库密码，匿名下载约 1.07 GiB 的模型到 `./models/`，校验七个权重的 SHA-256，然后构建镜像并等待服务就绪。模型下载用 Python 标准库，版本随代码固定。再次运行同一命令可复用已下载的完整文件、配置及两个持久卷。启动成功后在宿主机打开 `http://127.0.0.1:8000`。[公开模型包](https://huggingface.co/suwewa/sewer-agent-models) · [本版固定提交](deploy/model-revision.txt)

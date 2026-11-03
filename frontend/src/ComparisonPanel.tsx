@@ -1,29 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 
 import { ApiError, getComparison } from "./api";
+import { LABEL_TEXT, REVIEW_TEXT } from "./taskPresentation";
 import type { AssetRef, ComparisonResult, Finding, TaskRecord } from "./types";
 
 type ComparisonPanelProps = {
   sessionId: string;
   requestId: string;
 };
-
-const LABEL_TEXT = {
-  AJ: "支管暗接",
-  BX: "变形",
-  FS: "腐蚀",
-  PL: "破裂",
-  BLOCK: "堵塞",
-  OTHER: "其他类别",
-  UNLABELED: "未分类",
-} as const;
-
-const REVIEW_TEXT = {
-  confirmed: "已确认",
-  tentative: "暂定",
-  needs_review: "需复核",
-  rejected: "已排除",
-} as const;
 
 function assetUrl(asset: AssetRef): string {
   return `/api/assets/${encodeURIComponent(asset.asset_id)}/versions/${asset.version}/content`;
