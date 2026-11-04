@@ -1,0 +1,2 @@
+{"file":".trellis/spec/frontend/conventions.md","reason":"UI and browser acceptance"}
+{"file":".trellis/spec/backend/conventions.md","reason":"Config persistence, secret protection and old-task compatibility"}

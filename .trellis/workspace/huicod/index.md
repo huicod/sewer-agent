@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 57
-- **Last Active**: 2026-10-31
+- **Total Sessions**: 58
+- **Last Active**: 2026-11-04
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~1815 | Active |
+| `journal-1.md` | ~1848 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 58 | 2026-11-04 | 工作台设置与 Windows 从零部署 | `080656de` | `dev/agent-v1` |
 | 57 | 2026-10-31 | Publish models and verify single-key Docker setup | `55f936bf`, `59966713` | `dev/agent-v1` |
 | 56 | 2026-10-31 | Portable Docker deployment and private model bundle | `3a805d36`, `895098d2`, `09195ec6` | `dev/agent-v1` |
 | 55 | 2026-09-24 | 修复 reduced-motion 下菜单抖动及屏幕外定位 | - | `-` |

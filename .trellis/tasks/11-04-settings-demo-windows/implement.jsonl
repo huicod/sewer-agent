@@ -1,0 +1,2 @@
+{"file":".trellis/spec/frontend/conventions.md","reason":"Preserve conversation state, theme and API boundary"}
+{"file":".trellis/spec/backend/conventions.md","reason":"Versioned settings must preserve frozen run pins and secret boundaries"}

@@ -1813,3 +1813,36 @@ Published the existing seven-model bundle with source notices, shipped anonymous
 ### Status
 
 [OK] **Completed**
+
+
+## Session 58: 工作台设置与 Windows 从零部署
+
+**Date**: 2026-11-04
+**Task**: 工作台设置与 Windows 从零部署
+**Branch**: `dev/agent-v1`
+
+### Summary
+
+设置页、服务端修订凭据和 Windows/WSL 入口已实现并部署本机；真实 PL 示例备妥，个人网站发布等待明确授权。
+
+### Main Changes
+
+- 发布设置页、不可变 API 修订和可续装 Windows 入口；保留原有会话与媒体。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `080656de` | (see git log) |
+
+### Testing
+
+- [OK] 前端205通过；后端正式镜像1338通过/2跳过；安装器24通过；桌面/手机验收和隔离GPU检测通过。
+
+### Status
+
+[PARTIAL] **Local delivery complete; website publication awaiting approval**
+
+### Next Steps
+
+- 收到用户网站发布授权后推送已验收单组件更改并验证线上页面。
