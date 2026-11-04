@@ -1,0 +1,263 @@
+{
+  "case": "accepted-crack",
+  "scope": "One historical YOLO26s inspection on 2026-11-02; separate from the 606-image YOLO26m evaluation.",
+  "provenance": {
+    "archive": "var/standby/evidence/server-examples-20261102/scoped-examples.tar.gz",
+    "members": [
+      "server-index.json",
+      "records.json",
+      "assets/678cc6c9-6522-4ae4-b2b3-cb48dfa93951/1/source"
+    ],
+    "ground_truth": "example/sources.json samples[id=01_wall_trace].dataset_annotation_reference",
+    "original": "example/01_wall_trace/image.jpg",
+    "original_byte_equal_to_archived_asset": true,
+    "rendering": "Existing evaluation.gallery._overlay_svg with the archived original and recorded boxes; full 640x640 frame."
+  },
+  "index_entry": {
+    "slug": "01_wall_trace",
+    "session_id": "7ea02d44-c175-4aec-bae7-8e283c80e89c",
+    "mode": "yolo_vlm",
+    "kind": "image",
+    "asset": {
+      "asset_id": "678cc6c9-6522-4ae4-b2b3-cb48dfa93951",
+      "version": 1
+    },
+    "task_id": "2ff87e71-4546-46db-83a1-8037e7121974"
+  },
+  "source_reference": {
+    "id": "01_wall_trace",
+    "description": "细线裂纹与局部纹理",
+    "image": "01_wall_trace/image.jpg",
+    "prompt": "01_wall_trace/prompt.md",
+    "dataset": "Sewer2403 user-supplied source archive",
+    "source_sample_id": "sewer2403-4172_png.rf.fccf3ffaa2743770e3ebdd7199ebf7cd",
+    "source_group_id": "source:4172",
+    "source_image": "var/datasets/sewer2403_source/extracted/市政下水雨污管道缺陷数据2403/images/4172_png.rf.fccf3ffaa2743770e3ebdd7199ebf7cd.jpg",
+    "source_manifest": "var/evaluations/2026-09-11/sewer2403-paired-manifest.json",
+    "width": 640,
+    "height": 640,
+    "dataset_annotation_reference": [
+      {
+        "label": "PL",
+        "bbox_xyxy": [
+          274.0,
+          113.0,
+          341.0,
+          437.0
+        ]
+      }
+    ],
+    "optional_geometry_roi_xyxy": [
+      245,
+      104,
+      348,
+      436
+    ],
+    "geometry_roi_source": "var/evaluations/2026-09-11-guided/paired/gallery/sample-0003/record.json : historical original detector box rounded to pixels; prompt region only, not a mask ground truth",
+    "modified": false
+  },
+  "tool_calls": [
+    {
+      "error": null,
+      "status": "succeeded",
+      "attempt": 1,
+      "call_id": "0962c6d1-e327-4485-b224-505ac92204bb",
+      "step_id": "detect",
+      "task_id": "2ff87e71-4546-46db-83a1-8037e7121974",
+      "resource": "gpu",
+      "tool_name": "detect",
+      "skip_reason": null,
+      "input_assets": [
+        {
+          "version": 1,
+          "asset_id": "678cc6c9-6522-4ae4-b2b3-cb48dfa93951"
+        }
+      ],
+      "tool_version": "1",
+      "model_version": "sewer2403_5class_yolo26s_img960_e100/best",
+      "output_assets": [],
+      "idempotency_key": "b8c96d3c-64e9-45ec-a559-c749252882c7:detect",
+      "timeout_seconds": 180.0
+    },
+    {
+      "error": null,
+      "status": "succeeded",
+      "attempt": 1,
+      "call_id": "efa1d204-f5ea-4de3-8de1-88772ba0fc22",
+      "step_id": "verify",
+      "task_id": "2ff87e71-4546-46db-83a1-8037e7121974",
+      "resource": "api",
+      "tool_name": "verify",
+      "skip_reason": null,
+      "input_assets": [
+        {
+          "version": 1,
+          "asset_id": "678cc6c9-6522-4ae4-b2b3-cb48dfa93951"
+        }
+      ],
+      "tool_version": "yolo-guided-review-v4",
+      "model_version": "qwen3.8-max",
+      "output_assets": [],
+      "idempotency_key": "b8c96d3c-64e9-45ec-a559-c749252882c7:verify",
+      "timeout_seconds": 60.0
+    }
+  ],
+  "checkpoints": {
+    "detect": {
+      "quality": {
+        "reasons": [],
+        "adequate": true,
+        "contrast": 79.6526947592011,
+        "sharpness": 794.6015780849244,
+        "mean_luminance": 108.31026123046875
+      },
+      "detection": {
+        "width": 640,
+        "height": 640,
+        "detections": [
+          {
+            "label": "PL",
+            "score": 0.7094317674636841,
+            "bbox_xyxy": [
+              244.74905395507812,
+              103.53678894042969,
+              348.4539794921875,
+              435.980224609375
+            ],
+            "native_label": "PL"
+          }
+        ],
+        "detector_id": "ultralytics-yolo26",
+        "model_version": "sewer2403_5class_yolo26s_img960_e100/best",
+        "label_space_version": "sewer2403-5class-v1"
+      }
+    },
+    "verify": {
+      "fusion": {
+        "changes": [
+          {
+            "gate": null,
+            "index": 0,
+            "label": "PL",
+            "action": "accept",
+            "reason": "在候选框区域内，管壁上可见一条清晰的纵向细长裂纹，线条连续且颜色较浅，与周围深色管壁形成对比，符合破裂(PL)的视觉特征。",
+            "pending": false,
+            "bbox_xyxy": [
+              244.74905395507812,
+              103.53678894042969,
+              348.4539794921875,
+              435.980224609375
+            ],
+            "vlm_verdict": "accept",
+            "proposed_label": "PL",
+            "coexisting_labels": [],
+            "original_presence": "present",
+            "confirmation_status": null
+          }
+        ],
+        "predictions": [
+          {
+            "label": "PL",
+            "score": 0.7094317674636841,
+            "bbox_xyxy": [
+              244.74905395507812,
+              103.53678894042969,
+              348.4539794921875,
+              435.980224609375
+            ]
+          }
+        ]
+      },
+      "review": {
+        "summary": "图像显示管道内部存在一条明显的纵向裂纹，已被检测器正确识别为PL。管壁表面有一些斑驳和污渍，但未见明显的腐蚀剥落、变形或堵塞物。左上角有文字叠加，不影响主要缺陷判断。",
+        "candidates": [
+          {
+            "index": 0,
+            "reason": "在候选框区域内，管壁上可见一条清晰的纵向细长裂纹，线条连续且颜色较浅，与周围深色管壁形成对比，符合破裂(PL)的视觉特征。",
+            "verdict": "accept",
+            "proposed_label": "PL",
+            "coexisting_labels": [],
+            "evidence_strength": "clear",
+            "original_presence": "present"
+          }
+        ],
+        "image_assessable": true,
+        "full_image_audited": true,
+        "additional_anomalies": []
+      },
+      "skipped": false
+    },
+    "final": {
+      "stage": "finished",
+      "task_id": "2ff87e71-4546-46db-83a1-8037e7121974",
+      "coverage": {
+        "sufficient_quality": true,
+        "sufficient_coverage": true,
+        "negative_audit_complete": true
+      },
+      "findings": [
+        {
+          "score": 0.7094317674636841,
+          "source": "detector",
+          "task_id": "2ff87e71-4546-46db-83a1-8037e7121974",
+          "evidence": [
+            {
+              "asset": {
+                "version": 1,
+                "asset_id": "678cc6c9-6522-4ae4-b2b3-cb48dfa93951"
+              },
+              "region": {
+                "width": 640,
+                "height": 640,
+                "bbox_xyxy": [
+                  244.74905395507812,
+                  103.53678894042969,
+                  348.4539794921875,
+                  435.980224609375
+                ]
+              },
+              "frame_index": null,
+              "timestamp_seconds": null
+            }
+          ],
+          "finding_id": "756e2f68-998c-4f79-8fba-b3af8fb2aad1",
+          "open_label": null,
+          "confirmed_by": "rules",
+          "review_status": "confirmed",
+          "canonical_label": "PL"
+        }
+      ],
+      "can_cancel": false,
+      "updated_at": "2026-11-02T13:11:46.972582Z",
+      "active_tool": null,
+      "retry_count": 0,
+      "runtime_status": "completed",
+      "schema_version": "1",
+      "stage_progress": 1.0,
+      "waiting_reason": null,
+      "overall_progress": 1.0,
+      "processed_chunks": 0,
+      "processed_frames": 1,
+      "inspection_result": "defects_found"
+    }
+  },
+  "verified_metrics": {
+    "yolo": {
+      "tp": 1,
+      "fp": 0,
+      "fn": 0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0
+    },
+    "saved_fusion": {
+      "tp": 1,
+      "fp": 0,
+      "fn": 0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0
+    },
+    "iou": 0.6264317354571196
+  }
+}
