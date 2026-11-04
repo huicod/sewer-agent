@@ -13,7 +13,7 @@
 
 **准备主机和账号。** 完整项目需要 Linux x86-64 主机、NVIDIA GPU、支持 CUDA 12.8 的驱动、已配置的 NVIDIA Container Toolkit、Git、Python 3.10+，以及可用的 Docker Engine 和 Compose v2（建议 2.30+）。镜像构建建议预留至少 25 GiB，模型另需约 1.07 GiB；上传的图片和视频还会占用存储空间。主机需能联网下载镜像、依赖和模型，并访问配置的 API。安装步骤见 [Docker Engine](https://docs.docker.com/engine/install/) 和 [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html)。
 
-1. **在新服务器克隆部署分支。** 使用有该私有 GitHub 仓库读取权限的账号。当前 Docker 部署代码在 `dev/agent-v1`，克隆时请指定分支。
+1. **在新服务器克隆部署分支。** 仓库已公开，下载代码无需 GitHub 登录或令牌。当前 Docker 部署代码在 `dev/agent-v1`，克隆时请指定分支。
 
    ```bash
    git clone --branch dev/agent-v1 --single-branch https://github.com/huicod/sewer-agent.git
@@ -45,7 +45,9 @@
 
 **演示真实视频。** 在“新建检查 → 素材来源 → 项目示例”选择内置的现场短片，提交后启动任务。五段短片及其检查要求随 [示例目录](example/README.md) 提供，无需重新上传。
 
-**停止与恢复。** 在项目目录执行 `docker compose --env-file .env.docker down` 可停止服务并保留数据卷；下次再运行 `python3 scripts/docker_setup.py up`。请保留 `.env.docker`，其中保存 API Key 和数据库密码。`down -v` 会删除数据库及媒体卷。端口调整、自备模型和备份恢复见[完整 Docker 部署指南](https://github.com/huicod/sewer-agent/blob/dev/agent-v1/DOCKER.md)。
+**更换 API 密钥。** 在“设置 → API 连接”中输入新 Key，按需选择对话与视觉复检共用配置，再点击“保存设置”。新检查立即使用新配置，无需重启服务；正在执行的检查继续使用原配置。详细操作见[网页配置说明](DOCKER.md#通过网页配置和更换-api-密钥)。
+
+**停止与恢复。** 在项目目录执行 `docker compose --env-file .env.docker down` 可停止服务并保留数据卷；下次再运行 `python3 scripts/docker_setup.py up`。请保留 `.env.docker` 中的数据库密码及初始 API 配置，并备份网页设置所在的 `settings` 卷。`down -v` 会删除数据库、媒体及设置卷。端口调整、自备模型和备份恢复见[完整 Docker 部署指南](https://github.com/huicod/sewer-agent/blob/dev/agent-v1/DOCKER.md)。
 
 ## 初版原型快照：v0.1.0-prototype
 

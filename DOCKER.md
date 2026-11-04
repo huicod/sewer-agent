@@ -10,7 +10,7 @@ Windows 用户可直接使用 [Windows 从零部署教程](WINDOWS.md)及 `scrip
 
 ## 1. 新机一键部署
 
-先从有权访问私有 GitHub 仓库的账号取得代码，也可以使用项目维护者交付的代码副本。
+代码仓库已公开，可匿名克隆 `dev/agent-v1` 分支或下载该分支的 ZIP，也可以使用项目维护者交付的代码副本。
 
 ```bash
 git clone --branch dev/agent-v1 --single-branch https://github.com/huicod/sewer-agent.git
@@ -33,6 +33,19 @@ python3 scripts/docker_setup.py up
 
 ## 2. 使用其他 API 或自备模型
 
+### 通过网页配置和更换 API 密钥
+
+1. 打开工作台，点击侧栏左下角的“设置”，进入“API 连接”。
+2. 在“对话助手”和“视觉复检”分别填写服务地址、模型名称和新 API Key。视觉模型必须支持图片输入；如果两者共用同一个服务、模型与密钥，勾选“视觉复检使用相同的 API 配置”。
+3. 可先点击“测试连接”。它使用当前填写的密钥读取服务的 `/models` 目录，不发送推理请求；测试成功不等于验证了模型的图片能力。未提供模型目录的兼容服务也可能无法通过这项测试。
+4. 点击“保存设置”，看到保存成功提示后，新检查和新对话请求立即采用新配置，无需重建镜像或重启 API/worker。已接纳的任务保留原配置，避免中途切换账户或服务。
+
+保存后密钥框显示“已保存，留空保持原密钥”，不会回显原 Key。输入新 Key 并再次保存即可替换；只更换一个角色时，将另一角色的密钥输入框留空，并保持其地址与模型不变。若要移除某角色的当前密钥，使用对应“清除已保存的密钥”选项。更换服务地址时必须重新填写匹配的新密钥。
+
+网页配置存于部署机器的 `settings` 持久卷，普通停止/启动或容器重建会保留；公开代码不包含部署者的 API Key。首次接纳任务或保存网页设置后，配置修订已经持久化，后续应继续通过网页更换 API 设置，仅改 `.env.docker` 不会覆盖已保存的配置。历史修订仍供旧任务使用，备份要求见第 4 节。
+
+### 首次部署环境和模型目录
+
 使用其他地域、模型服务或端口时，可先生成配置，再编辑 `.env.docker` 并启动。配置文件已经存在时直接编辑即可。
 
 ```bash
@@ -41,7 +54,7 @@ python3 scripts/docker_setup.py
 python3 scripts/docker_setup.py up
 ```
 
-- 默认北京百炼配置只需 `DASHSCOPE_API_KEY`。使用其他兼容服务时，分别设置 `SEWER_LLM_BASE_URL`、`SEWER_LLM_MODEL`、`SEWER_LLM_API_KEY` 及对应的 `SEWER_VLM_*`。视觉端点和账号必须支持图片输入。服务商允许时，两处可以填同一把 Key。
+- 首次部署前也可通过 `.env.docker` 提供初始配置。默认北京百炼配置只需 `DASHSCOPE_API_KEY`；其他兼容服务分别设置 `SEWER_LLM_BASE_URL`、`SEWER_LLM_MODEL`、`SEWER_LLM_API_KEY` 及对应的 `SEWER_VLM_*`。视觉端点和账号必须支持图片输入。运行后更换密钥使用上面的网页设置流程。
 - 网页默认仅绑定 `127.0.0.1:8000`。端口被占用时，在配置文件把 `SEWER_HTTP_PORT` 改为其他空闲端口。远程访问可按第 3 节使用 SSH 转发。
 - 若已有这版模型，把完整目录放在 `./models/`，或在配置文件设置 `SEWER_MODELS_DIR`。目录内直接包含 `detector/`、`enhancement/`、`geometry/`，需要允许容器用户 UID 10001 读取。运行 `up` 时会核验本地文件，缺失的文件将自动下载。
 - 只想先下载模型时运行 `python3 scripts/model_bundle.py fetch-public --directory ./models`。从原服务器已有资产整理模型可用 `python3 scripts/model_bundle.py prepare --source-root . --output ./models`。权重的原始来源和各自条款见[模型说明](deploy/MODEL-NOTICES.md)。
@@ -68,7 +81,7 @@ docker compose --env-file .env.docker up -d --no-build --wait --wait-timeout 360
 
 在主机浏览器打开 `http://127.0.0.1:8000`（端口随配置调整）。远程主机可在自己电脑运行 `ssh -N -L 18000:127.0.0.1:8000 <SSH别名>`，打开 `http://127.0.0.1:18000`。先确认页面能列出会话；然后点击“新建检查”，从浏览器所在电脑选择示例图片，填写检查指令，选择“纯 YOLO（不复检）”并提交。在“任务与证据”点击“启动检查”后，查看任务结果和媒体证据。手动纯 YOLO 不调用检查 VLM；对话入口或 VLM 复检使用部署者的 API 账户。几何与增强按界面明确选择验证，不凭首页健康检查宣称模型推理通过。
 
-同一“新建检查”窗口的“素材来源 → 项目示例”可以直接选择现场视频（18–22）。镜像包含这五段私有演示短片，点击提交时由 API 从本地导入，浏览器不传输视频文件。已有部署更新代码后重新运行 `python3 scripts/docker_setup.py up` 即可使用。
+同一“新建检查”窗口的“素材来源 → 项目示例”可以直接选择现场视频（18–22）。镜像包含这五段项目演示短片，点击提交时由 API 从本地导入，浏览器不传输视频文件。已有部署更新代码后重新运行 `python3 scripts/docker_setup.py up` 即可使用。
 
 ```bash
 docker compose --env-file .env.docker logs --tail=80 initialize gpu-worker
@@ -134,7 +147,7 @@ python scripts/model_bundle.py upload --directory ./models --repo-id YOUR_ACCOUN
 | 现象 | 检查 |
 |---|---|
 | 初始化任务提示模型不完整 | 在宿主机运行 `model_bundle.py check`，确认只读挂载根目录直接含 `detector/`、`enhancement/`、`geometry/`，且子文件可读 |
-| API/worker 配置不完整 | 核对 `.env.docker` 的两套模型名、端点和密钥；不要把整份配置或 `docker compose config` 的展开输出贴到日志 |
+| API 配置不完整 | 在“设置 → API 连接”核对两套模型名、端点和密钥并保存；首次启动前也可提供 `.env.docker` 初始值。不要把整份配置或 `docker compose config` 的展开输出贴到日志 |
 | GPU worker 未就绪 | 检查宿主机 `nvidia-smi`、容器 GPU 支持、驱动与 CUDA 兼容性；普通 CPU Docker 主机不能验收 GPU 推理 |
 | 首启数据库或 Temporal 异常 | 用 `dc ps -a` 和对应服务日志检查。保留数据库卷；不要通过删除卷来重置密码 |
 | 重启后看不到旧会话 | 检查 Compose 项目名和三个卷是否与原部署一致；恢复时缺媒体卷会导致证据无法打开 |

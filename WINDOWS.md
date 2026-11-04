@@ -6,9 +6,9 @@
 
 ## 1. 下载代码
 
-登录有仓库读取权限的 GitHub 账号，打开 [dev/agent-v1 分支](https://github.com/huicod/sewer-agent/tree/dev/agent-v1)，选择 **Code → Download ZIP**，解压到一个普通本地文件夹，例如 `C:\sewer-agent`。确认其中能看到 `WINDOWS.md`、`compose.yaml` 和 `scripts` 文件夹。也可使用维护者提供的完整代码 ZIP。
+打开公开的 [dev/agent-v1 分支](https://github.com/huicod/sewer-agent/tree/dev/agent-v1)，选择 **Code → Download ZIP**，解压到一个普通本地文件夹，例如 `C:\sewer-agent`。确认其中能看到 `WINDOWS.md`、`compose.yaml` 和 `scripts` 文件夹。也可使用维护者提供的完整代码 ZIP。
 
-这是私有代码仓库，未登录时无法直接下载。安装脚本不要求在命令行填写 GitHub 令牌。七个视觉模型通过公开模型包自动下载，无需另行申请 Hugging Face Token。
+代码和七个视觉模型包均可匿名下载，无需 GitHub 登录、GitHub 令牌或 Hugging Face Token。部署者自己的模型服务 API Key 在网页设置中填写，不随公开代码提供。
 
 预留至少 **25 GiB** 镜像构建空间，模型另约 **1.07 GiB**；Ubuntu 的虚拟磁盘、视频、证据帧和数据库还会占用空间。完整模型推理建议配置与已测边界见 [Docker 部署手册](DOCKER.md)。这些空间数不代表显卡最低配置。
 
@@ -41,7 +41,9 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\windows_setup.
 
 安装完成后打开终端给出的网址，进入侧栏的**设置**，填写对话模型和视觉复检模型的 API 地址、模型名与 Key。可以使用预设百炼地址，也可填写兼容服务。没有 Key 时可以先打开工作台并使用支持的纯 YOLO 图片检查；需要对话或视觉复检时再完成对应配置。
 
-设置页只显示密钥是否已配置，不回显保存的完整 Key。API 配置保存在本机服务端持久存储中，不能只备份网页或源码；备份时同时保留数据库、媒体和设置，参见 [Docker 备份说明](DOCKER.md#4-备份与恢复)。网页默认仅绑定本机，当前部署用于本机或可信私网，未提供公网多人登录鉴权。
+以后更换 Key 也在“设置 → API 连接”操作：在对应角色输入新密钥；两者需要一起更换时，勾选“视觉复检使用相同的 API 配置”，然后点击“保存设置”。新检查立即生效，无需修改 `.env.docker`、重建镜像或重启服务；已开始的检查继续使用原配置。密码框留空表示保持已保存的密钥。完整步骤见 [网页配置和更换密钥](DOCKER.md#通过网页配置和更换-api-密钥)。
+
+设置页只显示密钥是否已配置，不回显保存的完整 Key。API 配置保存在本机服务端持久存储中，不能只备份网页或源码；备份时同时保留数据库、媒体和设置，参见 [Docker 备份说明](DOCKER.md#4-数据在哪里怎样备份)。网页默认仅绑定本机，当前部署用于本机或可信私网，未提供公网多人登录鉴权。
 
 首次使用可上传项目 `example` 中的一张图片，选择纯 YOLO，确认任务能完成、原图与报告能打开；配置 API 后，再尝试带视觉复检的检查。安装成功、容器健康与真实模型/API 推理是分别验证的步骤。
 
@@ -64,7 +66,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\windows_setup.
 
 ## 5. 更新版本
 
-先让正在执行的检查结束，按 [Docker 手册](DOCKER.md#4-备份与恢复)备份当前部署。使用同一 Windows 账号下载最新 `dev/agent-v1` ZIP 并解压到**新的 Windows 文件夹**，保留旧文件夹作为源码回退参考。
+先让正在执行的检查结束，按 [Docker 手册](DOCKER.md#4-数据在哪里怎样备份)备份当前部署。使用同一 Windows 账号下载最新 `dev/agent-v1` ZIP 并解压到**新的 Windows 文件夹**，保留旧文件夹作为源码回退参考。
 
 1. 从旧文件夹执行 `-Action stop`。
 2. 从新文件夹执行 `-Action setup`，使用原来的 `-Distro`、`-InstallDir`。
