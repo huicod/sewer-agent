@@ -1846,3 +1846,36 @@ Published the existing seven-model bundle with source notices, shipped anonymous
 ### Next Steps
 
 - 收到用户网站发布授权后推送已验收单组件更改并验证线上页面。
+
+
+## Session 59: 公开代码仓库并验证真实页面密钥轮换
+
+**Date**: 2026-11-05
+**Task**: 公开代码仓库并验证真实页面密钥轮换
+**Branch**: `dev/agent-v1`
+
+### Summary
+
+用户明确确认后将 sewer-agent 设为 Public；正式镜像的真实页面完成隔离 API Key 保存、替换、重启持久化及任务修订验收。
+
+### Main Changes
+
+- 仓库匿名可访问；部署文档更新公开下载及网页密钥轮换步骤。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `08310939` | (see git log) |
+
+### Testing
+
+- [OK] 真实settings后端与页面完成A到B轮换；六次本地模型目录请求、新旧任务修订、重启持久化与生产记录不变均通过。
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- 个人网站示例发布仍等待独立授权；此次不修改运行时代码或现有密钥。
