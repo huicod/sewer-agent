@@ -27,7 +27,8 @@ COPY scripts/ scripts/
 COPY deploy/ deploy/
 COPY --chown=sewer:sewer example/ example/
 COPY --from=frontend /web/dist/ frontend/dist/
-RUN mkdir -p /app/var/assets && chown -R sewer:sewer /app/var /home/sewer
+RUN mkdir -p /app/var/assets /app/var/settings && chmod 700 /app/var/settings \
+    && chown -R sewer:sewer /app/var /home/sewer
 USER sewer
 EXPOSE 8000
 ENTRYPOINT ["python", "deploy/docker/entrypoint.py"]

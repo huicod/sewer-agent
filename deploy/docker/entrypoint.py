@@ -100,8 +100,8 @@ def _model_errors(model_root: Path) -> list[str]:
 
 
 def validate_configuration(settings: Settings, role: str) -> None:
-    if not settings.llm_configured or not settings.vlm_configured:
-        raise ContainerError("configure both LLM and VLM endpoints, model names and API keys")
+    # The first deployment opens the settings page before API credentials are supplied.
+    # Cloud activities already report llm_not_configured / vlm_not_configured safely.
     if not settings.detector_path.is_file() or settings.detector_path.stat().st_size == 0:
         raise ContainerError("detector weights are missing or empty")
     try:

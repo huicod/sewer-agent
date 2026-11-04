@@ -9,12 +9,14 @@ from temporalio.exceptions import WorkflowAlreadyStartedError
 from temporalio.service import RPCError
 
 from pipe_inspector.contracts.turns import TurnInput, TurnSubmission
+from pipe_inspector.runtime_settings import current_api_settings, revision_pin
 from pipe_inspector.workflow.start import InspectionStartError
 
 CONVERSATION_VERSION = "conversation-v6-comparison"
 
 
 def turn_config(settings):
+    settings = current_api_settings(settings)
     if settings.llm_base_url:
         try:
             url = httpx.URL(settings.llm_base_url)
@@ -31,6 +33,7 @@ def turn_config(settings):
         if not valid:
             raise InspectionStartError("invalid_llm_configuration", "LLM Base URL 配置无效")
     return {
+        **revision_pin(settings),
         "llm_model": settings.llm_model,
         "llm_base_url": settings.llm_base_url,
         "api_timeout_seconds": settings.api_timeout_seconds,

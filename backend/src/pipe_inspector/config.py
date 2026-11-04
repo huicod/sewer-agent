@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Literal
 
 import httpx
-from pydantic import Field, SecretStr, model_validator
+from pydantic import Field, PrivateAttr, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -14,6 +14,9 @@ class Settings(BaseSettings):
     )
 
     asset_root: Path = Path("var/assets")
+    runtime_settings_dir: Path = Path("var/settings")
+    _api_settings_revision: int | None = PrivateAttr(default=None)
+    _api_settings_frozen: bool = PrivateAttr(default=False)
     example_root: Path = Path("example")
     web_dist: Path | None = None
     max_upload_bytes: int = Field(default=1024**3, gt=0)

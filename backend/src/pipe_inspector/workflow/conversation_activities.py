@@ -10,6 +10,7 @@ from pipe_inspector.agent.api_client import APIClientError, OpenAICompatibleClie
 from pipe_inspector.agent.conversation import ConversationDispatcher
 from pipe_inspector.agent.intent import IntentParser
 from pipe_inspector.contracts.conversation import ConversationIntent
+from pipe_inspector.runtime_settings import settings_for_run
 from pipe_inspector.storage.repository import MissingRecord, SubmissionConflict
 from pipe_inspector.workflow.conversation_start import turn_config
 from pipe_inspector.workflow.start import InspectionStarter, InspectionStartError
@@ -19,9 +20,7 @@ class TurnActivities:
     def __init__(self, settings, repository, *, parser=None, dispatcher=None):
         self.settings, self.repo = settings, repository
         self.parser = parser
-        self.dispatcher = dispatcher or ConversationDispatcher(
-            repository, InspectionStarter(settings, repository)
-        )
+        self.dispatcher = dispatcher
 
     async def _enter(self, request_id, stage):
         turn = await asyncio.to_thread(self.repo.get_turn, request_id)
@@ -42,17 +41,21 @@ class TurnActivities:
             return cached
         turn = await self._enter(request_id, "planning")
         try:
-            if turn_config(self.settings) != run["config"]:
+            settings = settings_for_run(self.settings, run["config"])
+            expected = turn_config(settings)
+            if "api_settings_revision" not in run["config"]:
+                expected.pop("api_settings_revision", None)
+            if expected != run["config"]:
                 raise APIClientError("configuration_changed", retryable=False)
             parser = self.parser
             if parser is None:
-                if not self.settings.llm_configured:
+                if not settings.llm_configured:
                     raise APIClientError("llm_not_configured", retryable=False)
                 parser = IntentParser(
                     OpenAICompatibleClient(
-                        self.settings.llm_base_url,
-                        self.settings.llm_model,
-                        self.settings.llm_api_key,
+                        settings.llm_base_url,
+                        settings.llm_model,
+                        settings.llm_api_key,
                         timeout_seconds=run["config"]["api_timeout_seconds"],
                         enable_thinking=run["config"]["api_enable_thinking"],
                         max_output_tokens=run["config"]["api_max_output_tokens"],
@@ -93,7 +96,11 @@ class TurnActivities:
         raw = await asyncio.to_thread(self.repo.load_turn_step, request_id, "intent")
         intent = ConversationIntent.model_validate(raw)
         try:
-            result = await self.dispatcher.handle(turn, intent, attempt=activity.info().attempt)
+            dispatcher = self.dispatcher or ConversationDispatcher(
+                self.repo,
+                InspectionStarter(settings_for_run(self.settings, run["config"]), self.repo),
+            )
+            result = await dispatcher.handle(turn, intent, attempt=activity.info().attempt)
         except (MissingRecord, SubmissionConflict):
             raise ApplicationError(
                 "invalid_reference", type="invalid_reference", non_retryable=True

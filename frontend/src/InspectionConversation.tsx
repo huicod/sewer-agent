@@ -6,6 +6,7 @@ import { ConversationTaskEntry } from "./ConversationTaskEntry";
 import { TaskCard } from "./TaskCard";
 import { GuidedRestartAction } from "./GuidedRestartAction";
 import { INSPECTION_MODE_TEXT } from "./taskPresentation";
+import { defaultImageMode } from "./preferences";
 import { useAssistantResize } from "./useAssistantResize";
 import { type CSSProperties, type FormEvent, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 
@@ -255,11 +256,11 @@ function Workbench({ pollIntervalMs = 2_000, sessionId, onSummary, draftCache,
   const [examples, setExamples] = useState<ExampleVideo[] | null>(null);
   const [examplesError, setExamplesError] = useState<string | null>(null);
   const [catalogAttempt, setCatalogAttempt] = useState(0);
-  const [inspectionMode, setInspectionMode] = useState<InspectionMode>(cached?.inspectionMode ?? DEFAULT_INSPECTION_MODE);
+  const [inspectionMode, setInspectionMode] = useState<InspectionMode>(cached?.inspectionMode ?? defaultImageMode());
   const [conversationText, setConversationText] = useState(cached?.text ?? "");
   const [conversationFile, setConversationFile] = useState<File | null>(cached?.file ?? null);
   const [conversationInspectionMode, setConversationInspectionMode] =
-    useState<InspectionMode>(cached?.mode ?? DEFAULT_INSPECTION_MODE);
+    useState<InspectionMode>(cached?.mode ?? defaultImageMode());
   const [selectedTaskId, setSelectedTaskId] = useState(cached?.taskId ?? "");
   const [followFocusedTask, setFollowFocusedTask] = useState(cached?.follow ?? true);
   const [restartingGuided, setRestartingGuided] = useState(false);
@@ -927,9 +928,7 @@ function Workbench({ pollIntervalMs = 2_000, sessionId, onSummary, draftCache,
                   followCreatedTurn.current = null;
                   pendingTurn.current = null;
                   setConversationFile(nextFile);
-                  if (!isImageFile(nextFile)) {
-                    setConversationInspectionMode(DEFAULT_INSPECTION_MODE);
-                  }
+                  setConversationInspectionMode(isImageFile(nextFile) ? defaultImageMode() : DEFAULT_INSPECTION_MODE);
                   if (nextFile) {
                     setSelectedVideoFrame(null);
                     setSelectedTaskId("");
@@ -1070,7 +1069,7 @@ function Workbench({ pollIntervalMs = 2_000, sessionId, onSummary, draftCache,
               onChange={(event) => {
                 const nextFile = event.target.files?.[0] ?? null;
                 setDirectFile(nextFile);
-                if (!isImageFile(nextFile)) setInspectionMode(DEFAULT_INSPECTION_MODE);
+                setInspectionMode(isImageFile(nextFile) ? defaultImageMode() : DEFAULT_INSPECTION_MODE);
               }}
               disabled={!session || submitting}
             />

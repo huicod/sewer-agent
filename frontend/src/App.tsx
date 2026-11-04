@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { createSession, listSessions, updateSession } from "./api";
 import { ConversationSidebar } from "./ConversationSidebar";
+import { SettingsPanel } from "./SettingsPanel";
 import InspectionConversation, { type ConversationDraft } from "./InspectionConversation";
 import type { SessionRecord, SessionSummary, SessionUpdate } from "./types";
 
@@ -36,6 +37,8 @@ function ConversationShell({ pollIntervalMs }: AppProps) {
   const [activeSessionId, setActiveSessionId] = useState("");
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const settingsTrigger = useRef<HTMLElement | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [updatingSessionId, setUpdatingSessionId] = useState<string | undefined>();
@@ -124,7 +127,7 @@ function ConversationShell({ pollIntervalMs }: AppProps) {
     const closeOnEscape = (event: KeyboardEvent) => {
       if (event.key !== "Escape" || !mobileViewport.current || event.defaultPrevented) return;
       // Dropdowns and dialogs handle Escape first; keep the drawer underneath open.
-      if (document.querySelector('.ant-dropdown:not(.ant-dropdown-hidden), .ant-modal-wrap:not([style*="display: none"])')) return;
+      if (document.querySelector('.ant-dropdown:not(.ant-dropdown-hidden), .ant-modal-wrap:not([style*="display: none"]), .application-settings')) return;
       setNavigationOpen(false);
       navigationToggle.current?.focus();
     };
@@ -205,6 +208,10 @@ function ConversationShell({ pollIntervalMs }: AppProps) {
           onUpdateSession={changeSession}
           updatingSessionId={updatingSessionId}
           onRefresh={() => void loadSessions()}
+          onOpenSettings={() => {
+            settingsTrigger.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+            setSettingsOpen(true);
+          }}
         />
         {error && activeSessionId ? (
           <Alert
@@ -256,6 +263,10 @@ function ConversationShell({ pollIntervalMs }: AppProps) {
           />
         ) : null}
       </main>
+      {settingsOpen && <SettingsPanel onClose={() => {
+        setSettingsOpen(false);
+        requestAnimationFrame(() => settingsTrigger.current?.focus());
+      }} />}
     </div>
   );
 }

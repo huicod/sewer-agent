@@ -130,10 +130,10 @@ def test_compose_empty_role_keys_allow_official_qwen_shared_key(entry, monkeypat
     assert "SEWER_LLM_API_KEY" not in os.environ
 
 
-def test_all_api_roles_require_provider_configuration(entry, configured):
-    settings = configured.model_copy(update={"vlm_api_key": None})
-    with pytest.raises(entry.ContainerError, match="both LLM and VLM"):
-        entry.validate_configuration(settings, "cpu")
+def test_api_and_cpu_can_start_before_cloud_credentials_are_configured(entry, configured):
+    settings = configured.model_copy(update={"llm_api_key": None, "vlm_api_key": None})
+    entry.validate_configuration(settings, "cpu")
+    entry.validate_configuration(settings, "api")
 
 
 def test_missing_detector_or_incomplete_bundle_prevents_start(entry, configured, monkeypatch):

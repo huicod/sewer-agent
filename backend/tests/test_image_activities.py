@@ -224,6 +224,7 @@ async def test_runtime_uses_selected_reviewer_and_replays_saved_answer(
     activities, store, run, detector = setup
     settings = Settings(
         _env_file=None,
+        runtime_settings_dir=tmp_path / "configured-settings",
         vlm_model="fixture",
         vlm_base_url="https://vlm.invalid/v1",
         vlm_api_key="fixture-only",

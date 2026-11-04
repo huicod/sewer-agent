@@ -94,12 +94,14 @@ async def test_ambiguous_conversation_start_reuses_persisted_identity():
     assert first.kwargs["id"] == f"conversation:{store.turn.request_id}"
 
 
-def test_turn_pins_contain_no_credentials_and_reject_secret_urls():
+def test_turn_pins_contain_no_credentials_and_reject_secret_urls(tmp_path):
     settings = Settings(_env_file=None, llm_api_key="fixture-secret", llm_model="fixture")
     assert "fixture-secret" not in str(turn_config(settings))
     with pytest.raises(InspectionStartError):
         turn_config(
             Settings(
-                _env_file=None, llm_base_url="https://example.invalid/v1?api_key=fixture-secret"
+                _env_file=None,
+                runtime_settings_dir=tmp_path / "invalid-endpoint",
+                llm_base_url="https://example.invalid/v1?api_key=fixture-secret",
             )
         )

@@ -23,6 +23,7 @@ from pipe_inspector.contracts.findings import EvidenceRef, Finding, FindingSourc
 from pipe_inspector.contracts.inspection import ImageObservation
 from pipe_inspector.contracts.tasks import CoverageSummary, TaskSnapshot
 from pipe_inspector.contracts.tools import ToolCall, ToolCallStatus, ToolError
+from pipe_inspector.runtime_settings import settings_for_run
 from pipe_inspector.vision.detector import UltralyticsDetector
 from pipe_inspector.vision.quality import analyze_quality
 from pipe_inspector.workflow.start import DETECT_TIMEOUT
@@ -55,6 +56,7 @@ class ImageActivities:
         )
 
     def _check_versions(self, config, *, detector=False, vlm=False):
+        settings = settings_for_run(self.settings, config)
         # Admission defaults may change during deployment. Existing runs execute
         # their supported, immutable policy tuple, never the worker's new default.
         inspection_mode = config.get("inspection_mode", "yolo_vlm")
@@ -91,12 +93,12 @@ class ImageActivities:
             )
         if vlm:
             expected.update(
-                vlm_model=self.settings.vlm_model,
-                vlm_base_url=self.settings.vlm_base_url,
-                api_timeout_seconds=self.settings.api_timeout_seconds,
-                api_enable_thinking=self.settings.api_enable_thinking,
-                api_max_output_tokens=self.settings.api_max_output_tokens,
-                max_image_bytes=self.settings.vlm_max_image_bytes,
+                vlm_model=settings.vlm_model,
+                vlm_base_url=settings.vlm_base_url,
+                api_timeout_seconds=settings.api_timeout_seconds,
+                api_enable_thinking=settings.api_enable_thinking,
+                api_max_output_tokens=settings.api_max_output_tokens,
+                max_image_bytes=settings.vlm_max_image_bytes,
             )
         if any(config.get(key) != value for key, value in expected.items()):
             raise ApplicationError(
@@ -237,9 +239,10 @@ class ImageActivities:
         )
         try:
             self._check_versions(run["config"], vlm=True)
+            settings = settings_for_run(self.settings, run["config"])
             reviewer = self.reviewer
             if reviewer is None:
-                if not self.settings.vlm_configured:
+                if not settings.vlm_configured:
                     raise APIClientError("vlm_not_configured", retryable=False)
                 reviewer_type = {
                     "guided_review": GuidedImageReviewer,
@@ -248,9 +251,9 @@ class ImageActivities:
                 }[run["config"]["image_review_mode"]]
                 reviewer = reviewer_type(
                     OpenAICompatibleClient(
-                        self.settings.vlm_base_url,
-                        self.settings.vlm_model,
-                        self.settings.vlm_api_key,
+                        settings.vlm_base_url,
+                        settings.vlm_model,
+                        settings.vlm_api_key,
                         timeout_seconds=run["config"]["api_timeout_seconds"],
                         enable_thinking=run["config"].get("api_enable_thinking"),
                         max_output_tokens=run["config"].get("api_max_output_tokens"),

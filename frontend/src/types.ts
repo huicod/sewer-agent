@@ -3,6 +3,39 @@ export type AssetRef = {
   version: number;
 };
 
+export type ApiRoleSettings = {
+  base_url: string;
+  model: string;
+  key_configured: boolean;
+  configured: boolean;
+};
+export type ApplicationSettings = {
+  revision: number;
+  llm: ApiRoleSettings;
+  vlm: ApiRoleSettings;
+  api_timeout_seconds: number;
+  api_max_output_tokens: number | null;
+  api_enable_thinking: boolean | null;
+};
+export type ApiRoleUpdate = {
+  base_url: string;
+  model: string;
+  api_key?: string;
+  clear_api_key?: boolean;
+  reuse_llm_key?: boolean;
+};
+export type ApplicationSettingsUpdate = Omit<ApplicationSettings, "llm" | "vlm"> & {
+  llm: ApiRoleUpdate;
+  vlm: ApiRoleUpdate;
+};
+export type ApiConnectionTest = {
+  role: "llm" | "vlm";
+  base_url: string;
+  model: string;
+  api_key?: string;
+};
+export type ApiConnectionResult = { ok: boolean; message: string; model_found: boolean | null };
+
 export type ExampleVideo = {
   id: string;
   title: string;

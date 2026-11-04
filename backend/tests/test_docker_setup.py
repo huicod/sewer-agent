@@ -105,17 +105,14 @@ def test_one_command_first_launch_and_repeat_preserve_key_and_passwords(compose,
     assert calls[-1][0][-2:] == ["api", "cpu-worker"]
 
 
-def test_interactive_setup_can_fill_previously_generated_file(compose, monkeypatch):
+def test_setup_without_key_opens_the_workbench_without_prompting(compose, monkeypatch):
     output, _, _, _ = compose
     create_configuration(output)
     before = output.read_bytes()
     monkeypatch.delenv("DASHSCOPE_API_KEY", raising=False)
     monkeypatch.setattr(docker_setup.sys.stdin, "isatty", lambda: True)
-    monkeypatch.setattr(docker_setup.getpass, "getpass", lambda prompt: "sk-from-terminal")
     docker_setup.deploy(output, None, [])
-    assert output.read_bytes() == before.replace(
-        b"DASHSCOPE_API_KEY=\n", b"DASHSCOPE_API_KEY=sk-from-terminal\n"
-    )
+    assert output.read_bytes() == before
 
 
 def test_explicit_provider_roles_need_no_shared_key_or_edit(compose, monkeypatch):
@@ -135,13 +132,12 @@ def test_explicit_provider_roles_need_no_shared_key_or_edit(compose, monkeypatch
     assert output.read_bytes() == before
 
 
-def test_missing_vision_key_for_another_provider_stops_before_fetch(compose, monkeypatch):
+def test_missing_custom_provider_key_can_be_configured_in_the_browser(compose, monkeypatch):
     output, _, settings, calls = compose
     settings["SEWER_VLM_BASE_URL"] = "https://example.test/v1"
     monkeypatch.setenv("DASHSCOPE_API_KEY", "unrelated-shared-key")
-    with pytest.raises(ValueError, match="SEWER_VLM_API_KEY"):
-        docker_setup.deploy(output, None, [])
-    assert not any("fetch-public" in command for command, _ in calls)
+    docker_setup.deploy(output, None, [])
+    assert any("fetch-public" in command for command, _ in calls)
 
 
 def test_failed_download_never_builds_or_starts(compose, monkeypatch):

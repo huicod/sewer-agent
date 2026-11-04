@@ -380,6 +380,9 @@ async def test_prepare_video_persists_selection_and_all_event_pngs(
         api_max_output_tokens=512,
     )
     config = video_run_config(settings, detector)
+    # This recovery case deliberately tests legacy environment-only configuration drift.
+    # Runtime settings revision behavior is covered by test_runtime_activity_settings.
+    config.pop("api_settings_revision")
     config["video_review_budget"] = 3
     run = {"task_id": str(task_id), "run_id": str(uuid4()), "config": config}
 

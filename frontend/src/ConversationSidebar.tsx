@@ -1,4 +1,4 @@
-import { AimOutlined, MoreOutlined, PlusOutlined, PushpinFilled, ReloadOutlined, SearchOutlined } from "@ant-design/icons";
+import { AimOutlined, MoreOutlined, PlusOutlined, PushpinFilled, ReloadOutlined, SearchOutlined, SettingOutlined } from "@ant-design/icons";
 import { Button, Dropdown, Empty, Input, Modal, Segmented, Spin } from "antd";
 import { useMemo, useState } from "react";
 
@@ -12,6 +12,7 @@ export type ConversationSidebarProps = {
   loading: boolean;
   disabled?: boolean;
   onRefresh(): void;
+  onOpenSettings?(): void;
   onUpdateSession?(sessionId: string, update: SessionUpdate): Promise<void>;
   updatingSessionId?: string;
 };
@@ -36,6 +37,7 @@ export function ConversationSidebar({
   loading,
   disabled = false,
   onRefresh,
+  onOpenSettings,
   onUpdateSession,
   updatingSessionId = "",
 }: ConversationSidebarProps) {
@@ -180,6 +182,8 @@ export function ConversationSidebar({
           <span>{sessions.length} 个对话</span>
           <Button type="text" size="small" icon={<ReloadOutlined />} aria-label="刷新对话列表"
             disabled={actionsDisabled} onClick={onRefresh}>刷新</Button>
+          {onOpenSettings && <Button className="workspace-settings-button" type="text" size="small"
+            icon={<SettingOutlined aria-hidden="true" />} onClick={onOpenSettings}>设置</Button>}
         </footer>
       </aside>
 

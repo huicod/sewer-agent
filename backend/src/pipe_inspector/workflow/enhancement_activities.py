@@ -22,6 +22,7 @@ from pipe_inspector.contracts.inspection import ImageObservation, InspectionDeci
 from pipe_inspector.contracts.intake import TaskRecord
 from pipe_inspector.contracts.tasks import TaskSnapshot
 from pipe_inspector.contracts.tools import ToolCall
+from pipe_inspector.runtime_settings import settings_for_run
 from pipe_inspector.vision.enhancement import EnhancementError, run_enhancement
 from pipe_inspector.workflow.activities import ImageActivities
 from pipe_inspector.workflow.enhancement_config import (
@@ -233,13 +234,14 @@ class EnhancementActivities(ImageActivities):
             baseline = InspectionDecision.model_validate(source["decision"])
             reviewer = self.reviewer
             if reviewer is None:
-                if not self.settings.vlm_configured:
+                settings = settings_for_run(self.settings, run["config"])
+                if not settings.vlm_configured:
                     raise APIClientError("vlm_not_configured", retryable=False)
                 reviewer = EnhancementReviewer(
                     OpenAICompatibleClient(
-                        self.settings.vlm_base_url,
-                        self.settings.vlm_model,
-                        self.settings.vlm_api_key,
+                        settings.vlm_base_url,
+                        settings.vlm_model,
+                        settings.vlm_api_key,
                         timeout_seconds=run["config"]["api_timeout_seconds"],
                         enable_thinking=run["config"].get("api_enable_thinking"),
                         max_output_tokens=run["config"].get("api_max_output_tokens"),

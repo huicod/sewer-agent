@@ -14,8 +14,10 @@ from pipe_inspector.api.inspection import inspection_router
 from pipe_inspector.api.intake import intake_router
 from pipe_inspector.api.limits import UPLOAD_LIMIT_DETAIL, BodyLimitMiddleware
 from pipe_inspector.api.reports import report_router
+from pipe_inspector.api.settings import settings_router
 from pipe_inspector.config import Settings
 from pipe_inspector.media import MediaError, MediaStore
+from pipe_inspector.runtime_settings import RuntimeSettingsError
 from pipe_inspector.storage.conversation import ConversationBusy
 from pipe_inspector.storage.human_review import HumanReviewRepository
 from pipe_inspector.storage.repository import MissingRecord, PostgresRepository, SubmissionConflict
@@ -44,6 +46,7 @@ def create_app(
     )
     app.include_router(intake_router(repo, media, settings.example_root))
     app.include_router(report_router(repo))
+    app.include_router(settings_router(settings))
     app.include_router(inspection_router(repo, starter or InspectionStarter(settings, repo)))
     app.include_router(
         conversation_router(repo, conversation_starter or ConversationStarter(settings, repo))
@@ -51,6 +54,14 @@ def create_app(
     app.include_router(
         human_review_router(repo, human_review_starter or HumanReviewStarter(settings, repo))
     )
+
+    @app.exception_handler(RuntimeSettingsError)
+    async def settings_error(request: Request, exc: RuntimeSettingsError):
+        return JSONResponse(
+            {"detail": {"code": exc.code, "message": str(exc)}},
+            exc.status_code,
+            headers={"Cache-Control": "no-store"},
+        )
 
     @app.exception_handler(HumanReviewConflict)
     async def human_review_conflict(request: Request, exc: HumanReviewConflict):

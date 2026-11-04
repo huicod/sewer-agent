@@ -33,6 +33,7 @@ from pipe_inspector.contracts.video import (
     VideoFrameToolPin,
 )
 from pipe_inspector.contracts.video_selection import VIDEO_SELECTION_VERSION
+from pipe_inspector.runtime_settings import current_api_settings, revision_pin
 from pipe_inspector.storage.repository import SubmissionConflict
 from pipe_inspector.storage.supplements import SupplementNotAllowed
 from pipe_inspector.vision.detector import UltralyticsDetector
@@ -50,6 +51,7 @@ def run_config(
     plan: TaskPlan | None = None,
     inspection_mode: str = "yolo_vlm",
 ) -> dict:
+    settings = current_api_settings(settings)
     if inspection_mode not in {"yolo_only", "yolo_vlm"}:
         raise InspectionStartError("inspection_mode_invalid", "不支持的检查模式", 409)
     _validate_inspection_mode_plan(inspection_mode, plan)
@@ -75,6 +77,7 @@ def run_config(
     )
     _reject_retired_plan(plan)
     config = {
+        **revision_pin(settings),
         "detector_id": detector.detector_id,
         "model_version": detector.model_version,
         "label_space_version": detector.label_space_version,
@@ -125,19 +128,23 @@ def run_config(
 
 
 def _validate_inspection_mode_plan(inspection_mode: str, plan: TaskPlan | None) -> None:
-    if inspection_mode == "yolo_only" and plan and (
-        plan.enhancement is not None
-        or plan.auto_enhancement
-        or plan.geometry is not None
-        or any(
-            step.action
-            in {
-                ActionKind.ENHANCE,
-                ActionKind.SEGMENT,
-                ActionKind.RELATIVE_DEPTH,
-                ActionKind.RELATIVE_MEASURE,
-            }
-            for step in plan.steps
+    if (
+        inspection_mode == "yolo_only"
+        and plan
+        and (
+            plan.enhancement is not None
+            or plan.auto_enhancement
+            or plan.geometry is not None
+            or any(
+                step.action
+                in {
+                    ActionKind.ENHANCE,
+                    ActionKind.SEGMENT,
+                    ActionKind.RELATIVE_DEPTH,
+                    ActionKind.RELATIVE_MEASURE,
+                }
+                for step in plan.steps
+            )
         )
     ):
         raise InspectionStartError(

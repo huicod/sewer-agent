@@ -16,6 +16,7 @@ from pipe_inspector.agent.review_pipeline import parse_image_review
 from pipe_inspector.contracts.enhancement import EnhancementProposal, EnhancementSelection
 from pipe_inspector.contracts.inspection import ImageObservation
 from pipe_inspector.contracts.tools import ToolCall
+from pipe_inspector.runtime_settings import settings_for_run
 from pipe_inspector.workflow.enhancement_activities import (
     EnhancementActivities,
     enhancement_baseline,
@@ -90,23 +91,20 @@ class EnhancementSelectionActivities(EnhancementActivities):
                 await asyncio.to_thread(self.repo.load_step, task_id, "detect")
             )
             saved = await asyncio.to_thread(self.repo.load_step, task_id, "verify")
-            review = (
-                parse_image_review(saved["review"])
-                if saved and saved.get("review")
-                else None
-            )
+            review = parse_image_review(saved["review"]) if saved and saved.get("review") else None
             baseline = await asyncio.to_thread(
                 enhancement_baseline, self.repo, run, task, observation, review
             )
             selector = self.selector
             if selector is None:
-                if not self.settings.vlm_configured:
+                settings = settings_for_run(self.settings, run["config"])
+                if not settings.vlm_configured:
                     raise APIClientError("vlm_not_configured", retryable=False)
                 selector = EnhancementSelector(
                     OpenAICompatibleClient(
-                        self.settings.vlm_base_url,
-                        self.settings.vlm_model,
-                        self.settings.vlm_api_key,
+                        settings.vlm_base_url,
+                        settings.vlm_model,
+                        settings.vlm_api_key,
                         timeout_seconds=run["config"]["api_timeout_seconds"],
                         enable_thinking=run["config"].get("api_enable_thinking"),
                         max_output_tokens=run["config"].get("api_max_output_tokens"),

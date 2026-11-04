@@ -10,6 +10,7 @@ x-app-environment: &app-environment
   SEWER_TEMPORAL_NAMESPACE: default
   SEWER_TASK_QUEUE: sewer-inspection
   SEWER_ASSET_ROOT: /app/var/assets
+  SEWER_RUNTIME_SETTINGS_DIR: /app/var/settings
   SEWER_MODEL_ROOT: /models
   SEWER_DETECTOR_PATH: /models/detector/best.pt
   SEWER_ENHANCEMENT_MODELS_DIR: /models/enhancement
@@ -42,6 +43,7 @@ x-app: &app
     - /tmp:mode=1777
   volumes:
     - assets:/app/var/assets
+    - settings:/app/var/settings
     - type: bind
       source: ${SEWER_MODELS_DIR:-./models}
       target: /models
@@ -190,3 +192,4 @@ services:
 volumes:
   postgres-data:
   assets:
+  settings:

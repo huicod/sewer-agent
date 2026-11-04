@@ -1,4 +1,6 @@
 import type {
+  ApplicationSettings,
+  ApiConnectionResult,
   AssetRecord,
   AssetRef,
   ComparisonResult,
@@ -57,6 +59,23 @@ const TURN_FIELDS_WITH_REFERENCE_AND_MODE = new Set([
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+export function isApplicationSettings(value: unknown): value is ApplicationSettings {
+  const role = (item: unknown) => isRecord(item) &&
+    typeof item.base_url === "string" && typeof item.model === "string" &&
+    typeof item.key_configured === "boolean" && typeof item.configured === "boolean";
+  return isRecord(value) && Number.isInteger(value.revision) && Number(value.revision) >= 0 &&
+    role(value.llm) && role(value.vlm) && typeof value.api_timeout_seconds === "number" &&
+    Number.isFinite(value.api_timeout_seconds) && value.api_timeout_seconds > 0 &&
+    (value.api_max_output_tokens === null ||
+      (Number.isInteger(value.api_max_output_tokens) && Number(value.api_max_output_tokens) > 0)) &&
+    (value.api_enable_thinking === null || typeof value.api_enable_thinking === "boolean");
+}
+
+export function isApiConnectionResult(value: unknown): value is ApiConnectionResult {
+  return isRecord(value) && typeof value.ok === "boolean" && typeof value.message === "string" &&
+    (value.model_found === null || typeof value.model_found === "boolean");
 }
 
 function hasExactFields(value: Record<string, unknown>, fields: Set<string>): boolean {

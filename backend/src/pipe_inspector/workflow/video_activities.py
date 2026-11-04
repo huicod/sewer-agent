@@ -24,6 +24,7 @@ from pipe_inspector.contracts.video import (
     VideoScanResult,
 )
 from pipe_inspector.contracts.video_selection import VIDEO_SELECTION_VERSION
+from pipe_inspector.runtime_settings import settings_for_run
 from pipe_inspector.storage.repository import MissingRecord, SubmissionConflict
 from pipe_inspector.vision.video_decode import VideoDecodeError, decode_video_chunks
 from pipe_inspector.vision.video_scan import scan_video
@@ -57,9 +58,7 @@ class VideoActivities(ImageActivities):
         reviewer=None,
         scene_selector=None,
     ):
-        super().__init__(
-            settings, repository, media, detector=detector, reviewer=reviewer
-        )
+        super().__init__(settings, repository, media, detector=detector, reviewer=reviewer)
         self.scene_selector = scene_selector
 
     def _check_video(self, run, **options):
@@ -334,16 +333,17 @@ class VideoActivities(ImageActivities):
                     self._check_video(run, vlm=True)
                     self._publish(task_id, "verifying", active_tool="video_scene")
                     if selector is None:
-                        if not self.settings.vlm_configured:
+                        settings = settings_for_run(self.settings, run["config"])
+                        if not settings.vlm_configured:
                             selector = _FailedSceneSelector(
                                 APIClientError("vlm_not_configured", retryable=False)
                             )
                         else:
                             selector = VideoSceneSelector(
                                 OpenAICompatibleClient(
-                                    self.settings.vlm_base_url,
-                                    self.settings.vlm_model,
-                                    self.settings.vlm_api_key,
+                                    settings.vlm_base_url,
+                                    settings.vlm_model,
+                                    settings.vlm_api_key,
                                     timeout_seconds=config["api_timeout_seconds"],
                                     enable_thinking=config.get("api_enable_thinking"),
                                     max_output_tokens=min(
@@ -414,13 +414,14 @@ class VideoActivities(ImageActivities):
             self._check_video(run, vlm=True)
             reviewer = self.reviewer
             if reviewer is None:
-                if not self.settings.vlm_configured:
+                settings = settings_for_run(self.settings, run["config"])
+                if not settings.vlm_configured:
                     raise APIClientError("vlm_not_configured", retryable=False)
                 reviewer = ImageReviewer(
                     OpenAICompatibleClient(
-                        self.settings.vlm_base_url,
-                        self.settings.vlm_model,
-                        self.settings.vlm_api_key,
+                        settings.vlm_base_url,
+                        settings.vlm_model,
+                        settings.vlm_api_key,
                         timeout_seconds=run["config"]["api_timeout_seconds"],
                         enable_thinking=run["config"].get("api_enable_thinking"),
                         max_output_tokens=run["config"].get("api_max_output_tokens"),

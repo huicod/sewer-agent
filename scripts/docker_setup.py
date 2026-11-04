@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import argparse
-import getpass
 import json
 import os
 import re
@@ -12,7 +11,6 @@ import secrets
 import subprocess
 import sys
 import tempfile
-import warnings
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -39,13 +37,13 @@ def create_configuration(output: Path, models_dir: Path | None = None) -> None:
 
 
 def needs_shared_key(environment: dict) -> bool:
-    """Prompt only for a Qwen role that can use the application's shared-key rule."""
+    """Persist an explicitly supplied shared key only for a compatible Qwen role."""
     missing = False
     for role in ("LLM", "VLM"):
         prefix = f"SEWER_{role}_"
         base, model = environment.get(prefix + "BASE_URL"), environment.get(prefix + "MODEL")
         if not base or not model:
-            raise ValueError(f"Set {prefix}BASE_URL and {prefix}MODEL in the Docker configuration.")
+            continue
         if environment.get(prefix + "API_KEY"):
             continue
         url = urlsplit(base)
@@ -65,7 +63,7 @@ def needs_shared_key(environment: dict) -> bool:
             or url.query
             or url.fragment
         ):
-            raise ValueError(f"Set {prefix}API_KEY for this provider in the Docker configuration.")
+            continue
         missing = missing or not environment.get("DASHSCOPE_API_KEY")
     return missing
 
@@ -78,7 +76,8 @@ def store_shared_key(output: Path, key: str) -> None:
     placeholder = b"DASHSCOPE_API_KEY="
     lines = original.splitlines(keepends=True)
     matches = [
-        i for i, line in enumerate(lines)
+        i
+        for i, line in enumerate(lines)
         if re.match(rb"\s*(?:export\s+)?DASHSCOPE_API_KEY\s*=", line)
     ]
     if len(matches) != 1 or lines[matches[0]].rstrip(b"\r\n") != placeholder:
@@ -150,15 +149,7 @@ def deploy(output: Path, models_dir: Path | None, services: list[str]) -> None:
         )
         if not mount or (models_dir and Path(mount) != models_dir.expanduser().resolve()):
             raise ValueError("Check SEWER_MODELS_DIR in the Docker configuration.")
-        if needs_shared_key(api["environment"]):
-            if not supplied_key:
-                if not sys.stdin.isatty():
-                    raise ValueError(
-                        "Set DASHSCOPE_API_KEY or run setup in an interactive terminal."
-                    )
-                with warnings.catch_warnings():
-                    warnings.simplefilter("error", getpass.GetPassWarning)
-                    supplied_key = getpass.getpass("DashScope API Key (hidden): ")
+        if supplied_key and needs_shared_key(api["environment"]):
             store_shared_key(output, supplied_key)
         # The public model host needs no application credentials or Hugging Face token.
         network_env = {
@@ -225,7 +216,7 @@ def main() -> int:
             deploy(args.output, args.models_dir, args.services or [])
         except subprocess.CalledProcessError as error:
             parser.exit(1, f"Deployment failed (exit {error.returncode}); see the step above.\n")
-        except (OSError, EOFError, getpass.GetPassWarning):
+        except (OSError, EOFError):
             parser.exit(
                 1, "Check Docker Compose v2, configuration permissions and terminal input.\n"
             )

@@ -1,4 +1,6 @@
 import type {
+  ApiConnectionTest,
+  ApplicationSettingsUpdate,
   AssetRecord,
   ComparisonResult,
   EnhancementDetail,
@@ -18,6 +20,8 @@ import type {
   VideoDetail,
 } from "./types";
 import {
+  isApplicationSettings,
+  isApiConnectionResult,
   isAssetRecord,
   isComparisonResult,
   isEnhancementDetail,
@@ -94,6 +98,26 @@ async function requestJson<T>(
 
 export function createSession(): Promise<SessionRecord> {
   return requestJson<SessionRecord>("/api/sessions", isSessionRecord, { method: "POST" });
+}
+
+export function getApplicationSettings() {
+  return requestJson("/api/settings", isApplicationSettings);
+}
+
+export function saveApplicationSettings(settings: ApplicationSettingsUpdate) {
+  return requestJson("/api/settings", isApplicationSettings, {
+    method: "PUT",
+    headers: { "content-type": "application/json", "X-Sewer-Settings": "1" },
+    body: JSON.stringify(settings),
+  });
+}
+
+export function testApiConnection(settings: ApiConnectionTest) {
+  return requestJson("/api/settings/test", isApiConnectionResult, {
+    method: "POST",
+    headers: { "content-type": "application/json", "X-Sewer-Settings": "1" },
+    body: JSON.stringify(settings),
+  });
 }
 
 export function listSessions(): Promise<SessionSummary[]> {
