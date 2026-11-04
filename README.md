@@ -9,6 +9,8 @@
 
 ## 新机部署（从克隆到打开网页）
 
+**Windows 从零安装：** 使用 [Windows / WSL 部署教程](WINDOWS.md)。它提供可重复执行的 PowerShell 入口，从 WSL、Ubuntu 和 Docker 安装开始；无需预装 Windows Git、Python 或 Docker Desktop。
+
 **准备主机和账号。** 完整项目需要 Linux x86-64 主机、NVIDIA GPU、支持 CUDA 12.8 的驱动、已配置的 NVIDIA Container Toolkit、Git、Python 3.10+，以及可用的 Docker Engine 和 Compose v2（建议 2.30+）。镜像构建建议预留至少 25 GiB，模型另需约 1.07 GiB；上传的图片和视频还会占用存储空间。主机需能联网下载镜像、依赖和模型，并访问配置的 API。安装步骤见 [Docker Engine](https://docs.docker.com/engine/install/) 和 [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html)。
 
 1. **在新服务器克隆部署分支。** 使用有该私有 GitHub 仓库读取权限的账号。当前 Docker 部署代码在 `dev/agent-v1`，克隆时请指定分支。
@@ -24,7 +26,7 @@
    python3 scripts/docker_setup.py up
    ```
 
-   首次启动会提示输入**阿里云百炼北京地域的 API Key**（输入时不回显）。默认模型为 `qwen3.8-max`，账号需已开通该模型；对话和图片复检共用这把 Key。脚本会自动从 [Hugging Face](https://huggingface.co/suwewa/sewer-agent-models) 匿名下载并校验 7 个模型，生成数据库密码，初始化 PostgreSQL 和 Temporal，再启动网页、API、CPU 和 GPU 工作进程。使用其他 API 服务时，先按[部署指南](https://github.com/huicod/sewer-agent/blob/dev/agent-v1/DOCKER.md)配置文字和视觉端点，再运行启动命令。
+   首次启动可以不填 API Key。脚本会自动从 [Hugging Face](https://huggingface.co/suwewa/sewer-agent-models) 匿名下载并校验 7 个模型，生成数据库密码，初始化 PostgreSQL 和 Temporal，再启动网页、API、CPU 和 GPU 工作进程。打开网页后在**设置**中填写对话与视觉复检的 API 地址、模型名和 Key。默认预设为阿里云百炼北京地域的 `qwen3.8-max`，账号需已开通对应模型；也可设置其他兼容服务。已配置的部署环境仍兼容，详见[部署指南](DOCKER.md)。
 
 3. **打开网页并验证一次检测。** 等启动命令提示服务就绪后，可在服务器查看状态：
 
