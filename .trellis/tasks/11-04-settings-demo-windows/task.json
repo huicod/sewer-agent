@@ -21,6 +21,6 @@
   "children": [],
   "parent": null,
   "relatedFiles": ["frontend/src/SettingsPanel.tsx", "WINDOWS.md"],
-  "notes": "Implementation published as 080656de on dev/agent-v1 and deployed locally with records/media verified. Personal website publish was rejected by automatic approval review and awaits explicit user authorization; prepared website commit e82963cc. See report.md. Isolated jj checkout based on df94421f; task.py create stalled, so the main agent saved metadata after stopping only that initializer.",
+  "notes": "Settings/Windows implementation is published and locally deployed; project visibility is Public and real settings key rotation is verified. User superseded the example replacement with removal of the entire two-image section, then explicitly authorized website publication. Website main commit e670d396 is deployed successfully by Pages run41940167792 and verified directly at 1440/390px; all tables and numeric results are preserved. No website publication remains pending. See report.md. Isolated jj checkout based on df94421f; task.py create stalled, so the main agent saved metadata after stopping only that initializer.",
   "meta": {}
 }
