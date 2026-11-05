@@ -3,7 +3,7 @@
   "name": "settings-demo-windows",
   "title": "应用设置、演示案例与 Windows 首次部署",
   "description": "持久化API设置、真实机制示例替换及可重入WSL部署入口",
-  "status": "in_progress",
+  "status": "completed",
   "dev_type": "fullstack",
   "scope": "settings-and-deployment",
   "package": null,
@@ -11,7 +11,7 @@
   "creator": "huicod",
   "assignee": "huicod",
   "createdAt": "2026-11-04",
-  "completedAt": null,
+  "completedAt": "2026-11-05",
   "branch": "dev/agent-v1",
   "base_branch": "dev/agent-v1",
   "worktree_path": "var/releases/settings-windows-20261104",
@@ -20,7 +20,10 @@
   "subtasks": [],
   "children": [],
   "parent": null,
-  "relatedFiles": ["frontend/src/SettingsPanel.tsx", "WINDOWS.md"],
+  "relatedFiles": [
+    "frontend/src/SettingsPanel.tsx",
+    "WINDOWS.md"
+  ],
   "notes": "Settings/Windows implementation is published and locally deployed; project visibility is Public and real settings key rotation is verified. User superseded the example replacement with removal of the entire two-image section, then explicitly authorized website publication. Website main commit e670d396 is deployed successfully by Pages run41940167792 and verified directly at 1440/390px; all tables and numeric results are preserved. No website publication remains pending. See report.md. Isolated jj checkout based on df94421f; task.py create stalled, so the main agent saved metadata after stopping only that initializer.",
   "meta": {}
 }
