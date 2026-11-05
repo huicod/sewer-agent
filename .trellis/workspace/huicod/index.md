@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 59
+- **Total Sessions**: 60
 - **Last Active**: 2026-11-05
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~1881 | Active |
+| `journal-1.md` | ~1901 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 60 | 2026-11-05 | Personal website comparison removal published | `8fba21f8` | `-` |
 | 59 | 2026-11-05 | 公开代码仓库并验证真实页面密钥轮换 | `08310939` | `dev/agent-v1` |
 | 58 | 2026-11-04 | 工作台设置与 Windows 从零部署 | `080656de` | `dev/agent-v1` |
 | 57 | 2026-10-31 | Publish models and verify single-key Docker setup | `55f936bf`, `59966713` | `dev/agent-v1` |

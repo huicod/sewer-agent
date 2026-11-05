@@ -1879,3 +1879,23 @@ Published the existing seven-model bundle with source notices, shipped anonymous
 ### Next Steps
 
 - 个人网站示例发布仍等待独立授权；此次不修改运行时代码或现有密钥。
+
+
+## Session 60: Personal website comparison removal published
+
+**Date**: 2026-11-05
+**Task**: Personal website comparison removal published
+
+### Summary
+
+User explicitly authorized personal website publication. Published huicod.github.io main e670d396; Pages run41940167792 succeeded. Direct live desktop/mobile checks confirm the two-image section is absent and all 5 tables and 232 numeric tokens remain unchanged. Settings/Windows task archived; previous API key and record preservation evidence retained.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `8fba21f8` | (see git log) |
+
+### Status
+
+[OK] **Completed**
