@@ -1,0 +1,33 @@
+{
+  "id": "engineering-workbench-reports",
+  "name": "engineering-workbench-reports",
+  "title": "Engineering workbench and structured reports",
+  "description": "Approved02steel-blue workbench with05formalHTMLand04structuredJSON reports; preserve existing records and workflows.",
+  "status": "in_progress",
+  "dev_type": "fullstack",
+  "scope": "workbench-reports",
+  "package": "frontend/backend",
+  "priority": "P2",
+  "creator": "huicod",
+  "assignee": "huicod",
+  "createdAt": "2026-11-09",
+  "completedAt": null,
+  "branch": "codex/engineering-workbench-reports",
+  "base_branch": "dev/agent-v1",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [],
+  "parent": null,
+  "relatedFiles": [
+    "frontend/src/InspectionConversation.tsx",
+    "frontend/src/ReportViewer.tsx",
+    "frontend/src/JsonReportView.tsx",
+    "frontend/src/TaskInputPreview.tsx",
+    "backend/src/pipe_inspector/reports.py",
+    "backend/src/pipe_inspector/session_report.py"
+  ],
+  "notes": "",
+  "meta": {}
+}

@@ -141,10 +141,11 @@ describe("TaskCard review and evidence integration", () => {
     expect(link.getAttribute("href")).toBe(frameUrl);
     expect(link.querySelector("image")?.getAttribute("href")).toBe(frameUrl);
     expect(link.querySelector("rect")?.getAttribute("width")).toBe("90");
-    expect(screen.getByRole("link", { name: "打开输入视频" }).getAttribute("href")).toBe(`/api/assets/${assetId}/versions/1/content`);
+    expect(screen.getAllByRole("link", { name: "打开输入文件" })[0].getAttribute("href")).toBe(`/api/assets/${assetId}/versions/1/content`);
   });
 
-  it("discovers a no-finding video from source metadata only after the user asks", async () => {
+  it("automatically previews the selected no-finding video from source metadata", async () => {
+    vi.stubGlobal("IntersectionObserver", undefined);
     const videoTask = task();
     videoTask.snapshot.findings = [];
     const fetchMock = vi.fn(async (url: string) => {
@@ -157,12 +158,10 @@ describe("TaskCard review and evidence integration", () => {
       throw new Error(`unexpected URL ${url}`);
     });
     vi.stubGlobal("fetch", fetchMock);
-    const user = userEvent.setup();
-
     render(<App pollIntervalMs={60_000} />);
-    const mediaButton = await screen.findByRole("button", { name: "查看媒体证据" });
-    expect(fetchMock.mock.calls.some(([url]) => url === `/api/assets/${assetId}/versions/1`)).toBe(false);
-    await user.click(mediaButton);
+    const video = await screen.findByLabelText("输入视频预览");
+    expect(video.getAttribute("src")).toBe(`/api/assets/${assetId}/versions/1/content`);
+    expect(screen.getByRole("link", { name: "打开原视频" }).getAttribute("href")).toBe(`/api/assets/${assetId}/versions/1/content`);
 
     expect(await screen.findByRole("button", { name: "展开视频候选时间线" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "展开检查依据" })).toBeNull();

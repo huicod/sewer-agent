@@ -237,6 +237,7 @@ function ConversationShell({ pollIntervalMs }: AppProps) {
             key={activeSessionId}
             pollIntervalMs={pollIntervalMs}
             sessionId={activeSessionId}
+            initialDetailsOpen={!mobileViewport.current}
             onSummary={updateSummary}
             draftCache={draftCache.current}
             notice={<>
@@ -277,11 +278,11 @@ export default function App(props: AppProps) {
       locale={zhCN}
       button={{ autoInsertSpace: false }}
       theme={{ token: {
-        colorPrimary: "#1677ff",
-        colorText: "#172b4d",
+        colorPrimary: "#2d648e",
+        colorText: "#24394b",
         colorTextSecondary: "#64748b",
-        colorBgLayout: "#f5f6f8",
-        borderRadius: 6,
+        colorBgLayout: "#eef2f5",
+        borderRadius: 4,
         fontSize: 14,
         fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans SC", "Microsoft YaHei", sans-serif',
       } }}

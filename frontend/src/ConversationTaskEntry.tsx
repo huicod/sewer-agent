@@ -7,10 +7,11 @@ const dateFormat = new Intl.DateTimeFormat("zh-CN", {
   month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false,
 });
 
-export function ConversationTaskEntry({ task, onViewTask, turnText }: {
+export function ConversationTaskEntry({ task, onViewTask, turnText, compact = false }: {
   task: TaskRecord;
   onViewTask(id: string): void;
   turnText?: string;
+  compact?: boolean;
 }) {
   const { snapshot } = task;
   const labels = [...new Set(snapshot.findings.map((finding) =>
@@ -29,7 +30,7 @@ export function ConversationTaskEntry({ task, onViewTask, turnText }: {
         <span className="feed-task__label">检查要求</span>
         <p>{task.instruction}</p>
       </div>}
-      <TaskInputPreview task={task} />
+      {compact ? <a className="feed-task__source" href={`/api/assets/${encodeURIComponent(task.input_asset.asset_id)}/versions/${task.input_asset.version}/content`} target="_blank" rel="noreferrer">打开输入文件</a> : <TaskInputPreview task={task} />}
       <p className="feed-task__summary">
         <strong>检查结果</strong> {inspectionResultText(task)} · 已保存 {snapshot.findings.length} 条发现{labels.length > 0 && `（${labels.join("、")}）`}
       </p>

@@ -4,6 +4,8 @@ import { FileSearchOutlined, InfoCircleOutlined, MenuOutlined, MessageOutlined, 
 import { ConversationTaskHistory } from "./ConversationTaskHistory";
 import { ConversationTaskEntry } from "./ConversationTaskEntry";
 import { TaskCard } from "./TaskCard";
+import { FindingsOverview } from "./FindingsOverview";
+import { ReportViewer } from "./ReportViewer";
 import { GuidedRestartAction } from "./GuidedRestartAction";
 import { INSPECTION_MODE_TEXT } from "./taskPresentation";
 import { defaultImageMode } from "./preferences";
@@ -229,7 +231,7 @@ function TurnCard({ turn, sessionId, linkedTask, createdTask, resending, onResen
         {turn.status === "completed" && turn.linked_task_id ? (
           <p className="linked-status">{linkedTaskStatus(linkedTask)}</p>
         ) : null}
-        {createdTask && <ConversationTaskEntry task={createdTask} turnText={turn.text} onViewTask={onViewTask} />}
+        {createdTask && <ConversationTaskEntry compact task={createdTask} turnText={turn.text} onViewTask={onViewTask} />}
         {linkedTask && linkedTask.snapshot.task_id !== createdTask?.snapshot.task_id ? <Button size="small" className="turn-task-link" onClick={() => onViewTask(linkedTask.snapshot.task_id)}>查看任务与证据 · {linkedTask.snapshot.task_id.slice(0, 8)}</Button> : null}
         {turn.status === "completed" ? (
           <details className="turn-extra" open={Boolean(turn.reference_task_id)}><summary>结果对比</summary><ComparisonPanel sessionId={sessionId} requestId={turn.request_id} /></details>
@@ -242,6 +244,8 @@ function TurnCard({ turn, sessionId, linkedTask, createdTask, resending, onResen
 function Workbench({ pollIntervalMs = 2_000, sessionId, onSummary, draftCache,
   onToggleNavigation, navigationOpen, initialDetailsOpen = false, notice }: AppProps) {
   const cached = useRef(sessionId ? draftCache?.get(sessionId) : undefined).current;
+  const [report, setReport] = useState<{ source: { kind: "session" | "task"; id: string }; format: "html" | "json" } | null>(null);
+  const detailToggle = useRef<HTMLButtonElement>(null);
   const [focusedTaskId, setFocusedTaskId] = useState(cached?.focusedId ?? "");
   const [intakeOpen, setIntakeOpen] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(cached?.detailsOpen ?? initialDetailsOpen);
@@ -285,7 +289,7 @@ function Workbench({ pollIntervalMs = 2_000, sessionId, onSummary, draftCache,
   const navigationToggle = useRef<HTMLButtonElement>(null);
   const workspaceContent = useRef<HTMLElement>(null);
   const { width: assistantWidth, separatorProps } = useAssistantResize(workspaceContent, {
-    storageKey: "pipe-inspector.detail-width", defaultWidth: 520,
+    storageKey: "pipe-inspector.engineering-conversation-width", defaultWidth: 420,
   });
   const transcript = useRef<HTMLDivElement>(null);
   const previousTimelineLength = useRef<number | null>(null);
@@ -322,6 +326,9 @@ function Workbench({ pollIntervalMs = 2_000, sessionId, onSummary, draftCache,
     followCreatedTurn.current = null;
     setFocusedTaskId(id);
     setDetailsOpen(true);
+    if (window.matchMedia("(max-width: 900px)").matches) {
+      requestAnimationFrame(() => workspaceContent.current?.querySelector<HTMLSelectElement>(".workbench-task-select select")?.focus());
+    }
   }
 
   function discussFocusedTask() {
@@ -780,6 +787,10 @@ function Workbench({ pollIntervalMs = 2_000, sessionId, onSummary, draftCache,
   );
 
   function selectVideoFrame(parentTaskId: string, frame: VideoEvidenceFrame) {
+    if (window.matchMedia("(max-width: 900px)").matches) {
+      setDetailsOpen(false);
+      requestAnimationFrame(() => conversationForm.current?.querySelector<HTMLTextAreaElement>("textarea")?.focus());
+    }
     setOptionsOpen(true);
     setSelectedVideoFrame({ parentTaskId, frame });
     setSelectedTaskId(parentTaskId);
@@ -797,17 +808,17 @@ function Workbench({ pollIntervalMs = 2_000, sessionId, onSummary, draftCache,
         <div className="workspace-header__title">
           {onToggleNavigation ? <Button ref={navigationToggle} icon={<MenuOutlined />} type="text"
             aria-label={navigationOpen ? "收起对话导航" : "展开对话导航"} onClick={onToggleNavigation} /> : null}
-          <h1>管道影像检查</h1><span className="workspace-header__caption">独立对话</span>
+          <h1>管道影像检查</h1><span className="workspace-header__caption">巡检工作台</span>
         </div>
         <div className="workspace-header__actions">
           {session ? <span className="workspace-session" title={session.session_id}><code>{session.session_id}</code></span> : null}
-          {session ? <details className="conversation-report-menu"><summary>统一报告</summary><div>
-            <a href={`/api/sessions/${session.session_id}/report?format=html`} target="_blank" rel="noreferrer">HTML 统一报告</a>
-            <a href={`/api/sessions/${session.session_id}/report?format=json`} target="_blank" rel="noreferrer">JSON 统一报告</a>
-          </div></details> : null}
+          {session ? <div className="workbench-report-actions" aria-label="统一报告">
+            <Button onClick={() => setReport({ source: { kind: "session", id: session.session_id }, format: "html" })}>HTML 统一报告</Button>
+            <Button onClick={() => setReport({ source: { kind: "session", id: session.session_id }, format: "json" })}>JSON 统一报告</Button>
+          </div> : null}
           <Button onClick={() => setIntakeOpen(true)}>新建检查</Button>
-          <Button aria-label={detailsOpen ? "收起任务详情" : "展开任务详情"}
-            onClick={() => setDetailsOpen((value) => !value)}>{detailsOpen ? "收起详情" : `任务与证据 ${tasks.length}`}</Button>
+          <Button ref={detailToggle} aria-label={detailsOpen ? "收起任务详情" : "展开任务详情"}
+            onClick={() => setDetailsOpen((value) => !value)}>{detailsOpen ? "检查对话" : `影像与结果 ${tasks.length}`}</Button>
         </div>
       </Layout.Header>
       {notice}
@@ -816,7 +827,33 @@ function Workbench({ pollIntervalMs = 2_000, sessionId, onSummary, draftCache,
       </div> : null}
       <Layout.Content ref={workspaceContent} style={{ "--detail-width": `${assistantWidth}px` } as CSSProperties}
         className={`conversation-content${detailsOpen ? " conversation-content--details" : ""}`}>
+        <aside className="inspection-workspace" hidden={!detailsOpen} aria-label="任务与证据">
+          <div className="inspection-panel-heading"><strong>影像检查</strong><div>
+            <label className="workbench-task-select"><span>当前任务</span><select aria-label="当前查看的任务" value={focusedTask?.snapshot.task_id ?? ""}
+              onChange={(event) => { followCreatedTurn.current = null; setFocusedTaskId(event.target.value); }}>
+              {!tasks.length ? <option value="">暂无检查任务</option> : tasks.map((task) => <option key={task.snapshot.task_id} value={task.snapshot.task_id}>{task.instruction} · {task.snapshot.task_id.slice(0, 8)}</option>)}
+            </select></label>
+            <Button size="small" aria-label="关闭任务详情" onClick={() => { setDetailsOpen(false); detailToggle.current?.focus(); }}>关闭</Button>
+          </div></div>
+          <section className="inspection-detail" aria-label="检查详情">
+            {loading ? <div className="workspace-loading"><Spin /><p>正在恢复对话</p></div> : focusedTask ? (
+              <TaskCard key={focusedTask.snapshot.task_id} task={focusedTask} presentation="workbench"
+                onReport={(id, format) => setReport({ source: { kind: "task", id }, format })}
+                onStart={startInspection} onCancel={cancelInspection}
+                starting={startingTaskIds.has(focusedTask.snapshot.task_id)}
+                cancelling={cancellingTaskIds.has(focusedTask.snapshot.task_id)}
+                onReviewed={(updated, snapshot) => setTasks((current) => upsertTask(current, { ...updated, snapshot }))}
+                onSelectFrame={selectVideoFrame} frameSelectionDisabled={composerBusy} />
+            ) : <div className="workspace-empty"><FileSearchOutlined /><h2>从一份现场影像开始</h2><p>上传图片或视频，在这里查看原始影像、检查结果与证据。</p><Button type="primary" icon={<UploadOutlined />} onClick={() => setIntakeOpen(true)}>新建检查</Button></div>}
+          </section>
+          <details className="conversation-task-list" open><summary>影像与执行记录 · {tasks.length}</summary>
+            <ConversationTaskHistory tasks={tasks} activeTaskId={focusedTask?.snapshot.task_id ?? ""}
+              onSelectTask={(id) => { followCreatedTurn.current = null; setFocusedTaskId(id); }} />
+          </details>
+        </aside>
+        {detailsOpen ? <div {...separatorProps} className="assistant-resizer" aria-label="调整检查对话宽度" title="拖动调整检查对话宽度" /> : null}
         <main className="conversation-main-surface">
+          {focusedTask ? <FindingsOverview task={focusedTask} /> : null}
       <section className="conversation-panel" aria-labelledby="conversation-title">
         <div className="conversation-thread-heading"><h2 id="conversation-title">检查对话</h2><span>{turns.length} 条消息 · {tasks.length} 项任务</span></div>
         <div ref={transcript} className="transcript" aria-live="polite" aria-label="对话消息">
@@ -833,7 +870,7 @@ function Workbench({ pollIntervalMs = 2_000, sessionId, onSummary, draftCache,
               onViewTask={showTaskEvidence}
             />
           ) : (
-            <ConversationTaskEntry key={item.task.snapshot.task_id} task={item.task} onViewTask={showTaskEvidence} />
+            <ConversationTaskEntry compact key={item.task.snapshot.task_id} task={item.task} onViewTask={showTaskEvidence} />
           ))}
         </div>
         {conversationError ? <div className="conversation-error" role="alert">{conversationError}</div> : null}
@@ -1018,25 +1055,8 @@ function Workbench({ pollIntervalMs = 2_000, sessionId, onSummary, draftCache,
         </form>
       </section>
         </main>
-        {detailsOpen ? <div {...separatorProps} className="assistant-resizer" aria-label="调整任务详情宽度" title="拖动调整任务详情宽度" /> : null}
-        <aside className="inspection-workspace" hidden={!detailsOpen} aria-label="任务与证据">
-          <div className="inspection-panel-heading"><strong>当前对话的任务与证据</strong><Button size="small" aria-label="关闭任务详情" onClick={() => setDetailsOpen(false)}>关闭</Button></div>
-          <details className="conversation-task-list" open><summary>影像与执行记录 · {tasks.length}</summary>
-            <ConversationTaskHistory tasks={tasks} activeTaskId={focusedTask?.snapshot.task_id ?? ""}
-              onSelectTask={(id) => { followCreatedTurn.current = null; setFocusedTaskId(id); }} />
-          </details>
-          <section className="inspection-detail" aria-label="检查详情">
-            {loading ? <div className="workspace-loading"><Spin /><p>正在恢复对话</p></div> : focusedTask ? (
-              <TaskCard key={focusedTask.snapshot.task_id} task={focusedTask}
-                onStart={startInspection} onCancel={cancelInspection}
-                starting={startingTaskIds.has(focusedTask.snapshot.task_id)}
-                cancelling={cancellingTaskIds.has(focusedTask.snapshot.task_id)}
-                onReviewed={(updated, snapshot) => setTasks((current) => upsertTask(current, { ...updated, snapshot }))}
-                onSelectFrame={selectVideoFrame} frameSelectionDisabled={composerBusy} />
-            ) : <p className="empty-state">上传影像后，检查与工具执行记录会显示在这里。</p>}
-          </section>
-        </aside>
       </Layout.Content>
+      {report ? <ReportViewer source={report.source} initialFormat={report.format} open onClose={() => setReport(null)} /> : null}
       <Modal open={intakeOpen} title="新建检查" footer={null} onCancel={() => { if (!submitting) setIntakeOpen(false); }}
         closable={!submitting} mask={{ closable: !submitting }} keyboard={!submitting} width={560} className="inspection-modal">
       <section className="intake-panel" aria-labelledby="intake-title">
@@ -1134,8 +1154,8 @@ function Workbench({ pollIntervalMs = 2_000, sessionId, onSummary, draftCache,
 export default function InspectionConversation(props: AppProps) {
   return (
     <ConfigProvider locale={zhCN} button={{ autoInsertSpace: false }} theme={{
-      token: { colorPrimary: "#1677ff", colorText: "#172b4d", colorTextSecondary: "#64748b",
-        colorBgLayout: "#f5f6f8", borderRadius: 6, fontSize: 14,
+      token: { colorPrimary: "#2d648e", colorText: "#24394b", colorTextSecondary: "#64748b",
+        colorBgLayout: "#eef2f5", borderRadius: 4, fontSize: 14,
         fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans SC", "Microsoft YaHei", sans-serif' },
     }}>
       <Workbench {...props} />

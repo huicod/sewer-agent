@@ -14,10 +14,13 @@ import type {
   HumanReviewSubmission,
   ImageEvidenceDetail,
   ImageRegion,
+  JsonValue,
   RuntimeStatus,
   SessionDetail,
   SessionRecord,
   SessionSummary,
+  SessionReport,
+  TaskReport,
   TaskRecord,
   TaskSnapshot,
   TurnRecord,
@@ -59,6 +62,43 @@ const TURN_FIELDS_WITH_REFERENCE_AND_MODE = new Set([
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function isJsonValue(value: unknown): value is JsonValue {
+  if (value === null || typeof value === "string" || typeof value === "boolean") return true;
+  if (typeof value === "number") return Number.isFinite(value);
+  if (Array.isArray(value)) return value.every(isJsonValue);
+  return isRecord(value) && Object.values(value).every(isJsonValue);
+}
+
+function isReportEvidence(value: Record<string, unknown>, taskId: string): boolean {
+  return Array.isArray(value.tool_calls) && value.tool_calls.every((call) =>
+    isRecord(call) && call.task_id === taskId && isJsonValue(call)) &&
+    ["enhancement_selection", "enhancement", "enhancement_review", "geometry", "image_evidence"]
+      .every((key) => isJsonValue(value[key]));
+}
+
+export function isTaskReport(value: unknown): value is TaskReport {
+  return isRecord(value) && value.schema_version === "1" && isTaskRecord(value.task) &&
+    ["completed", "partial", "failed", "cancelled"].includes(value.task.snapshot.runtime_status) &&
+    isReportEvidence(value, value.task.snapshot.task_id);
+}
+
+export function isSessionReport(value: unknown): value is SessionReport {
+  if (!isRecord(value) || value.schema_version !== "1" || !isSessionRecord(value.session) ||
+      !isAwareTimestamp(value.generated_at) || typeof value.is_final !== "boolean" ||
+      !Array.isArray(value.turns) || !Array.isArray(value.asset_groups)) return false;
+  const sessionId = value.session.session_id;
+  return value.turns.every((turn) => isTurnRecord(turn) && turn.session_id === sessionId) &&
+    value.asset_groups.every((group) => {
+      if (!isRecord(group) || !isAssetRef(group.input_asset) || !Array.isArray(group.sources)) return false;
+      const asset = group.input_asset;
+      return group.sources.every((source) => isRecord(source) && isUuid(source.task_id) &&
+        isUuid(source.root_task_id) && ["primary", "supplement", "video_frame_tool"].includes(String(source.role)) &&
+        isTaskRecord(source.task) && source.task.snapshot.task_id === source.task_id &&
+        source.task.session_id === sessionId && source.task.input_asset.asset_id === asset.asset_id &&
+        source.task.input_asset.version === asset.version && isReportEvidence(source, source.task_id));
+    });
 }
 
 export function isApplicationSettings(value: unknown): value is ApplicationSettings {

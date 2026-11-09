@@ -380,6 +380,7 @@ describe("stored image inspection provenance panel", () => {
 
 describe("TaskCard image evidence integration", () => {
   it("offers provenance only after an image is identified", async () => {
+    vi.stubGlobal("IntersectionObserver", undefined);
     const imageTask = task();
     const fetchMock = vi.fn(async (url: string) => {
       if (url === `/api/sessions/${sessionId}`) {
@@ -405,9 +406,7 @@ describe("TaskCard image evidence integration", () => {
     const user = userEvent.setup();
 
     render(<App pollIntervalMs={60_000} />);
-    expect(await screen.findByRole("button", { name: "查看媒体证据" })).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "展开检查依据" })).toBeNull();
-    await user.click(screen.getByRole("button", { name: "查看媒体证据" }));
+    expect(await screen.findByRole("link", { name: "打开原图" })).toBeTruthy();
     await user.click(await screen.findByRole("button", { name: "展开检查依据" }));
     expect(await screen.findByRole("img", { name: "原始检测候选叠加图" })).toBeTruthy();
   });

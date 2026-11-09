@@ -1,0 +1,53 @@
+.inspection-report-viewer .ant-drawer-body { display: flex; flex-direction: column; gap: 14px; min-width: 0; padding: 20px 24px; background: #edf1f5; overflow: auto; }
+.inspection-report-viewer .ant-drawer-header { border-bottom-color: #cdd6df; }
+.report-viewer-toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
+.report-viewer-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.report-viewer-meta { display: flex; flex-wrap: wrap; gap: 10px 20px; align-items: center; color: #52677b; font-size: 12px; }
+.report-viewer-meta code { margin-left: 5px; overflow-wrap: anywhere; }
+.report-viewer-meta .ant-tag { margin: 0; }
+.report-viewer-loading { display: flex; align-items: center; justify-content: center; gap: 14px; min-height: 250px; color: #52677b; }
+.report-viewer-document { display: block; flex: 1; min-height: 540px; width: 100%; border: 1px solid #cdd6df; background: #fff; border-radius: 3px; }
+.report-viewer-json { display: flex; flex-direction: column; flex: 1; min-height: 0; gap: 12px; }
+.report-viewer-json-mode .ant-radio-button-wrapper { font-size: 13px; }
+.json-report { display: grid; grid-template-columns: 245px minmax(0, 1fr); flex: 1; min-height: 400px; border: 1px solid #cdd6df; border-radius: 3px; background: #fff; overflow: hidden; }
+.json-report h3 { font-size: 14px; margin: 0; color: #263e53; }
+.json-report-tree { min-width: 0; max-height: calc(100dvh - 235px); overflow: auto; background: #f7f9fb; border-right: 1px solid #d8e0e7; padding-bottom: 14px; }
+.json-report-tree > h3 { padding: 14px; border-bottom: 1px solid #d8e0e7; background: #f0f4f7; }
+.json-report-tree ul { padding: 0 0 0 13px; list-style: none; margin: 2px 0; }
+.json-report-tree > ul { padding-left: 5px; }
+.json-report-tree__row { display: flex; align-items: center; width: max-content; min-width: 100%; border-radius: 2px; }
+.json-report-tree__row--selected { background: #dce8f3; box-shadow: inset 3px 0 #375f82; }
+.json-report-tree__toggle { flex: 0 0 24px; width: 24px; border: 0; background: transparent; color: #52677b; font-size: 14px; text-align: center; }
+.json-report-tree__select { display: flex; align-items: center; gap: 8px; padding: 8px 8px 8px 0; border: 0; background: transparent; color: #263e53; font-size: 12px; text-align: left; }
+.json-report-tree__select small { color: #7b8996; font-size: 11px; }
+.json-report-selection { min-width: 0; padding: 18px; overflow: auto; max-height: calc(100dvh - 235px); }
+.json-report-selection > header { display: flex; align-items: start; justify-content: space-between; gap: 16px; margin-bottom: 8px; }
+.json-report-selection h3 { overflow-wrap: anywhere; }
+.json-report-selection button, .json-report-more { border: 0; padding: 3px 0; background: transparent; color: #285d8b; font-size: 12px; text-align: left; }
+.json-report-selection button:hover, .json-report-more:hover { text-decoration: underline; }
+.json-report-selection > header button { flex-shrink: 0; }
+.json-report-path { display: block; color: #6c7b89; font-size: 11px; margin-bottom: 18px; overflow-wrap: anywhere; }
+.json-report-table-scroll { width: 100%; overflow: auto; }
+.json-report-table { width: 100%; border-collapse: collapse; font-size: 12px; text-align: left; line-height: 1.65; }
+.json-report-table th, .json-report-table td { border: 1px solid #d5dde5; padding: 10px 12px; vertical-align: top; overflow-wrap: anywhere; min-width: 82px; max-width: 320px; white-space: pre-wrap; }
+.json-report-table thead th { background: #eaf0f5; color: #2e475e; font-weight: 600; }
+.json-report-table tbody th { background: #f7f9fb; font-weight: 500; width: 26%; }
+.json-report-table th code { display: block; font-size: 10px; font-weight: 400; color: #7b8996; margin-top: 3px; }
+.json-report-table td { color: #344b5d; }
+.json-report-table button { word-break: normal; white-space: nowrap; }
+.json-report-hint, .json-report-empty { color: #6c7b89; font-size: 11px; margin: 14px 0 0; line-height: 1.7; }
+.json-report-more { margin: 9px 0 0 8px; }
+.json-report-scalar { font-size: 13px; line-height: 1.8; white-space: pre-wrap; overflow-wrap: anywhere; }
+.report-viewer-raw { margin: 0; padding: 20px; min-height: 400px; overflow: auto; max-height: calc(100dvh - 220px); border: 1px solid #cdd6df; border-radius: 3px; background: #fff; color: #263e53; font-size: 12px; line-height: 1.7; tab-size: 2; }
+@media (max-width: 700px) {
+  .inspection-report-viewer .ant-drawer-body { padding: 12px; gap: 12px; }
+  .report-viewer-toolbar { align-items: start; }
+  .report-viewer-actions { gap: 6px; }
+  .report-viewer-actions .ant-btn { padding-inline: 9px; font-size: 12px; }
+  .report-viewer-document { min-height: 60dvh; }
+  .json-report { grid-template-columns: minmax(0, 1fr); }
+  .json-report-tree { max-height: 210px; border-right: 0; border-bottom: 1px solid #d8e0e7; }
+  .json-report-selection { max-height: none; padding: 14px 10px; }
+  .json-report-table th, .json-report-table td { padding: 8px; }
+  .report-viewer-raw { padding: 12px; }
+}

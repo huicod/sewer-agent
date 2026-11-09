@@ -3,6 +3,36 @@ export type AssetRef = {
   version: number;
 };
 
+export type JsonValue = null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue };
+export type ReportSource = { kind: "session" | "task"; id: string };
+export type ReportFormat = "html" | "json";
+
+// Report evidence remains the complete server JSON; the viewer does not recompute it.
+export type ReportEvidence = {
+  tool_calls: JsonValue[];
+  enhancement_selection: JsonValue;
+  enhancement: JsonValue;
+  enhancement_review: JsonValue;
+  geometry: JsonValue;
+  image_evidence: JsonValue;
+};
+export type TaskReport = ReportEvidence & { schema_version: "1"; task: TaskRecord };
+export type SessionReportSource = ReportEvidence & {
+  task_id: string;
+  root_task_id: string;
+  role: "primary" | "supplement" | "video_frame_tool";
+  task: TaskRecord;
+};
+export type SessionReport = {
+  schema_version: "1";
+  session: SessionRecord;
+  generated_at: string;
+  is_final: boolean;
+  turns: TurnRecord[];
+  asset_groups: { input_asset: AssetRef; sources: SessionReportSource[] }[];
+};
+export type InspectionReport = TaskReport | SessionReport;
+
 export type ApiRoleSettings = {
   base_url: string;
   model: string;

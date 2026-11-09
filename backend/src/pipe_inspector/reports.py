@@ -4,7 +4,10 @@ from html import escape
 
 from pipe_inspector.contracts.assets import AssetRef
 from pipe_inspector.contracts.inspection import QualitySummary
+from pipe_inspector.contracts.intake import TaskRecord
 from pipe_inspector.contracts.reports import SessionReportSource, TaskReport
+from pipe_inspector.contracts.tools import ToolCall
+from pipe_inspector.report_document import document_end, document_start, metadata_table
 
 LABELS = {
     "PL": "破裂",
@@ -25,6 +28,15 @@ REVIEWS = {
     "needs_review": "待人工复核",
     "tentative": "候选待定",
     "rejected": "已驳回",
+}
+STATUSES = {
+    "queued": "等待启动",
+    "running": "检查中",
+    "waiting_review": "待人工复核",
+    "completed": "已完成",
+    "partial": "部分完成",
+    "failed": "处理失败",
+    "cancelled": "已取消",
 }
 ENHANCEMENTS = {
     "low_light": "低照度恢复",
@@ -157,7 +169,7 @@ def _image_evidence_section(report: TaskReport | SessionReportSource) -> list[st
         )
     if not detail.fusion_changes:
         lines.append("<p>没有已保存的逐项融合动作，不重新推算历史结果。</p>")
-    lines.append("<p>以上是原始复核与融合记录；当前状态（含人工审核）以下方发现项为准。</p>")
+    lines.append("<p>以上是原始复核与融合记录；当前状态（含人工审核）以本报告发现项为准。</p>")
     return lines
 
 
@@ -307,41 +319,39 @@ def render_evidence_sections(report: TaskReport | SessionReportSource) -> list[s
     return lines
 
 
-def render_html(report: TaskReport) -> str:
-    task, snapshot = report.task, report.task.snapshot
+def render_task_summary(task: TaskRecord) -> list[str]:
+    """Render persisted task state without deriving a new conclusion."""
+    snapshot = task.snapshot
     coverage = snapshot.coverage
     quality = "画质充分" if coverage.sufficient_quality else "画质不足"
     covered = "覆盖充分" if coverage.sufficient_coverage else "覆盖不足"
     audited = "已完成阴性审计" if coverage.negative_audit_complete else "阴性审计未完成"
     lines = [
-        '<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">',
-        '<meta name="viewport" content="width=device-width,initial-scale=1">',
-        "<title>管网检查报告</title>",
-        "<style>body{max-width:900px;margin:2rem auto;padding:0 1rem;font-family:sans-serif;"
-        "line-height:1.6}section{border-top:1px solid #ccc;margin-top:1.5rem}"
-        "pre{white-space:pre-wrap;overflow-wrap:anywhere}li{margin:.5rem 0}"
-        ".image-comparison{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1rem}"
-        ".image-comparison figure{margin:0}"
-        ".image-comparison img{display:block;width:100%;height:auto}"
-        "</style></head><body>",
-        "<h1>管网检查报告</h1>",
-        f"<p>任务：{snapshot.task_id}</p>",
-        (
-            "<p>检测模式：纯 YOLO（未执行 VLM 复检）</p>"
-            if task.inspection_mode == "yolo_only"
-            else "<p>检测模式：YOLO＋VLM</p>"
-        ),
-        f"<p>结果：{RESULTS[snapshot.inspection_result]}"
-        f"；运行状态：{snapshot.runtime_status.value}</p>",
-        f"<p>快照更新时间：{snapshot.updated_at.isoformat()}</p>",
-        "<h2>用户要求</h2><pre>" + escape(task.instruction) + "</pre>",
-        "<p>" + evidence_link(task.input_asset) + "</p>",
-        f"<h2>证据覆盖</h2><p>{covered}；{quality}；{audited}</p>",
+        metadata_table([
+            ("检查结论", RESULTS[snapshot.inspection_result], "运行状态",
+             f"{STATUSES[snapshot.runtime_status]} / {snapshot.runtime_status.value}"),
+            ("证据覆盖", covered, "影像质量", quality),
+            ("阴性审计", audited, "总进度", f"{snapshot.overall_progress:.0%}"),
+            ("处理帧 / 块", f"{snapshot.processed_frames} / {snapshot.processed_chunks}",
+             "阶段", snapshot.stage.value),
+        ]),
     ]
+    if snapshot.waiting_reason:
+        lines.append('<p class="report-note report-note--pending">限制/待处理：'
+                     + escape(snapshot.waiting_reason) + "</p>")
+    if not snapshot.is_terminal:
+        lines.append('<p class="report-note report-note--pending">此来源尚未结束，'
+                     "当前状态与证据可能继续更新。</p>")
+    return lines
+
+
+def render_source_scope(task: TaskRecord) -> list[str]:
+    """Keep original-image and selected-frame scopes explicit in either report."""
+    lines: list[str] = []
     if task.frame_source is not None:
         source = task.frame_source
         lines.append(
-            '<p>视频帧工具：<a href="/api/tasks/'
+            '<p class="report-note">视频帧工具：<a href="/api/tasks/'
             f'{task.parent_task_id}/report?format=html">原视频任务报告</a>'
             f"；帧 {source.frame_index}；原视频时间 {source.timestamp_seconds:g} 秒。"
             "本报告结果与覆盖仅针对所选视频帧，整段视频结论不变；"
@@ -350,28 +360,44 @@ def render_html(report: TaskReport) -> str:
         lines.append("<p>源视频：" + evidence_link(source.video_asset) + "</p>")
     elif task.parent_task_id:
         lines.append(
-            '<p>关联追加复检：<a href="/api/tasks/'
+            '<p class="report-note">关联追加复检：<a href="/api/tasks/'
             f'{task.parent_task_id}/report?format=html">原任务报告</a>'
             "。复用原图片及原检测证据，未重新运行检测器；原结果未改写。"
             "原检测器版本和调用记录见原任务报告。</p>"
         )
-    if snapshot.waiting_reason:
-        lines.append("<p>限制/待处理：" + escape(snapshot.waiting_reason) + "</p>")
-    lines.extend(render_evidence_sections(report))
-    lines.append("<h2>检测发现</h2>")
-    if not snapshot.findings:
-        lines.append("<p>没有已保存的缺陷发现；是否正常以任务结论和覆盖条件为准。</p>")
-    for finding in snapshot.findings:
+    return lines
+
+
+def render_findings(report: TaskReport | SessionReportSource) -> list[str]:
+    """Show each stored finding and preview only references known to be image evidence."""
+    task = report.task
+    findings = task.snapshot.findings
+    if not findings:
+        return ["<p>没有已保存的缺陷发现；是否正常以任务结论和覆盖条件为准。</p>"]
+    lines = [
+        '<table class="findings-table"><thead><tr><th scope="col">序号</th>',
+        '<th scope="col">缺陷类别 / 发现 ID</th><th scope="col">当前状态</th>',
+        '<th scope="col">候选来源与依据</th><th scope="col">影像证据</th></tr></thead><tbody>',
+    ]
+    known_input_image = bool(task.frame_source or report.image_evidence or report.enhancement
+                             or report.geometry)
+    # Preserve exact AssetRef identity. Multiple findings on one image share its preview.
+    previews: dict[tuple[object, int], tuple[AssetRef, list[str]]] = {}
+    for index, finding in enumerate(findings, 1):
         label = LABELS.get(finding.canonical_label, "待定类别")
         lines.extend(
             [
-                "<section>",
-                f"<h3>{label} — {REVIEWS[finding.review_status]}</h3>",
-                f"<p>发现 ID：{finding.finding_id}；候选来源：{finding.source.value}</p>",
+                f"<tr><td>{index}</td><td><strong>{label}</strong>",
+                f'<code class="finding-id">{finding.finding_id}</code>',
             ]
         )
         if finding.open_label:
             lines.append("<p>候选名称：" + escape(finding.open_label) + "</p>")
+        lines.append(
+            f'</td><td><span class="status status--{finding.review_status.value}">'
+            f"{REVIEWS[finding.review_status]}</span></td>"
+            f"<td>候选来源：{finding.source.value}"
+        )
         if finding.score is not None:
             lines.append(
                 f"<p>原检测候选分数：{finding.score:.4f}"
@@ -384,28 +410,103 @@ def render_html(report: TaskReport) -> str:
                 "human": "人工审核",
             }[finding.confirmed_by]
             lines.append("<p>确认依据：" + confirmed_by + "</p>")
+        lines.append('</td><td><ul class="evidence-links">')
         for evidence in finding.evidence:
-            lines.append("<p>" + evidence_link(evidence.asset) + "</p>")
+            lines.append("<li>" + evidence_link(evidence.asset))
+            locator = f"发现 {index}：{label}"
             if evidence.frame_index is not None:
+                locator += (f" · 帧 {evidence.frame_index} · "
+                            f"{evidence.timestamp_seconds:g} 秒")
                 lines.append(
-                    f"<p>帧 {evidence.frame_index}；原视频时间 {evidence.timestamp_seconds} 秒</p>"
+                    f'<p class="muted">帧 {evidence.frame_index}；'
+                    f"原视频时间 {evidence.timestamp_seconds:g} 秒</p>"
                 )
             if evidence.region:
-                lines.append("<p>原图像素坐标：" + escape(str(evidence.region.bbox_xyxy)) + "</p>")
-        lines.append("</section>")
-    lines.append("<h2>工具调用记录</h2><ul>")
-    for call in report.tool_calls:
-        description = (
-            f"{call.tool_name.value} v{call.tool_version}；模型 {call.model_version or '—'}；"
-            f"尝试 {call.attempt}；{call.status.value}"
-        )
+                lines.append('<p class="muted">原图像素坐标：'
+                             + escape(str(evidence.region.bbox_xyxy)) + "</p>")
+            # Legacy locators can point to the input video itself, not an image.
+            # A frame-tool task explicitly proves that its own input is a saved frame.
+            original_video_locator = (
+                evidence.frame_index is not None
+                and evidence.asset == task.input_asset
+                and task.frame_source is None
+            )
+            if not original_video_locator and (
+                evidence.region is not None or evidence.frame_index is not None
+                or (known_input_image and evidence.asset == task.input_asset)
+            ):
+                key = (evidence.asset.asset_id, evidence.asset.version)
+                _, captions = previews.setdefault(key, (evidence.asset, []))
+                if locator not in captions:
+                    captions.append(locator)
+            lines.append("</li>")
+        lines.append("</ul></td></tr>")
+    lines.append("</tbody></table>")
+    if previews:
+        lines.append('<h3>影像证据</h3><div class="evidence-gallery">')
+        for asset, captions in previews.values():
+            path = _asset_path(asset)
+            caption = escape("；".join(captions))
+            lines.append(
+                f'<figure><a href="{path}"><img src="{path}" '
+                f'alt="{caption}" loading="eager"></a>'
+                f'<figcaption>{caption}<br><a href="{path}">打开原始证据 '
+                f"v{asset.version}</a></figcaption></figure>"
+            )
+        lines.append("</div>")
+    return lines
+
+
+def render_tool_calls(calls: tuple[ToolCall, ...]) -> list[str]:
+    if not calls:
+        return ["<p>暂无工具调用记录。</p>"]
+    lines = [
+        '<table class="tool-table"><thead><tr><th scope="col">工具 / 模型</th>',
+        '<th scope="col">执行状态</th><th scope="col">说明</th></tr></thead><tbody>',
+    ]
+    for call in calls:
+        detail = "—"
         if call.error:
-            description += f"；{call.error.code}：{call.error.message}"
+            detail = f"{call.error.code}：{call.error.message}"
         if call.skip_reason:
-            description += f"；跳过原因：{call.skip_reason}"
-        lines.append("<li>" + escape(description) + "</li>")
-    if not report.tool_calls:
-        lines.append("<li>暂无工具调用记录。</li>")
-    lines.append("</ul><p>本报告引用已保存的证据与状态，不执行新的检测或自动改写结论。</p>")
-    lines.append("</body></html>")
+            detail = f"{detail}；跳过原因：{call.skip_reason}" if call.error else (
+                f"跳过原因：{call.skip_reason}"
+            )
+        lines.append(
+            f"<tr><td>{escape(call.tool_name.value)} v{escape(call.tool_version)}"
+            f'<br><span class="muted">模型 {escape(call.model_version or "—")}</span></td>'
+            f"<td>{escape(call.status.value)}<br>尝试 {call.attempt}</td>"
+            f"<td>{escape(detail)}</td></tr>"
+        )
+    lines.append("</tbody></table>")
+    return lines
+
+
+def render_html(report: TaskReport) -> str:
+    task, snapshot = report.task, report.task.snapshot
+    mode = "纯 YOLO（未执行 VLM 复检）" if task.inspection_mode == "yolo_only" else "YOLO＋VLM"
+    lines = document_start("管道影像检查报告", "单任务报告 · 已保存检查结果与影像证据")
+    lines.extend([
+        '<nav class="report-outline" aria-label="报告目录">'
+        '<a href="#basic">基本信息</a><a href="#summary">检查摘要</a>'
+        '<a href="#findings">缺陷候选结果</a><a href="#tools">工具调用记录</a></nav>',
+        '<h2 id="basic">1. 基本信息</h2>',
+        metadata_table([
+            ("任务编号", str(snapshot.task_id), "会话编号", str(task.session_id)),
+            ("提交时间", task.created_at.isoformat(),
+             "快照更新时间", snapshot.updated_at.isoformat()),
+            ("检测模式", mode, "输入版本", str(task.input_asset.version)),
+        ]),
+        "<h3>用户要求</h3><pre>" + escape(task.instruction) + "</pre>",
+        "<p>输入文件：" + evidence_link(task.input_asset) + "</p>",
+        '<h2 id="summary">2. 检查摘要与证据覆盖</h2>',
+    ])
+    lines.extend(render_task_summary(task))
+    lines.extend(render_source_scope(task))
+    lines.append('<h2 id="findings">3. 缺陷候选结果</h2>')
+    lines.extend(render_findings(report))
+    lines.extend(render_evidence_sections(report))
+    lines.append('<h2 id="tools">4. 工具调用记录</h2>')
+    lines.extend(render_tool_calls(report.tool_calls))
+    lines.extend(document_end())
     return "\n".join(lines)

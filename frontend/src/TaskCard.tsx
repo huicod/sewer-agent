@@ -8,6 +8,7 @@ import { GeometryPanel } from "./GeometryPanel";
 import { ImageEvidencePanel } from "./ImageEvidencePanel";
 import { ReviewPanel } from "./ReviewPanel";
 import { EvidenceThumbnail } from "./EvidenceThumbnail";
+import { TaskInputPreview } from "./TaskInputPreview";
 import { inspectionResultText, INSPECTION_MODE_TEXT, REVIEW_TEXT, STATUS_COLOR, STATUS_TEXT } from "./taskPresentation";
 import type { AssetRef, InspectionMode, RuntimeStatus, TaskRecord, VideoEvidenceFrame } from "./types";
 import { VideoTimeline } from "./VideoTimeline";
@@ -47,6 +48,8 @@ export type TaskCardProps = {
   onReviewed: (task: TaskRecord, snapshot: TaskRecord["snapshot"]) => void;
   onSelectFrame: (taskId: string, frame: VideoEvidenceFrame) => void;
   frameSelectionDisabled: boolean;
+  presentation?: "detail" | "workbench";
+  onReport?: (taskId: string, format: "html" | "json") => void;
 };
 
 function formatError(error: unknown): string {
@@ -90,6 +93,8 @@ export function TaskCard({
   onReviewed,
   onSelectFrame,
   frameSelectionDisabled,
+  presentation = "detail",
+  onReport,
 }: TaskCardProps) {
   const [reviewOpen, setReviewOpen] = useState(false);
   const [mediaKind, setMediaKind] = useState<string | null>(null);
@@ -131,7 +136,7 @@ export function TaskCard({
   const sourceUrl = evidenceUrl(task.input_asset);
 
   return (
-    <article className="task-card">
+    <article className={`task-card${presentation === "workbench" ? " task-card--workbench" : ""}`}>
       <header className="task-card__heading task-detail-header">
         <div className="task-detail-title">
           <p className="eyebrow">
@@ -185,7 +190,8 @@ export function TaskCard({
             <Button
               type="link"
               icon={<FileTextOutlined aria-hidden="true" />}
-              href={reportUrl(task.snapshot.task_id, "json")}
+              href={onReport ? undefined : reportUrl(task.snapshot.task_id, "json")}
+              onClick={onReport ? () => onReport(task.snapshot.task_id, "json") : undefined}
               target="_blank"
               rel="noreferrer"
             >
@@ -194,7 +200,8 @@ export function TaskCard({
             <Button
               type="link"
               icon={<FileTextOutlined aria-hidden="true" />}
-              href={reportUrl(task.snapshot.task_id, "html")}
+              href={onReport ? undefined : reportUrl(task.snapshot.task_id, "html")}
+              onClick={onReport ? () => onReport(task.snapshot.task_id, "html") : undefined}
               target="_blank"
               rel="noreferrer"
             >
@@ -203,6 +210,15 @@ export function TaskCard({
           </div>
         ) : null}
       </div>
+
+      {presentation === "workbench" ? <>
+        <TaskInputPreview task={task} variant="stage" onMediaKind={setMediaKind} />
+        {task.frame_source ? <div className="task-hint"><p>来源：帧 {task.frame_source.frame_index} · {task.frame_source.timestamp_seconds} 秒；仅分析这一帧，不代表整段视频结论。</p><a href={evidenceUrl(task.frame_source.video_asset)} target="_blank" rel="noreferrer">打开来源视频</a></div> : null}
+        {!task.frame_source && (hasVideoLocator || mediaKind === "video") ? <VideoTimeline
+          taskId={task.snapshot.task_id} snapshotRevision={task.snapshot.updated_at}
+          onSelectFrame={(frame) => onSelectFrame(task.snapshot.task_id, frame)}
+          frameSelectionDisabled={frameSelectionDisabled} /> : null}
+      </> : null}
 
       {task.parent_task_id ? (
         <p className="task-hint">
@@ -257,7 +273,7 @@ export function TaskCard({
         </div>
       </section>
 
-      <section className="task-detail-media" aria-label="源媒体">
+      {presentation === "detail" ? <section className="task-detail-media" aria-label="源媒体">
         <div className="task-detail-section-heading">
           <h4>源媒体</h4>
           {!task.frame_source && !mediaKind ? (
@@ -305,9 +321,9 @@ export function TaskCard({
           <p className="task-detail-media-hint">已保存视频时间定位证据，可在下方展开候选时间线。</p>
         ) : null}
         {mediaError ? <p className="task-error" role="alert">{mediaError}</p> : null}
-      </section>
+      </section> : null}
 
-      {task.snapshot.findings.length > 0 ? (
+      {presentation !== "workbench" && task.snapshot.findings.length > 0 ? (
         <section className="findings task-detail-findings" aria-labelledby={`findings-${task.snapshot.task_id}`}>
           <h4 id={`findings-${task.snapshot.task_id}`}>发现项</h4>
           <ul>
@@ -398,7 +414,7 @@ export function TaskCard({
             snapshotRevision={task.snapshot.updated_at}
           />
         ) : null}
-        {!task.frame_source && (hasVideoLocator || mediaKind === "video") ? (
+        {presentation !== "workbench" && !task.frame_source && (hasVideoLocator || mediaKind === "video") ? (
           <VideoTimeline
             taskId={task.snapshot.task_id}
             snapshotRevision={task.snapshot.updated_at}

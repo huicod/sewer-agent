@@ -9,6 +9,9 @@ import type {
   HumanReviewRecord,
   HumanReviewSubmission,
   ImageEvidenceDetail,
+  InspectionReport,
+  ReportFormat,
+  ReportSource,
   SessionDetail,
   SessionRecord,
   SessionSummary,
@@ -34,6 +37,8 @@ import {
   isSessionRecord,
   isSessionList,
   isSessionSummary,
+  isSessionReport,
+  isTaskReport,
   isTaskRecord,
   isTurnList,
   isTurnRecord,
@@ -132,6 +137,36 @@ export function updateSession(sessionId: string, update: SessionUpdate): Promise
 
 export function getSession(sessionId: string): Promise<SessionDetail> {
   return requestJson<SessionDetail>(`/api/sessions/${encodeURIComponent(sessionId)}`, isSessionDetail);
+}
+
+export function inspectionReportUrl(source: ReportSource, format: ReportFormat): string {
+  const collection = source.kind === "session" ? "sessions" : "tasks";
+  return `/api/${collection}/${encodeURIComponent(source.id)}/report?format=${format}`;
+}
+
+export function getInspectionReport(source: ReportSource): Promise<InspectionReport> {
+  return requestJson(inspectionReportUrl(source, "json"), (value): value is InspectionReport =>
+    source.kind === "session"
+      ? isSessionReport(value) && value.session.session_id === source.id
+      : isTaskReport(value) && value.task.snapshot.task_id === source.id);
+}
+
+export async function getInspectionReportHtml(source: ReportSource): Promise<string> {
+  let response: Response;
+  try {
+    response = await fetch(inspectionReportUrl(source, "html"));
+  } catch {
+    throw new ApiError(0, "无法连接本地服务");
+  }
+  if (!response.ok) {
+    let payload: unknown;
+    try { payload = await response.json(); } catch { payload = null; }
+    throw new ApiError(response.status, errorMessage(response.status, payload));
+  }
+  if (!response.headers.get("content-type")?.includes("text/html")) {
+    throw new ApiError(response.status, "服务返回的报告格式无效");
+  }
+  return response.text();
 }
 
 export function uploadAsset(file: File): Promise<AssetRecord> {

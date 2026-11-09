@@ -65,19 +65,24 @@ function FrameLink({ frame }: { frame: EvidenceRef }) {
   );
 }
 
-export function TaskInputPreview({ task }: { task: TaskRecord }) {
-  return <InputPreview key={assetUrl(task.input_asset)} task={task} />;
+type PreviewProps = { task: TaskRecord; variant?: "inline" | "stage"; onMediaKind?: (kind: string) => void };
+
+export function TaskInputPreview(props: PreviewProps) {
+  return <InputPreview key={assetUrl(props.task.input_asset)} {...props} />;
 }
 
-function InputPreview({ task }: { task: TaskRecord }) {
+function InputPreview({ task, variant = "inline", onMediaKind }: PreviewProps) {
   const container = useRef<HTMLElement>(null);
   const [asset, setAsset] = useState<AssetRecord | null>();
   const [unavailable, setUnavailable] = useState(false);
+  const [attempt, setAttempt] = useState(0);
   const { asset_id, version } = task.input_asset;
   const url = assetUrl(task.input_asset);
 
   useEffect(() => {
     let active = true;
+    setAsset(undefined);
+    setUnavailable(false);
     function load() {
       loadAsset({ asset_id, version }).then(
         (value) => { if (active) setAsset(value); },
@@ -97,7 +102,11 @@ function InputPreview({ task }: { task: TaskRecord }) {
       load();
     }
     return () => { active = false; observer?.disconnect(); };
-  }, [asset_id, version]);
+  }, [asset_id, version, attempt]);
+
+  useEffect(() => {
+    if (asset) onMediaKind?.(asset.kind);
+  }, [asset, onMediaKind]);
 
   const video = asset?.kind === "video";
   const image = asset?.media_type.startsWith("image/");
@@ -111,19 +120,19 @@ function InputPreview({ task }: { task: TaskRecord }) {
   const frames = video ? firstEvidenceFrames(task) : [];
 
   return (
-    <figure className="task-input-preview" ref={container} aria-label={label}>
+    <figure className={`task-input-preview${variant === "stage" ? " task-input-preview--large" : ""}`} ref={container} aria-label={label}>
       <figcaption>
         <span><strong>{label}</strong>
           {width && height ? <small>{width} × {height}</small> : null}
           {video && asset.duration_seconds != null ? <small>{Number(asset.duration_seconds.toFixed(1))} 秒</small> : null}
         </span>
         <a href={url} target="_blank" rel="noreferrer">
-          {video ? "打开原视频" : image ? "打开原图" : "打开输入文件"}
+          {task.frame_source ? "打开证据帧" : video ? "打开原视频" : image ? "打开原图" : "打开输入文件"}
         </a>
       </figcaption>
       <div className={`task-input-preview__body${groups.size || frames.length ? " has-evidence" : ""}`}>
       {asset === undefined ? <p>正在准备预览…</p> :
-        unavailable || (!video && !image) ? <p>预览暂不可用，可打开输入文件查看。</p> :
+        unavailable || (!video && !image) ? <p>预览暂不可用，可打开输入文件查看。 <button type="button" className="secondary-button" onClick={() => setAttempt((value) => value + 1)}>重新加载预览</button></p> :
         video ? (
           <div className="task-input-preview__stage">
             <video aria-label="输入视频预览" src={url} controls playsInline preload="metadata"

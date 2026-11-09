@@ -498,8 +498,9 @@ describe("image inspection modes", () => {
       (await screen.findByRole("heading", { name: "检查破损" })).closest("article")!,
     );
     expect(card.getByText("发现缺陷")).toBeTruthy();
-    expect(card.getByText("纯 YOLO 检测规则确认")).toBeTruthy();
-    expect(card.getByText("原始检测器分数 0.81")).toBeTruthy();
+    const findings = within(screen.getByRole("region", { name: "当前任务发现项" }));
+    expect(findings.getByText("纯 YOLO 检测规则确认")).toBeTruthy();
+    expect(findings.getByText("原始检测器分数 0.81")).toBeTruthy();
   });
 
   it("does not describe an empty failed pure-YOLO task as having completed detection", async () => {

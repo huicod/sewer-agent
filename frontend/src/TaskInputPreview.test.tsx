@@ -78,6 +78,19 @@ describe("task input preview", () => {
     expect(screen.queryByText("证据帧预览")).toBeNull();
   });
 
+  it("recovers a failed stage metadata request and restores its media tools", async () => {
+    const metadata = vi.spyOn(api, "getAsset").mockRejectedValueOnce(new Error("offline")).mockResolvedValueOnce(asset);
+    const onMediaKind = vi.fn();
+    render(<TaskInputPreview task={task} variant="stage" onMediaKind={onMediaKind} />);
+    const retry = await screen.findByRole("button", { name: "重新加载预览" });
+    expect(screen.getByRole("link", { name: "打开输入文件" }).getAttribute("href")).toBe(url);
+    expect(onMediaKind).not.toHaveBeenCalled();
+    fireEvent.click(retry);
+    expect(await screen.findByRole("img", { name: "检查任务的输入图片" })).toBeTruthy();
+    expect(metadata).toHaveBeenCalledTimes(2);
+    expect(onMediaKind).toHaveBeenCalledWith("image");
+  });
+
   it("links the first three distinct saved frames by time, excluding the input video and unlocated refs", async () => {
     vi.spyOn(api, "getAsset").mockResolvedValue({
       ...asset, kind: "video", media_type: "video/mp4", duration_seconds: 9,

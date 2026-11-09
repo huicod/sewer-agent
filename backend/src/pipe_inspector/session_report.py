@@ -3,7 +3,19 @@
 from html import escape
 
 from pipe_inspector.contracts.reports import SessionReport
-from pipe_inspector.reports import render_evidence_sections
+from pipe_inspector.report_document import document_end, document_start, metadata_table
+from pipe_inspector.reports import (
+    RESULTS,
+    STATUSES,
+    evidence_link,
+    render_evidence_sections,
+    render_findings,
+    render_source_scope,
+    render_task_summary,
+    render_tool_calls,
+)
+
+ROLES = {"primary": "原始检查", "supplement": "关联追加复检", "video_frame_tool": "视频证据帧工具"}
 
 
 def _value(value: object) -> str:
@@ -11,94 +23,108 @@ def _value(value: object) -> str:
 
 
 def render_session_html(report: SessionReport) -> str:
-    lines = [
-        '<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">',
-        '<meta name="viewport" content="width=device-width,initial-scale=1">',
-        "<title>会话统一检查报告</title>",
-        "<style>body{max-width:1000px;margin:2rem auto;padding:0 1rem;font-family:sans-serif;"
-        "line-height:1.6}section{border-top:1px solid #ccc;margin-top:1.5rem}"
-        "article{border-left:3px solid #bbb;padding-left:1rem;margin:1rem 0}"
-        "code{overflow-wrap:anywhere}li{margin:.35rem 0}</style></head><body>",
-        "<h1>会话统一检查报告</h1>",
-        f"<p>会话 ID：<code>{report.session.session_id}</code>；生成时间："
-        f"{escape(report.generated_at.isoformat())}</p>",
-    ]
+    lines = document_start("管道影像检查报告", "会话统一检查报告 · 按原始影像与来源任务编排")
+    source_count = sum(len(group.sources) for group in report.asset_groups)
+    lines.extend([
+        '<nav class="report-outline" aria-label="报告目录">'
+        '<a href="#basic">基本信息</a><a href="#sources">检查来源</a>'
+        '<a href="#evidence">结果与证据</a><a href="#turns">对话记录</a></nav>',
+        '<h2 id="basic">1. 基本信息</h2>',
+        metadata_table([
+            ("会话编号", str(report.session.session_id),
+             "报告生成时间", report.generated_at.isoformat()),
+            ("会话创建时间", report.session.created_at.isoformat(), "快照状态",
+             "当前为最终快照" if report.is_final else "当前为非最终快照"),
+            ("输入影像版本组", str(len(report.asset_groups)), "来源任务", str(source_count)),
+            ("已保存对话轮次", str(len(report.turns)), "数据版本", report.schema_version),
+        ]),
+    ])
     if report.is_final:
-        lines.append("<p>当前为最终快照。</p>")
+        lines.append('<p class="report-note">当前为最终快照。任务结论、待定事项及审核依据'
+                     "以各来源记录为准。</p>")
     else:
-        lines.append("<p><strong>当前为非最终快照：</strong>运行中的进度和证据可能继续更新。</p>")
+        lines.append('<p class="report-note report-note--pending"><strong>当前为非最终快照：'
+                     "</strong>运行中的进度和证据可能继续更新。</p>")
     lines.append(
-        "<p>各来源保留自己的发现 ID 和状态；辅助任务及重复检查的发现"
+        '<p class="report-note">各来源保留自己的发现 ID 和状态；辅助任务及重复检查的发现'
         "不跨任务累计为独立缺陷总数。</p>"
     )
-    lines.append("<h2>对话轮次</h2><ul>")
-    for turn in report.turns:
-        linked = f"；关联任务 {turn.linked_task_id}" if turn.linked_task_id else ""
-        lines.append(
-            f"<li><code>{turn.request_id}</code>；{_value(turn.status)} / {_value(turn.stage)}"
-            f"{linked}；{escape(turn.text)}</li>"
-        )
-        if turn.reply:
-            lines.append(f"<li>助手回复：{escape(turn.reply)}</li>")
-    if not report.turns:
-        lines.append("<li>暂无已保存轮次。</li>")
-    lines.append("</ul>")
-    for group in report.asset_groups:
+    lines.append('<h2 id="sources">2. 检查来源</h2>')
+    if report.asset_groups:
+        lines.extend([
+            '<table class="source-table"><thead><tr><th scope="col">来源任务 / 输入影像</th>',
+            '<th scope="col">来源角色</th><th scope="col">运行状态</th>',
+            '<th scope="col">保存结论</th></tr></thead><tbody>',
+        ])
+        for group in report.asset_groups:
+            for source in group.sources:
+                snapshot = source.task.snapshot
+                lines.append(
+                    f'<tr><td><a href="#source-{source.task_id}"><code>{source.task_id}</code></a>'
+                    f'<br><code class="muted">{group.input_asset.asset_id} '
+                    f"v{group.input_asset.version}</code></td>"
+                    f"<td>{ROLES[source.role]}</td>"
+                    f'<td><span class="status status--{snapshot.runtime_status.value}">'
+                    f"{STATUSES[snapshot.runtime_status]}</span></td>"
+                    f"<td>{RESULTS[snapshot.inspection_result]}</td></tr>"
+                )
+        lines.append("</tbody></table>")
+    else:
+        lines.append("<p>暂无已保存的检查任务；这不单独证明影像正常。</p>")
+    lines.append('<h2 id="evidence">3. 检查结果与影像证据</h2>')
+    for group_index, group in enumerate(report.asset_groups, 1):
         asset = group.input_asset
-        path = f"/api/assets/{asset.asset_id}/versions/{asset.version}/content"
-        lines.extend(
-            [
-                "<section>",
-                f"<h2>同图来源：<code>{asset.asset_id}</code> v{asset.version}</h2>",
-                f'<p><a href="{path}">打开输入资产</a></p>',
-            ]
-        )
+        lines.extend([
+            '<section class="report-asset-group">',
+            f"<h3>影像 {group_index} · <code>{asset.asset_id}</code> v{asset.version}</h3>",
+            "<p>打开输入资产：" + evidence_link(asset) + "</p>",
+        ])
         for source in group.sources:
             task = source.task
             snapshot = task.snapshot
-            coverage = snapshot.coverage
-            lines.extend(
-                [
-                    "<article>",
-                    f"<h3>来源 <code>{source.task_id}</code></h3>",
-                    f"<p>根任务：<code>{source.root_task_id}</code>；角色：{source.role}</p>",
-                    f"<p>状态：{_value(snapshot.runtime_status)}；阶段：{_value(snapshot.stage)}；"
-                    f"总进度：{snapshot.overall_progress:g}；结果："
-                    f"{_value(snapshot.inspection_result)}</p>",
-                    f"<p>覆盖：{'充分' if coverage.sufficient_coverage else '不足'}；"
-                    f"画质：{'充分' if coverage.sufficient_quality else '不足'}；阴性审计："
-                    f"{'完成' if coverage.negative_audit_complete else '未完成'}</p>",
-                    f"<p>用户要求：{escape(task.instruction)}</p>",
-                    f'<p><a href="/api/tasks/{source.task_id}/report?format=html">'
-                    "打开该来源的详细任务报告</a></p>",
-                ]
-            )
-            if snapshot.waiting_reason:
-                lines.append(f"<p>限制/待处理：{escape(snapshot.waiting_reason)}</p>")
+            mode = ("纯 YOLO（未执行 VLM 复检）"
+                    if task.inspection_mode == "yolo_only" else "YOLO＋VLM")
+            lines.extend([
+                f'<article class="report-source" id="source-{source.task_id}">',
+                f"<h3>{ROLES[source.role]} · <code>{source.task_id}</code></h3>",
+                metadata_table([
+                    ("根任务", str(source.root_task_id),
+                     "来源角色", f"{ROLES[source.role]} / {source.role}"),
+                    ("提交时间", task.created_at.isoformat(),
+                     "快照更新时间", snapshot.updated_at.isoformat()),
+                    ("检测模式", mode, "输入版本", str(asset.version)),
+                ]),
+                "<h4>用户要求</h4><pre>" + escape(task.instruction) + "</pre>",
+            ])
+            lines.extend(render_task_summary(task))
+            lines.extend(render_source_scope(task))
+            if snapshot.is_terminal:
+                lines.append(f'<p><a href="/api/tasks/{source.task_id}/report?format=html">'
+                             "打开该来源的详细任务报告</a></p>")
+            else:
+                lines.append('<p class="muted">此来源尚未结束；详细任务报告在终态后可用。</p>')
+            lines.append("<h4>已保存发现</h4>")
+            lines.extend(render_findings(source))
             lines.extend(render_evidence_sections(source))
-            lines.append("<h4>已保存发现</h4><ul>")
-            for finding in snapshot.findings:
-                lines.append(
-                    f"<li><code>{finding.finding_id}</code>；类别 "
-                    f"{_value(finding.canonical_label or finding.open_label or '未分类')}；"
-                    f"{_value(finding.review_status)}；来源 {_value(finding.source)}</li>"
-                )
-            if not snapshot.findings:
-                lines.append("<li>暂无已保存发现；这不单独证明影像正常。</li>")
-            lines.append("</ul><h4>工具调用</h4><ul>")
-            for call in source.tool_calls:
-                detail = (
-                    f"{_value(call.tool_name)} v{escape(call.tool_version)}；"
-                    f"尝试 {call.attempt}；{_value(call.status)}"
-                )
-                if call.error:
-                    detail += f"；{escape(call.error.code)}：{escape(call.error.message)}"
-                if call.skip_reason:
-                    detail += f"；跳过原因：{escape(call.skip_reason)}"
-                lines.append(f"<li>{detail}</li>")
-            if not source.tool_calls:
-                lines.append("<li>暂无工具调用记录。</li>")
-            lines.append("</ul></article>")
+            lines.append("<h4>工具调用</h4>")
+            lines.extend(render_tool_calls(source.tool_calls))
+            lines.append("</article>")
         lines.append("</section>")
-    lines.append("</body></html>")
+    lines.append('<h2 id="turns">4. 对话记录</h2>')
+    for index, turn in enumerate(report.turns, 1):
+        linked = f"；关联任务 {turn.linked_task_id}" if turn.linked_task_id else ""
+        lines.extend([
+            '<article class="report-turn">',
+            f"<h3>轮次 {index}</h3>",
+            f'<p class="muted"><code>{turn.request_id}</code> · '
+            f"{_value(turn.status)} / {_value(turn.stage)}{linked}<br>"
+            f"{escape(turn.created_at.isoformat())}</p>",
+            f"<strong>用户</strong><pre>{escape(turn.text)}</pre>",
+        ])
+        if turn.reply:
+            lines.append(f"<strong>助手回复</strong><pre>{escape(turn.reply)}</pre>")
+        lines.append("</article>")
+    if not report.turns:
+        lines.append("<p>暂无已保存轮次。</p>")
+    lines.extend(document_end())
     return "\n".join(lines)

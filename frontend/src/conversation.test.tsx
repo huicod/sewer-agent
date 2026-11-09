@@ -188,12 +188,10 @@ describe("durable conversation panel", () => {
 
     render(<App pollIntervalMs={10} />);
     expect(await screen.findByText("对话已回复；关联检查仍在继续")).toBeTruthy();
-    expect(screen.queryByRole("link", { name: "JSON 报告" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "JSON 报告" })).toBeNull();
     expect(await screen.findByText("关联检查已完成")).toBeTruthy();
-    expect(screen.getByRole<HTMLAnchorElement>("link", { name: "JSON 报告" }).getAttribute("href"))
-      .toBe(`/api/tasks/${taskId}/report?format=json`);
-    expect(screen.getByRole<HTMLAnchorElement>("link", { name: "HTML 报告" }).getAttribute("href"))
-      .toBe(`/api/tasks/${taskId}/report?format=html`);
+    expect(screen.getByRole("button", { name: "JSON 报告" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "HTML 报告" })).toBeTruthy();
   });
 
   it("does not describe a failed linked inspection as completed", async () => {
