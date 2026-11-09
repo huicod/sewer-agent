@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 
 import { ApiError, getVideo } from "./api";
+import { VideoProcessingTimeline } from "./VideoProcessingTimeline";
 import type {
+  AssetRef,
   VideoDetail,
   VideoEvent,
   VideoEvidenceFrame,
@@ -17,6 +19,12 @@ type VideoTimelineProps = {
   snapshotRevision: string;
   onSelectFrame?: (frame: VideoEvidenceFrame) => void;
   frameSelectionDisabled?: boolean;
+  visible?: boolean;
+  sourceAsset?: AssetRef;
+  durationSeconds?: number | null;
+  currentTime?: number;
+  processedFrames?: number;
+  onSeek?: (seconds: number) => void;
 };
 
 function assetUrl(assetId: string, version: number): string {
@@ -32,6 +40,12 @@ export function VideoTimeline({
   snapshotRevision,
   onSelectFrame,
   frameSelectionDisabled = false,
+  visible = false,
+  sourceAsset,
+  durationSeconds = null,
+  currentTime = 0,
+  processedFrames = 0,
+  onSeek,
 }: VideoTimelineProps) {
   const [expanded, setExpanded] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -39,26 +53,27 @@ export function VideoTimeline({
   const [error, setError] = useState<string | null>(null);
   const [loadedRevision, setLoadedRevision] = useState<string | null>(null);
   const activeRequest = useRef(0);
-  const stateTaskId = useRef(taskId);
-  const taskChanged = stateTaskId.current !== taskId;
+  const identity = `${taskId}:${sourceAsset?.asset_id ?? ""}:${sourceAsset?.version ?? ""}`;
+  const stateIdentity = useRef(identity);
+  const taskChanged = stateIdentity.current !== identity;
 
   useEffect(() => {
     activeRequest.current += 1;
-    stateTaskId.current = taskId;
+    stateIdentity.current = identity;
     setExpanded(false);
     setLoading(false);
     setDetail(null);
     setError(null);
     setLoadedRevision(null);
     return () => { activeRequest.current += 1; };
-  }, [taskId]);
+  }, [identity]);
 
   async function load(revision: string) {
     const request = ++activeRequest.current;
     setLoading(true);
     setError(null);
     try {
-      const next = await getVideo(taskId);
+      const next = await getVideo(taskId, sourceAsset);
       if (activeRequest.current === request) {
         setDetail(next);
         setLoadedRevision(revision);
@@ -73,25 +88,47 @@ export function VideoTimeline({
   }
 
   useEffect(() => {
-    if (taskChanged || !expanded || loadedRevision === snapshotRevision) return;
+    if ((!visible && !expanded) || (!taskChanged && loadedRevision === snapshotRevision)) return;
     void load(snapshotRevision);
-  }, [taskId, snapshotRevision, expanded]);
+  }, [taskId, snapshotRevision, expanded, visible, sourceAsset?.asset_id, sourceAsset?.version]);
 
-  const scan = detail?.scan;
-  const selection = detail?.evidence?.selection;
-  const events = scan
-    ? [...scan.state.events, ...(scan.state.finalized ? [] : scan.state.active)].sort(eventOrder)
+  const currentDetail = taskChanged ? null : detail;
+  const scan = currentDetail?.scan;
+  const state = scan?.state ?? currentDetail?.scan_progress ?? null;
+  const selection = currentDetail?.evidence?.selection;
+  const events = state
+    ? [...state.events, ...(state.finalized ? [] : state.active)].sort(eventOrder)
     : [];
-  const frameAssets = new Map(detail?.evidence?.frames.map((frame) => [frame.frame_index, frame.asset]) ?? []);
-  const storedFrames = [...(detail?.evidence?.frames ?? [])].sort((left, right) =>
+  const frameAssets = new Map(currentDetail?.evidence?.frames.map((frame) => [frame.frame_index, frame.asset]) ?? []);
+  const storedFrames = [...(currentDetail?.evidence?.frames ?? [])].sort((left, right) =>
     left.frame_index - right.frame_index || left.timestamp_seconds - right.timestamp_seconds,
   );
+  const observedEnd = storedFrames.reduce((end, frame) => Math.max(end, frame.timestamp_seconds),
+    events.reduce((end, event) => Math.max(end, event.end_seconds), state?.last_timestamp_seconds ?? 0));
+  const seekUnavailableReason = currentDetail?.scan_start_seconds == null
+    ? "扫描时间起点尚未保存，可先使用播放器浏览。"
+    : currentDetail.scan_start_seconds >= 0.001
+      ? "此视频保留了原始时间偏移，请使用播放器定位；证据帧仍可直接查看。"
+      : durationSeconds !== null && observedEnd > durationSeconds + 0.01
+        ? "已保存时间戳超出播放器时长，请使用播放器定位；证据帧仍可直接查看。"
+        : undefined;
 
   return (
     <section className="video-timeline">
-      <button type="button" className="secondary-button" aria-expanded={expanded} onClick={() => setExpanded(true)}>
-        展开视频候选时间线
-      </button>
+      {visible ? <>
+        <VideoProcessingTimeline key={`${taskId}:${sourceAsset?.asset_id}:${sourceAsset?.version}`}
+          state={state} frames={storedFrames} reviewFrames={currentDetail?.evidence?.review_frames ?? []}
+          scanStartSeconds={currentDetail?.scan_start_seconds ?? null} decodeComplete={scan?.decode_complete ?? false}
+          durationSeconds={durationSeconds} currentTime={currentTime} processedFrames={processedFrames}
+          onSeek={seekUnavailableReason ? undefined : onSeek}
+          seekUnavailableReason={seekUnavailableReason}
+          onSelectFrame={onSelectFrame} frameSelectionDisabled={frameSelectionDisabled} />
+        {loading ? <p className="empty-state" role="status">正在读取已保存的视频进度…</p> : null}
+        {error ? <p className="task-error" role="alert">{error}</p> : null}
+      </> : null}
+      <div className="video-timeline__actions"><button type="button" className="secondary-button" aria-expanded={expanded} onClick={() => setExpanded((value) => !value)}>
+        {expanded ? "收起视频候选时间线" : "展开视频候选时间线"}
+      </button>{visible ? <button type="button" className="secondary-button" disabled={loading} onClick={() => void load(snapshotRevision)}>刷新时间轴</button> : null}</div>
       {expanded ? (
         <div className="video-timeline__content">
           <h3>视频候选时间线</h3>
@@ -101,7 +138,7 @@ export function VideoTimeline({
           <p className="truth-note">以下是自动扫描保存的候选事件，不代表已确认缺陷。</p>
           {loading ? <p className="empty-state">正在加载视频证据…</p> : null}
           {error ? <p className="task-error" role="alert">{error}</p> : null}
-          {!loading && detail && !scan ? <p className="truth-note">尚无持久化视频扫描结果。</p> : null}
+          {!loading && currentDetail && !state ? <p className="truth-note">尚无持久化视频扫描结果。</p> : null}
           {selection ? (
             <section aria-label="复检证据选择">
               <h4>复检证据选择</h4>
@@ -149,15 +186,15 @@ export function VideoTimeline({
               </div>
             </details>
           ) : null}
-          {scan ? (
+          {state ? (
             <>
               <dl className="timeline-summary">
-                <div><dt>扫描帧</dt><dd>{scan.state.next_frame}</dd></div>
-                <div><dt>质量充分帧</dt><dd>{scan.state.adequate_frames}</dd></div>
-                <div><dt>源时间范围</dt><dd>{scan.state.last_timestamp_seconds === null ? "未知" : `0–${scan.state.last_timestamp_seconds} 秒`}</dd></div>
+                <div><dt>扫描帧</dt><dd>{state.next_frame}</dd></div>
+                <div><dt>质量充分帧</dt><dd>{state.adequate_frames}</dd></div>
+                <div><dt>最后扫描时间</dt><dd>{state.last_timestamp_seconds === null ? "未知" : `${state.last_timestamp_seconds} 秒`}</dd></div>
               </dl>
-              <p className={scan.decode_complete ? "muted" : "task-error"}>
-                {scan.decode_complete ? "解码完整" : `解码未完整${scan.error_code ? `：${scan.error_code}` : ""}`}
+              <p className={!scan || scan.decode_complete ? "muted" : "task-error"}>
+                {scan ? scan.decode_complete ? "解码完整" : `解码未完整${scan.error_code ? `：${scan.error_code}` : ""}` : "扫描尚未形成最终记录；当前显示已保存的分块进度。"}
               </p>
               {events.length ? (
                 <ol className="timeline-events">
@@ -185,7 +222,7 @@ export function VideoTimeline({
                   ))}
                 </ol>
               ) : <p className="empty-state">没有持久化候选事件。</p>}
-              <a href={assetUrl(scan.state.source.asset_id, scan.state.source.version)} target="_blank" rel="noreferrer">打开源视频</a>
+              <a href={assetUrl(state.source.asset_id, state.source.version)} target="_blank" rel="noreferrer">打开源视频</a>
             </>
           ) : null}
         </div>

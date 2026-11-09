@@ -576,5 +576,7 @@ export type VideoReviewSelection = {
 export type VideoDetail = {
   task_id: string;
   scan: VideoScanResult | null;
+  scan_progress?: VideoAggregationState | null;
+  scan_start_seconds?: number | null;
   evidence: VideoEvidence | null;
 };

@@ -183,13 +183,16 @@ describe("comparison boundary and panel", () => {
       status: "completed", stage: "finished", reply: "已完成保存结果对比",
       linked_task_id: currentTaskId, error_code: null, attempts: 1,
     };
-    const fetchMock = vi.fn()
+    const sequence = vi.fn()
       .mockResolvedValueOnce(response({
         session: { session_id: sessionId, created_at: createdAt },
         tasks: [snapshot.reference, snapshot.current],
       }))
       .mockResolvedValueOnce(response([textOnlyTurn]))
       .mockResolvedValueOnce(response(snapshot));
+    const fetchMock = vi.fn((url: string, init?: RequestInit) => url.endsWith("/video")
+      ? Promise.resolve(response({ task_id: url.split("/")[3], scan: null, evidence: null }))
+      : sequence(url, init));
     vi.stubGlobal("fetch", fetchMock);
     const user = userEvent.setup();
     render(<App pollIntervalMs={60_000} />);
@@ -214,11 +217,14 @@ describe("comparison composer identity", () => {
       updated_at: createdAt, status: "queued", stage: "queued", reply: null,
       linked_task_id: null, error_code: null, attempts: 0,
     };
-    const fetchMock = vi.fn()
+    const sequence = vi.fn()
       .mockResolvedValueOnce(response({ session: { session_id: sessionId, created_at: createdAt }, tasks: [reference, current] }))
       .mockResolvedValueOnce(response([]))
       .mockRejectedValueOnce(new TypeError("connection reset"))
       .mockResolvedValueOnce(response(completedTurn, 202));
+    const fetchMock = vi.fn((url: string, init?: RequestInit) => url.endsWith("/video")
+      ? Promise.resolve(response({ task_id: url.split("/")[3], scan: null, evidence: null }))
+      : sequence(url, init));
     vi.stubGlobal("fetch", fetchMock);
     vi.spyOn(globalThis.crypto, "randomUUID").mockReturnValue(requestId);
     const user = userEvent.setup();

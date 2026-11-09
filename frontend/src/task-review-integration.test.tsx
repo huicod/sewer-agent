@@ -108,7 +108,7 @@ describe("TaskCard review and evidence integration", () => {
     expect(await screen.findByText("该历史任务没有可用的结构化人工审核记录。")).toBeTruthy();
   });
 
-  it("offers the lazy video timeline when a source frame locator proves the task is video", async () => {
+  it("shows the video axis with expandable details when a source frame locator proves the task is video", async () => {
     const waiting = task();
     const fetchMock = vi.fn(async (url: string) => {
       if (url === `/api/sessions/${sessionId}`) return response({ session: { session_id: sessionId, created_at: createdAt }, tasks: [waiting] });
@@ -121,7 +121,8 @@ describe("TaskCard review and evidence integration", () => {
 
     render(<App pollIntervalMs={60_000} />);
     const timelineButton = await screen.findByRole("button", { name: "展开视频候选时间线" });
-    expect(fetchMock.mock.calls.some(([url]) => url === `/api/tasks/${taskId}/video`)).toBe(false);
+    expect(await screen.findByRole("region", { name: "视频处理时间轴" })).toBeTruthy();
+    await waitFor(() => expect(fetchMock.mock.calls.some(([url]) => url === `/api/tasks/${taskId}/video`)).toBe(true));
     await user.click(timelineButton);
     await waitFor(() => expect(fetchMock.mock.calls.some(([url]) => url === `/api/tasks/${taskId}/video`)).toBe(true));
   });

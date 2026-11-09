@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { type RefObject, useEffect, useRef, useState } from "react";
 
 import { getAsset } from "./api";
 import { assetUrl, findingRegions } from "./ImageEvidencePanel";
@@ -65,13 +65,20 @@ function FrameLink({ frame }: { frame: EvidenceRef }) {
   );
 }
 
-type PreviewProps = { task: TaskRecord; variant?: "inline" | "stage"; onMediaKind?: (kind: string) => void };
+type PreviewProps = {
+  task: TaskRecord;
+  variant?: "inline" | "stage";
+  onMediaKind?: (kind: string) => void;
+  videoRef?: RefObject<HTMLVideoElement | null>;
+  onPlaybackChange?: (time: number, duration: number | null) => void;
+  showEvidenceFrames?: boolean;
+};
 
 export function TaskInputPreview(props: PreviewProps) {
   return <InputPreview key={assetUrl(props.task.input_asset)} {...props} />;
 }
 
-function InputPreview({ task, variant = "inline", onMediaKind }: PreviewProps) {
+function InputPreview({ task, variant = "inline", onMediaKind, videoRef, onPlaybackChange, showEvidenceFrames = true }: PreviewProps) {
   const container = useRef<HTMLElement>(null);
   const [asset, setAsset] = useState<AssetRecord | null>();
   const [unavailable, setUnavailable] = useState(false);
@@ -117,7 +124,10 @@ function InputPreview({ task, variant = "inline", onMediaKind }: PreviewProps) {
     ? findingRegions({ findings: task.snapshot.findings, input_asset: task.input_asset }, width, height)
     : [];
   const groups = regionSummary(regions);
-  const frames = video ? firstEvidenceFrames(task) : [];
+  const frames = video && showEvidenceFrames ? firstEvidenceFrames(task) : [];
+  function updatePlayback(player: HTMLVideoElement) {
+    onPlaybackChange?.(player.currentTime, Number.isFinite(player.duration) && player.duration > 0 ? player.duration : null);
+  }
 
   return (
     <figure className={`task-input-preview${variant === "stage" ? " task-input-preview--large" : ""}`} ref={container} aria-label={label}>
@@ -135,8 +145,12 @@ function InputPreview({ task, variant = "inline", onMediaKind }: PreviewProps) {
         unavailable || (!video && !image) ? <p>预览暂不可用，可打开输入文件查看。 <button type="button" className="secondary-button" onClick={() => setAttempt((value) => value + 1)}>重新加载预览</button></p> :
         video ? (
           <div className="task-input-preview__stage">
-            <video aria-label="输入视频预览" src={url} controls playsInline preload="metadata"
-              width={width ?? undefined} height={height ?? undefined} onError={() => setUnavailable(true)} />
+            <video ref={videoRef} aria-label="输入视频预览" src={url} controls playsInline preload="metadata"
+              onLoadedMetadata={(event) => updatePlayback(event.currentTarget)}
+              onDurationChange={(event) => updatePlayback(event.currentTarget)}
+              onTimeUpdate={(event) => updatePlayback(event.currentTarget)}
+              onEmptied={() => onPlaybackChange?.(0, null)}
+              width={width ?? undefined} height={height ?? undefined} onError={() => { setUnavailable(true); onPlaybackChange?.(0, null); }} />
           </div>
         ) : (
           <div className="task-input-preview__stage">

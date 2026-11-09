@@ -117,7 +117,8 @@
 .task-input-preview--large .task-input-preview__stage, .task-input-preview--large .task-input-preview__body:not(.has-evidence) .task-input-preview__stage { width: 100%; min-height: 290px; padding: 8px; border-radius: 0; background: #202c35; }
 .task-input-preview--large .task-input-preview__image { max-width: 100%; }
 .task-input-preview--large .task-input-preview__image img, .task-input-preview--large video { max-height: min(54vh, 620px); height: auto; width: auto; max-width: 100%; object-fit: contain; }
-.task-input-preview--large video { width: 100%; min-height: 290px; }
+.task-input-preview--large video { width: 100%; min-height: 240px; max-height: min(36vh, 420px); }
+.video-timeline__actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
 .task-input-preview--large .task-input-preview__side { margin: 0; border: 0; border-top: 1px solid #d2dee7; border-radius: 0; padding: 8px 10px; font-size: 12px; background: #fafcfd; }
 .task-input-preview--large .task-input-preview__side > ul { display: flex; flex-wrap: wrap; gap: 6px 16px; }
 .task-input-preview--large .task-input-preview__side li { border: 0; gap: 2px 6px; padding: 3px 0; min-width: 120px; }

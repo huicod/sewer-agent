@@ -1,0 +1,2 @@
+{"file": ".trellis/spec/frontend/conventions.md", "reason": "Source-bound media and axis interaction contract"}
+{"file": ".trellis/spec/backend/conventions.md", "reason": "Read-only persisted progress and timestamp contract"}

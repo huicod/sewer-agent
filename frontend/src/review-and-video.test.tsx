@@ -378,7 +378,7 @@ describe("persisted video timeline", () => {
     rerender(<VideoTimeline taskId={taskId} snapshotRevision="2026-09-11T12:03:00Z" />);
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
-    expect(screen.getByRole("button", { name: "展开视频候选时间线" }).getAttribute("aria-expanded")).toBe("true");
+    expect(screen.getByRole("button", { name: "收起视频候选时间线" }).getAttribute("aria-expanded")).toBe("true");
     expect(screen.getByText("视频候选时间线")).toBeTruthy();
   });
 

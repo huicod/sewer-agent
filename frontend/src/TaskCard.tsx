@@ -1,6 +1,6 @@
 import { EyeOutlined, FileTextOutlined, PlayCircleOutlined, StopOutlined } from "@ant-design/icons";
 import { Button, Tag } from "antd";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { ApiError, getAsset } from "./api";
 import { EnhancementPanel } from "./EnhancementPanel";
@@ -100,13 +100,27 @@ export function TaskCard({
   const [mediaKind, setMediaKind] = useState<string | null>(null);
   const [mediaLoading, setMediaLoading] = useState(false);
   const [mediaError, setMediaError] = useState<string | null>(null);
+  const player = useRef<HTMLVideoElement>(null);
+  const [playback, setPlayback] = useState<{ time: number; duration: number | null }>({ time: 0, duration: null });
+  const updatePlayback = useCallback((time: number, duration: number | null) => setPlayback({ time, duration }), []);
+
+  function seekVideo(seconds: number) {
+    const video = player.current;
+    if (!video || !Number.isFinite(video.duration) || video.duration <= 0 || !Number.isFinite(seconds)) return;
+    video.currentTime = Math.max(0, Math.min(seconds, video.duration));
+    updatePlayback(video.currentTime, video.duration);
+  }
 
   useEffect(() => {
     setReviewOpen(false);
+  }, [task.snapshot.task_id]);
+
+  useEffect(() => {
     setMediaKind(null);
     setMediaLoading(false);
     setMediaError(null);
-  }, [task.snapshot.task_id]);
+    setPlayback({ time: 0, duration: null });
+  }, [task.input_asset.asset_id, task.input_asset.version]);
 
   const progress = Math.round(
     Math.min(1, Math.max(0, task.snapshot.overall_progress)) * 100,
@@ -212,10 +226,13 @@ export function TaskCard({
       </div>
 
       {presentation === "workbench" ? <>
-        <TaskInputPreview task={task} variant="stage" onMediaKind={setMediaKind} />
+        <TaskInputPreview task={task} variant="stage" onMediaKind={setMediaKind}
+          videoRef={player} onPlaybackChange={updatePlayback} showEvidenceFrames={false} />
         {task.frame_source ? <div className="task-hint"><p>来源：帧 {task.frame_source.frame_index} · {task.frame_source.timestamp_seconds} 秒；仅分析这一帧，不代表整段视频结论。</p><a href={evidenceUrl(task.frame_source.video_asset)} target="_blank" rel="noreferrer">打开来源视频</a></div> : null}
         {!task.frame_source && (hasVideoLocator || mediaKind === "video") ? <VideoTimeline
           taskId={task.snapshot.task_id} snapshotRevision={task.snapshot.updated_at}
+          visible sourceAsset={task.input_asset} durationSeconds={playback.duration} currentTime={playback.time}
+          processedFrames={task.snapshot.processed_frames} onSeek={playback.duration === null ? undefined : seekVideo}
           onSelectFrame={(frame) => onSelectFrame(task.snapshot.task_id, frame)}
           frameSelectionDisabled={frameSelectionDisabled} /> : null}
       </> : null}

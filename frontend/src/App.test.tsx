@@ -317,13 +317,16 @@ describe("conversation-ready intake shell", () => {
     const cancelResponse = new Promise<Response>((resolve) => {
       resolveCancel = resolve;
     });
-    const fetchMock = vi.fn()
+    const sequence = vi.fn()
       .mockResolvedValueOnce(jsonResponse({
         session: { session_id: sessionId, created_at: createdAt },
         tasks: [videoTask],
       }))
       .mockResolvedValueOnce(jsonResponse([]))
       .mockReturnValueOnce(cancelResponse);
+    const fetchMock = vi.fn((url: string, init?: RequestInit) => url.endsWith("/video")
+      ? Promise.resolve(jsonResponse({ task_id: taskId, scan: null, evidence: null }))
+      : sequence(url, init));
     vi.stubGlobal("fetch", fetchMock);
     const user = userEvent.setup();
 
@@ -335,7 +338,7 @@ describe("conversation-ready intake shell", () => {
     const cancelButton = screen.getByRole("button", { name: "取消检查" });
     await user.click(cancelButton);
     expect((cancelButton as HTMLButtonElement).disabled).toBe(true);
-    expect(fetchMock.mock.calls[2]).toEqual([
+    expect(fetchMock.mock.calls.find(([url]) => url.endsWith("/cancel"))).toEqual([
       `/api/tasks/${taskId}/cancel`,
       { method: "POST" },
     ]);

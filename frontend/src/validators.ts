@@ -488,9 +488,8 @@ function isVideoConfig(value: unknown): boolean {
     isNonNegativeFinite(value.evidence_separation_seconds) && isPositiveFinite(value.audit_interval_seconds);
 }
 
-function isVideoScan(value: unknown): boolean {
-  if (!isRecord(value) || !isRecord(value.state)) return false;
-  const state = value.state;
+function isVideoState(state: unknown): boolean {
+  if (!isRecord(state)) return false;
   if (
     !isAssetRef(state.source) || !isVideoConfig(state.config) ||
     !isNullableString(state.detector_id) || !isNullableString(state.model_version) ||
@@ -500,17 +499,21 @@ function isVideoScan(value: unknown): boolean {
     !Array.isArray(state.active) || !state.active.every(isVideoEvent) ||
     !Array.isArray(state.events) || !state.events.every(isVideoEvent) ||
     !Array.isArray(state.audit_frames) || !state.audit_frames.every(isFrameLocator) ||
-    typeof state.finalized !== "boolean" || (state.finalized && state.active.length > 0) ||
-    typeof value.decode_complete !== "boolean" ||
-    !(value.error_code === null || isNonEmptyString(value.error_code)) ||
-    value.inspection_result !== "pending"
+    typeof state.finalized !== "boolean" || (state.finalized && state.active.length > 0)
   ) return false;
   if ((state.next_frame as number) > 0 && (
     state.last_timestamp_seconds === null || !state.detector_id || !state.model_version || !state.label_space_version
   )) return false;
-  if (value.decode_complete && (value.error_code !== null || state.next_frame === 0)) return false;
   const ids = [...state.events, ...state.active].map((event) => event.event_id);
   return ids.length === new Set(ids).size;
+}
+
+function isVideoScan(value: unknown): boolean {
+  return isRecord(value) && isRecord(value.state) && isVideoState(value.state) &&
+    typeof value.decode_complete === "boolean" &&
+    (value.error_code === null || isNonEmptyString(value.error_code)) &&
+    value.inspection_result === "pending" &&
+    (!value.decode_complete || (value.error_code === null && value.state.next_frame !== 0));
 }
 
 function isVideoSelection(value: unknown, reviewFrames: unknown[]): boolean {
@@ -552,9 +555,17 @@ function isVideoEvidence(value: unknown): boolean {
 }
 
 export function isVideoDetail(value: unknown): value is VideoDetail {
-  return isRecord(value) && isUuid(value.task_id) &&
+  if (!(isRecord(value) && isUuid(value.task_id) &&
     (value.scan === null || isVideoScan(value.scan)) &&
-    (value.evidence === null || isVideoEvidence(value.evidence));
+    (value.scan_progress === undefined || value.scan_progress === null || isVideoState(value.scan_progress)) &&
+    (value.scan_start_seconds === undefined || isNullableNonNegativeNumber(value.scan_start_seconds)) &&
+    (value.evidence === null || isVideoEvidence(value.evidence)))) return false;
+  if (value.scan !== null && value.scan_progress != null) return false;
+  if (value.scan_start_seconds == null) return true;
+  const state = isRecord(value.scan) ? value.scan.state : value.scan_progress;
+  return isRecord(state) && typeof state.next_frame === "number" && state.next_frame > 0 &&
+    typeof state.last_timestamp_seconds === "number" &&
+    (value.scan_start_seconds as number) <= state.last_timestamp_seconds;
 }
 
 const ASSET_RECORD_FIELDS = new Set([

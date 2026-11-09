@@ -21,6 +21,7 @@ from pipe_inspector.contracts.geometry import (
 from pipe_inspector.contracts.image_evidence import ImageEvidence
 from pipe_inspector.contracts.intake import TaskRecord
 from pipe_inspector.contracts.tools import ToolCall
+from pipe_inspector.contracts.video import VideoScanResult
 from pipe_inspector.workflow.start import InspectionStartError
 
 
@@ -101,10 +102,25 @@ def inspection_router(repository, starter) -> APIRouter:
         asset = repository.get_asset(task.input_asset)
         if asset.kind != AssetKind.VIDEO:
             raise InspectionStartError("video_only", "只有视频任务具有视频检查详情", 409)
+        # Read the committed head first so a concurrently saved final scan always wins.
+        progress = repository.load_video_state(task_id)
+        raw_scan = repository.load_step(task_id, "video_scan")
+        scan = VideoScanResult.model_validate(raw_scan) if raw_scan is not None else None
+        for state in (progress, scan.state if scan is not None else None):
+            if state is not None and state.source != task.input_asset:
+                raise InspectionStartError(
+                    "video_source_mismatch", "视频检查记录与当前任务的原始文件不一致", 409
+                )
+        state = scan.state if scan is not None else progress
+        start_seconds = None
+        if state is not None and state.next_frame > 0:
+            start_seconds = repository.get_video_frame(task_id, 0).timestamp_seconds
         return {
             "task_id": task_id,
-            "scan": repository.load_step(task_id, "video_scan"),
+            "scan": raw_scan,
             "evidence": repository.load_step(task_id, "video_evidence"),
+            "scan_progress": progress if scan is None else None,
+            "scan_start_seconds": start_seconds,
         }
 
     @router.get("/{task_id}/enhancement", response_model=EnhancementDetail)

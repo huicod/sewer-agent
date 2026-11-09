@@ -2,6 +2,7 @@ import type {
   ApiConnectionTest,
   ApplicationSettingsUpdate,
   AssetRecord,
+  AssetRef,
   ComparisonResult,
   EnhancementDetail,
   GeometryDetail,
@@ -233,10 +234,12 @@ export function submitReview(
   );
 }
 
-export function getVideo(taskId: string): Promise<VideoDetail> {
+export function getVideo(taskId: string, sourceAsset?: AssetRef): Promise<VideoDetail> {
   return requestJson<VideoDetail>(
     `/api/tasks/${encodeURIComponent(taskId)}/video`,
-    isVideoDetail,
+    (payload): payload is VideoDetail => isVideoDetail(payload) && payload.task_id === taskId &&
+      [payload.scan?.state, payload.scan_progress].every((state) => !state || !sourceAsset ||
+        (state.source.asset_id === sourceAsset.asset_id && state.source.version === sourceAsset.version)),
   );
 }
 
