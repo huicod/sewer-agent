@@ -27,3 +27,6 @@
 - Visual/behavior/media/report validation does not claim new model inference accuracy. Existing review states and findings are preserved.
 - HTML downloads reference the current deployment's evidence URLs; they are not self-contained offline media bundles. Original complete JSON remains available.
 - Local screenshots, test logs, acceptance PDF and exact API snapshots are in ignored `var/ui-*` artifacts, not public source history.
+
+## Version control
+- Feature commit `c08f49d59068` was pushed successfully to `dev/agent-v1` on 2026-11-09. The task archive and journal follow in a separate bookkeeping change.

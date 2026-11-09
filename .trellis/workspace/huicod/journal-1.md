@@ -1899,3 +1899,35 @@ User explicitly authorized personal website publication. Published huicod.github
 ### Status
 
 [OK] **Completed**
+
+
+## Session 61: Engineering workbench and structured reports
+
+**Date**: 2026-11-09
+**Task**: Engineering workbench and structured reports
+**Branch**: `dev/agent-v1`
+
+### Summary
+
+Delivered the approved 02/05/04 UI combination, formal HTML and structured JSON reports; local services healthy, 8 sessions and 25 tasks preserved exactly.
+
+### Main Changes
+
+- Reflowed original image/video, findings and continuing conversation; retained settings, drafts, review and retry identities.
+- Added authoritative HTML viewer/print and JSON tree/table/raw/copy/download; preserved source scope and media provenance.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `c08f49d59068` | (see git log) |
+
+### Testing
+
+- [OK] Frontend full suite 215 passed; final report suite 10 passed and media/frame suite 28 passed; TypeScript and Vite build passed.
+- [OK] Backend reports 53 passed; final legacy-video/frame subset 22 passed; Ruff passed.
+- [OK] Real desktop/mobile media, HTML evidence, JSON, print and keyboard resize verified; exact before/after record snapshots unchanged.
+
+### Status
+
+[OK] **Completed**
