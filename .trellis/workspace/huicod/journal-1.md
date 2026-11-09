@@ -1931,3 +1931,34 @@ Delivered the approved 02/05/04 UI combination, formal HTML and structured JSON 
 ### Status
 
 [OK] **Completed**
+
+
+## Session 62: Interactive video processing timeline
+
+**Date**: 2026-11-09
+**Task**: Interactive video processing timeline
+**Branch**: `dev/agent-v1`
+
+### Summary
+
+Delivered always-visible source-bound video axis, persisted processing progress, exact evidence preview and read-only playback seeking. Local deployment verified; 8 sessions, 25 tasks and 1 turn preserved.
+
+### Main Changes
+
+- Add scan/candidate/evidence tracks and explicit saved-frame tool selection
+- Expose real persisted head and first PTS with final/source precedence
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `06a97b35e6f8cc9a5480040d6fe8dabe8e727c30` | (see git log) |
+
+### Testing
+
+- [OK] 261 frontend tests, 13 API tests, TypeScript/build and Ruff pass
+- [OK] Desktop/mobile real playback, all 9 video endpoints, exact before/after history equality
+
+### Status
+
+[OK] **Completed**
